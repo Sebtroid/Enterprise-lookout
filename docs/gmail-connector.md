@@ -22,6 +22,17 @@ destinatario, asunto y cuerpo precargados. El usuario revisa y aprieta
 - Enviar drafts aprobados.
 - Mantener el costo cerca de cero usando Codex Automations.
 
+Para replies, el plugin no escribe directo en la app. La Automation:
+
+1. Obtiene queries desde `npm run gmail:reply-queries`.
+2. Busca y lee Gmail con la cuenta conectada.
+3. Exporta candidatos a JSON.
+4. Ejecuta `npm run gmail:reply-ingest` para guardar respuestas en Supabase.
+
+Asi cada respuesta queda asociada a `campaign_id`, `company_id`, `contact_id`,
+`sender_account_id`, `gmail_message_id` y `gmail_thread_id`, y aparece en
+`/review/replies` para aprobar la respuesta.
+
 ## Por Qué No API Propia Todavía
 
 Gmail API/Microsoft Graph propios sirven mejor para multi-remitente real, pero

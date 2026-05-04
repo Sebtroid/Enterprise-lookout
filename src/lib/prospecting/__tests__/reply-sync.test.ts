@@ -1,0 +1,130 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  buildGmailReplySearchQuery,
+  buildInboundReplyDraft,
+  classifyInboundReply,
+  matchInboundReply,
+  normalizeEmailSubject,
+  prepareInboundReplyRecord,
+  shouldIngestReply,
+  type GmailReplyCandidate,
+  type SentMessageMatchInput,
+} from "../reply-sync";
+
+const sentMessage: SentMessageMatchInput = {
+  id: "message-1",
+  campaignId: "pastoral-invierno-2026",
+  companyId: "company-1",
+  contactId: "contact-1",
+  contactEmail: "alianzas@empresa.cl",
+  contactName: "Francisca Morales",
+  senderId: "sender-1",
+  senderEmail: "sawitting@miuandes.cl",
+  subject: "Trabajo Pais: posible apoyo de Empresa",
+  sentAt: "2026-05-01T12:00:00.000Z",
+  gmailThreadId: "thread-1",
+};
+
+const candidate: GmailReplyCandidate = {
+  gmailMessageId: "gmail-reply-1",
+  gmailThreadId: "thread-1",
+  fromEmail: "alianzas@empresa.cl",
+  toEmail: "sawitting@miuandes.cl",
+  subject: "Re: Trabajo País: posible apoyo de Empresa",
+  body: "Hola, gracias por escribir. Mándame la presentación y el monto objetivo.",
+  receivedAt: "2026-05-02T15:00:00.000Z",
+};
+
+describe("reply sync", () => {
+  it("normalizes reply subjects for Gmail matching", () => {
+    expect(normalizeEmailSubject("RE: Fwd: Trabajo País - Apoyo")).toBe(
+      "trabajo pais apoyo",
+    );
+  });
+
+  it("matches by Gmail thread id before weaker fallbacks", () => {
+    const match = matchInboundReply(candidate, [
+      sentMessage,
+      {
+        ...sentMessage,
+        id: "message-2",
+        contactEmail: "otra@empresa.cl",
+        gmailThreadId: "other-thread",
+      },
+    ]);
+
+    expect(match).toMatchObject({
+      message: { id: "message-1" },
+      reason: "gmail_thread_id",
+      confidence: 1,
+    });
+  });
+
+  it("falls back to contact email and normalized subject", () => {
+    const match = matchInboundReply(
+      { ...candidate, gmailThreadId: null },
+      [{ ...sentMessage, gmailThreadId: null }],
+    );
+
+    expect(match).toMatchObject({
+      message: { id: "message-1" },
+      reason: "contact_email_subject",
+      confidence: 0.9,
+    });
+  });
+
+  it("classifies replies and builds an approval draft", () => {
+    expect(classifyInboundReply(candidate.body)).toBe("needs_info");
+    expect(buildInboundReplyDraft(candidate)).toContain("presentación");
+  });
+
+  it("prepares inbound reply records with explicit sender/campaign/contact ids", () => {
+    expect(prepareInboundReplyRecord(candidate, sentMessage)).toMatchObject({
+      campaignId: "pastoral-invierno-2026",
+      companyId: "company-1",
+      contactId: "contact-1",
+      senderId: "sender-1",
+      gmailMessageId: "gmail-reply-1",
+      gmailThreadId: "thread-1",
+      subject: "Re: Trabajo País: posible apoyo de Empresa",
+      status: "needs_review",
+      kind: "inbound_reply",
+      classification: "needs_info",
+    });
+  });
+
+  it("skips self-sent messages and already ingested Gmail ids", () => {
+    expect(
+      shouldIngestReply(candidate, {
+        senderEmail: "sawitting@miuandes.cl",
+        existingGmailMessageIds: new Set(["gmail-reply-1"]),
+      }),
+    ).toBe(false);
+
+    expect(
+      shouldIngestReply(
+        { ...candidate, gmailMessageId: "gmail-reply-2", fromEmail: "sawitting@miuandes.cl" },
+        {
+          senderEmail: "sawitting@miuandes.cl",
+          existingGmailMessageIds: new Set(),
+        },
+      ),
+    ).toBe(false);
+  });
+
+  it("builds Gmail search queries scoped to replies to the sender", () => {
+    expect(buildGmailReplySearchQuery(sentMessage)).toContain(
+      "to:sawitting@miuandes.cl",
+    );
+    expect(buildGmailReplySearchQuery(sentMessage)).toContain(
+      "-from:sawitting@miuandes.cl",
+    );
+    expect(buildGmailReplySearchQuery(sentMessage)).toContain(
+      "after:2026/05/01",
+    );
+    expect(buildGmailReplySearchQuery(sentMessage)).not.toContain(
+      "rfc822msgid:",
+    );
+  });
+});

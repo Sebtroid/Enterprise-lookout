@@ -236,6 +236,9 @@ create table automation_runs (
 create index campaign_contacts_status_idx on campaign_contacts (campaign_id, status);
 create index messages_review_idx on messages (campaign_id, status, kind);
 create index messages_sender_status_idx on messages (sender_account_id, status, sent_at);
+create unique index messages_gmail_message_id_unique
+  on messages (gmail_message_id)
+  where gmail_message_id is not null;
 create index outbound_feedback_campaign_idx on outbound_feedback (campaign_id, remember_for_future, created_at desc);
 create index threads_gmail_idx on threads (gmail_thread_id);
 create index contacts_company_idx on contacts (company_id);

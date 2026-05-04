@@ -56,3 +56,49 @@ npm run outreach:queue -- mark-sent --message-id <message_id> --gmail-message-id
 ```bash
 npm run outreach:queue -- mark-failed --message-id <message_id> --error "<motivo>"
 ```
+
+## Flujo `monitor-replies`
+
+Este job necesita dos partes: Gmail busca los correos y el dashboard los ingiere
+en Supabase. La base de datos sigue siendo la fuente de verdad.
+
+1. Pedir los queries Gmail para los mails enviados:
+
+```bash
+npm run gmail:reply-queries -- --sender sawitting@miuandes.cl --campaign pastoral-invierno-2026 --days 45
+```
+
+2. La Automation usa el conector Gmail para buscar cada `query`, leer los
+   mensajes nuevos y producir un JSON con esta forma:
+
+```json
+[
+  {
+    "gmailMessageId": "gmail-internal-message-id",
+    "gmailThreadId": "gmail-thread-id",
+    "fromEmail": "contacto@empresa.cl",
+    "toEmail": "sawitting@miuandes.cl",
+    "subject": "Re: Trabajo Pais - posible apoyo",
+    "body": "Hola, mandanos mas informacion.",
+    "receivedAt": "2026-05-03T15:00:00.000Z"
+  }
+]
+```
+
+3. Primero correr dry-run:
+
+```bash
+npm run gmail:reply-ingest -- --file replies.json --sender sawitting@miuandes.cl --campaign pastoral-invierno-2026 --dry-run
+```
+
+4. Si el match se ve correcto, ingerir:
+
+```bash
+npm run gmail:reply-ingest -- --file replies.json --sender sawitting@miuandes.cl --campaign pastoral-invierno-2026
+```
+
+El importador no duplica `gmailMessageId`, evita replies enviados por la misma
+cuenta, busca el mail original por `gmailThreadId` cuando existe y si no cae a
+email + asunto. Al insertar, crea un `message.kind = inbound_reply`, deja el
+draft en `review/replies`, actualiza `campaign_contacts.status = replied` y
+registra el job en `automation_runs`.

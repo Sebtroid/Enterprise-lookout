@@ -8,6 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "outreach:queue": "node scripts/outreach-queue.mjs",
+    "gmail:reply-queries": "node scripts/gmail-replies.mjs queries",
+    "gmail:reply-ingest": "node scripts/gmail-replies.mjs ingest",
     "supabase:apply": "node scripts/apply-supabase.mjs",
     "test": "vitest run",
     "test:watch": "vitest"

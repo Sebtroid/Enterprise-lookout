@@ -1,0 +1,351 @@
+import type { AppReply } from "./demo-data";
+
+export type GmailReplyCandidate = {
+  gmailMessageId: string;
+  gmailThreadId: string | null;
+  fromEmail: string;
+  toEmail: string;
+  subject: string;
+  body: string;
+  receivedAt: string;
+};
+
+export type SentMessageMatchInput = {
+  id: string;
+  campaignId: string;
+  companyId: string;
+  contactId: string;
+  contactEmail: string;
+  contactName: string;
+  senderId: string;
+  senderEmail: string;
+  subject: string;
+  sentAt: string;
+  gmailThreadId: string | null;
+};
+
+export type ReplyMatchReason =
+  | "gmail_thread_id"
+  | "contact_email_subject"
+  | "contact_email_recent"
+  | "contact_domain_subject";
+
+export type ReplyMatch = {
+  message: SentMessageMatchInput;
+  reason: ReplyMatchReason;
+  confidence: number;
+};
+
+export type PreparedInboundReply = {
+  campaignId: string;
+  companyId: string;
+  contactId: string;
+  senderId: string;
+  originalMessageId: string;
+  gmailMessageId: string;
+  gmailThreadId: string | null;
+  subject: string;
+  kind: "inbound_reply";
+  status: "needs_review";
+  classification: AppReply["classification"];
+  body: string;
+  draftResponse: string;
+  receivedAt: string;
+  futureNote: string;
+};
+
+export function normalizeEmailSubject(subject: string) {
+  return subject
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/^(\s*(re|fw|fwd)\s*:\s*)+/i, "")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export function matchInboundReply(
+  candidate: GmailReplyCandidate,
+  sentMessages: SentMessageMatchInput[],
+): ReplyMatch | null {
+  const receivedAt = new Date(candidate.receivedAt);
+  const eligible = sentMessages
+    .filter((message) => isBeforeOrSame(message.sentAt, candidate.receivedAt))
+    .sort((a, b) => newestFirst(a.sentAt, b.sentAt));
+
+  const threadMatch = eligible.find(
+    (message) =>
+      Boolean(candidate.gmailThreadId) &&
+      message.gmailThreadId === candidate.gmailThreadId,
+  );
+
+  if (threadMatch) {
+    return { message: threadMatch, reason: "gmail_thread_id", confidence: 1 };
+  }
+
+  const fromEmail = normalizeEmail(candidate.fromEmail);
+  const subject = normalizeEmailSubject(candidate.subject);
+
+  const emailSubjectMatch = eligible.find(
+    (message) =>
+      normalizeEmail(message.contactEmail) === fromEmail &&
+      subjectsMatch(subject, normalizeEmailSubject(message.subject)),
+  );
+
+  if (emailSubjectMatch) {
+    return {
+      message: emailSubjectMatch,
+      reason: "contact_email_subject",
+      confidence: 0.9,
+    };
+  }
+
+  const contactEmailMatch = eligible.find(
+    (message) => normalizeEmail(message.contactEmail) === fromEmail,
+  );
+
+  if (contactEmailMatch) {
+    return {
+      message: contactEmailMatch,
+      reason: "contact_email_recent",
+      confidence: isRecentEnough(contactEmailMatch.sentAt, receivedAt) ? 0.78 : 0.62,
+    };
+  }
+
+  const candidateDomain = getEmailDomain(fromEmail);
+  const domainSubjectMatch = eligible.find(
+    (message) =>
+      candidateDomain &&
+      getEmailDomain(message.contactEmail) === candidateDomain &&
+      subjectsMatch(subject, normalizeEmailSubject(message.subject)),
+  );
+
+  if (domainSubjectMatch) {
+    return {
+      message: domainSubjectMatch,
+      reason: "contact_domain_subject",
+      confidence: 0.66,
+    };
+  }
+
+  return null;
+}
+
+export function classifyInboundReply(body: string): AppReply["classification"] {
+  const normalized = normalizeSearch(body);
+
+  if (
+    includesAny(normalized, [
+      "no corresponde",
+      "no nos interesa",
+      "no estamos interesados",
+      "no podremos",
+      "por ahora no",
+      "no por ahora",
+      "mas adelante",
+      "más adelante",
+      "el proximo ano",
+      "el próximo año",
+    ])
+  ) {
+    return "not_now";
+  }
+
+  if (
+    includesAny(normalized, [
+      "te copio",
+      "copio a",
+      "derivo",
+      "derivar",
+      "contacta a",
+      "habla con",
+      "la persona encargada",
+    ])
+  ) {
+    return "referred";
+  }
+
+  if (
+    includesAny(normalized, [
+      "presentacion",
+      "presentación",
+      "monto",
+      "propuesta",
+      "mas informacion",
+      "más información",
+      "detalle",
+      "revisar internamente",
+    ])
+  ) {
+    return "needs_info";
+  }
+
+  if (
+    includesAny(normalized, [
+      "me interesa",
+      "nos interesa",
+      "conversemos",
+      "agenda",
+      "reunion",
+      "reunión",
+      "llamada",
+    ])
+  ) {
+    return "interested";
+  }
+
+  return "needs_info";
+}
+
+export function buildInboundReplyDraft(candidate: GmailReplyCandidate) {
+  const classification = classifyInboundReply(candidate.body);
+
+  if (classification === "not_now") {
+    return [
+      "Hola,",
+      "",
+      "Muchas gracias por responder y por avisarnos. Lo dejamos registrado para no insistir con este tema.",
+      "",
+      "Saludos,",
+      "Sebastian",
+    ].join("\n");
+  }
+
+  if (classification === "referred") {
+    return [
+      "Hola,",
+      "",
+      "Muchas gracias por la orientación. Tomo el contacto y le escribo con el contexto breve para revisar si existe calce.",
+      "",
+      "Saludos,",
+      "Sebastian",
+    ].join("\n");
+  }
+
+  return [
+    "Hola,",
+    "",
+    "Muchas gracias por responder. Te comparto una presentación breve, una propuesta y el contexto del proyecto para que lo puedan revisar internamente.",
+    "",
+    "Quedo atento a cualquier formato o información adicional que necesiten.",
+    "",
+    "Saludos,",
+    "Sebastian",
+  ].join("\n");
+}
+
+export function prepareInboundReplyRecord(
+  candidate: GmailReplyCandidate,
+  sentMessage: SentMessageMatchInput,
+): PreparedInboundReply {
+  const classification = classifyInboundReply(candidate.body);
+
+  return {
+    campaignId: sentMessage.campaignId,
+    companyId: sentMessage.companyId,
+    contactId: sentMessage.contactId,
+    senderId: sentMessage.senderId,
+    originalMessageId: sentMessage.id,
+    gmailMessageId: candidate.gmailMessageId,
+    gmailThreadId: candidate.gmailThreadId,
+    subject: candidate.subject,
+    kind: "inbound_reply",
+    status: "needs_review",
+    classification,
+    body: candidate.body,
+    draftResponse: buildInboundReplyDraft(candidate),
+    receivedAt: candidate.receivedAt,
+    futureNote: [
+      `Reply detectado automáticamente desde Gmail.`,
+      `Clasificación: ${classification}.`,
+      `Mensaje original: ${sentMessage.id}.`,
+    ].join(" "),
+  };
+}
+
+export function shouldIngestReply(
+  candidate: GmailReplyCandidate,
+  {
+    existingGmailMessageIds,
+    senderEmail,
+  }: {
+    existingGmailMessageIds: Set<string>;
+    senderEmail: string;
+  },
+) {
+  if (!candidate.gmailMessageId) return false;
+  if (existingGmailMessageIds.has(candidate.gmailMessageId)) return false;
+  if (normalizeEmail(candidate.fromEmail) === normalizeEmail(senderEmail)) {
+    return false;
+  }
+
+  return true;
+}
+
+export function buildGmailReplySearchQuery(message: SentMessageMatchInput) {
+  const sentAt = new Date(message.sentAt);
+  const after = Number.isNaN(sentAt.getTime())
+    ? null
+    : sentAt.toISOString().slice(0, 10).replaceAll("-", "/");
+
+  return [
+    "in:anywhere",
+    `to:${message.senderEmail}`,
+    `-from:${message.senderEmail}`,
+    after ? `after:${after}` : "newer_than:30d",
+    `"${message.subject.replaceAll("\"", "")}"`,
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function subjectsMatch(replySubject: string, originalSubject: string) {
+  if (!replySubject || !originalSubject) return false;
+  return (
+    replySubject === originalSubject ||
+    replySubject.includes(originalSubject) ||
+    originalSubject.includes(replySubject)
+  );
+}
+
+function isBeforeOrSame(a: string, b: string) {
+  const left = new Date(a).getTime();
+  const right = new Date(b).getTime();
+  if (Number.isNaN(left) || Number.isNaN(right)) return true;
+  return left <= right;
+}
+
+function newestFirst(a: string, b: string) {
+  return new Date(b).getTime() - new Date(a).getTime();
+}
+
+function isRecentEnough(sentAt: string, receivedAt: Date) {
+  const sent = new Date(sentAt);
+  if (Number.isNaN(sent.getTime()) || Number.isNaN(receivedAt.getTime())) {
+    return false;
+  }
+
+  return receivedAt.getTime() - sent.getTime() <= 45 * 86_400_000;
+}
+
+function includesAny(value: string, needles: string[]) {
+  return needles.some((needle) => value.includes(normalizeSearch(needle)));
+}
+
+function normalizeSearch(value: string) {
+  return value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizeEmail(email: string) {
+  return email.trim().toLowerCase();
+}
+
+function getEmailDomain(email: string) {
+  return normalizeEmail(email).split("@")[1] ?? "";
+}
