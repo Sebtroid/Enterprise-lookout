@@ -1,36 +1,74 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Prospección de Auspicios
 
-## Getting Started
+Dashboard privado para gestionar campañas de auspicios, contactos, imports, aprobación de mails y respuestas.
 
-First, run the development server:
+## Stack
+
+- Next.js App Router + TypeScript
+- Tailwind CSS + shadcn/ui
+- Supabase/Postgres schema en `supabase/schema.sql`
+- Vitest para reglas de dedupe, remitentes y envío
+- Prompts versionados en `prompts/`
+- Reglas operativas en `rules/`
+
+## Desarrollo
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+La app corre en modo demo si no hay Supabase configurado.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+cp .env.example .env.local
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Variables principales:
 
-## Learn More
+```bash
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
+SUPABASE_DB_URL=
+SUPABASE_SERVICE_ROLE_KEY=
+APP_ALLOWED_EMAILS=tu@email.com,josemigueloaguado@estudiante.uc.cl
+NEXT_PUBLIC_APP_MODE=demo
+```
 
-To learn more about Next.js, take a look at the following resources:
+## Supabase
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+1. Crear proyecto en Supabase.
+2. Ejecutar `supabase/schema.sql` en SQL Editor.
+3. Ejecutar `supabase/seed.sql`.
+4. Verificar el remitente real `josemigueloaguado@estudiante.uc.cl`.
+5. Configurar auth/magic links y Vercel env vars.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+También se puede aplicar desde terminal sin guardar la password:
 
-## Deploy on Vercel
+```bash
+SUPABASE_DB_URL="postgresql://postgres.<project-ref>:<password>@<pooler-host>:6543/postgres?sslmode=require" npm run supabase:apply
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+La app usa `SUPABASE_DB_URL` solo en el servidor para leer/escribir datos del
+dashboard y ejecutar Server Actions. No debe llevar prefijo `NEXT_PUBLIC_`.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Rutas
+
+- `/campaigns`
+- `/campaigns/all`
+- `/campaigns/pastoral-invierno-2026`
+- `/campaigns/:campaignId/imports`
+- `/campaigns/:campaignId/companies`
+- `/campaigns/:campaignId/contacts`
+- `/campaigns/:campaignId/review/outbound`
+- `/campaigns/:campaignId/review/replies`
+- `/campaigns/:campaignId/pipeline`
+- `/campaigns/:campaignId/settings/senders`
+
+## Checks
+
+```bash
+npm test
+npm run lint
+npm run build
+```
