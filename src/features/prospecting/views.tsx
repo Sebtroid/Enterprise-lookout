@@ -23,6 +23,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { getContactPriority } from "@/lib/prospecting/demo-data";
+import { getPostgresClient } from "@/lib/supabase/postgres";
 import type { AppMessage, AppReply } from "@/lib/prospecting/demo-data";
 import {
   ALL_CAMPAIGNS_SCOPE,
@@ -362,6 +363,14 @@ export async function ImportsView({ scope }: { scope: string }) {
 
 export async function OutboundReviewView({ scope }: { scope: string }) {
   const snapshot = await getProspectingSnapshot(scope);
+  
+  // Check which senders have Gmail connected
+  const sql = getPostgresClient();
+  let gmailConnectedEmails: string[] = [];
+  if (sql) {
+    const tokenRows = await sql`select user_email from gmail_tokens`;
+    gmailConnectedEmails = tokenRows.map((r: { user_email: string }) => r.user_email);
+  }
 
   return (
     <div className="space-y-6">
@@ -377,6 +386,7 @@ export async function OutboundReviewView({ scope }: { scope: string }) {
         )}
         scope={scope}
         senders={snapshot.senders}
+        gmailConnectedEmails={gmailConnectedEmails}
       />
     </div>
   );

@@ -8,6 +8,7 @@ import {
   FileDown,
   Inbox,
   LayoutDashboard,
+  Mail,
   MailCheck,
   Send,
   Settings,
@@ -24,6 +25,7 @@ const NAV_ITEMS = [
   { path: "/review/outbound", label: "Mails", icon: Send },
   { path: "/review/replies", label: "Respuestas", icon: Inbox },
   { path: "/settings/senders", label: "Remitentes", icon: MailCheck },
+  { path: "/settings/gmail", label: "Gmail", icon: Mail },
 ];
 
 export function AppSidebar() {

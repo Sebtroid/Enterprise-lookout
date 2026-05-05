@@ -54,12 +54,14 @@ export function OutboundReview({
   contacts,
   messages,
   senders,
+  gmailConnectedEmails = [],
 }: {
   companies: AppCompany[];
   contacts: AppContact[];
   messages: AppMessage[];
   scope: string;
   senders: AppSender[];
+  gmailConnectedEmails?: string[];
 }) {
   const router = useRouter();
   const [reviewState, reviewAction, isReviewPending] = useActionState(
@@ -73,6 +75,7 @@ export function OutboundReview({
   const [manualSentState, manualSentAction, isManualSentPending] =
     useActionState(markMessageSentManuallyAction, initialActionState);
   const [redraftingId, setRedraftingId] = useState<string | null>(null);
+  const [sendingGmailId, setSendingGmailId] = useState<string | null>(null);
   const [rejectionReasons, setRejectionReasons] = useState<
     Record<string, OutboundRejectionReason>
   >({});
@@ -92,9 +95,34 @@ export function OutboundReview({
 
   const queues = useMemo(() => splitOutboundReviewQueue(items), [items]);
 
+  async function sendWithGmail(messageId: string, to: string, subject: string, body: string, fromEmail: string) {
+    setSendingGmailId(messageId);
+    try {
+      const res = await fetch("/api/gmail/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ to, subject, body, fromEmail, messageId }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        updateStatus(messageId, "sent");
+      } else {
+        alert(`Error enviando mail: ${data.error}`);
+      }
+    } catch (err) {
+      alert("Error de red al enviar mail.");
+    } finally {
+      setSendingGmailId(null);
+    }
+  }
+
   function updateStatus(id: string, status: AppMessage["status"]) {
     setItems((current) =>
       current.map((item) =>
+        item.id === id ? { ...item, localStatus: status } : item,
+      ),
+    );
+  }
         item.id === id ? { ...item, localStatus: status } : item,
       ),
     );
@@ -375,6 +403,8 @@ export function OutboundReview({
                 })
               : null;
 
+          const hasGmail = sender?.email && gmailConnectedEmails.includes(sender.email);
+
           return (
             <form
               key={message.id}
@@ -389,7 +419,30 @@ export function OutboundReview({
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {composeHref ? (
+                  {hasGmail ? (
+                    <Button
+                      disabled={sendingGmailId === message.id}
+                      size="sm"
+                      type="button"
+                      onClick={() =>
+                        contact?.email && sender?.email &&
+                        sendWithGmail(
+                          message.id,
+                          contact.email,
+                          message.subject,
+                          message.localBody,
+                          sender.email
+                        )
+                      }
+                    >
+                      {sendingGmailId === message.id ? (
+                        <Loader2 className="mr-2 size-4 animate-spin" />
+                      ) : (
+                        <Mail className="mr-2 size-4" />
+                      )}
+                      {sendingGmailId === message.id ? "Enviando..." : "Enviar con Gmail"}
+                    </Button>
+                  ) : composeHref ? (
                     <a
                       className={buttonVariants({
                         variant: "outline",
