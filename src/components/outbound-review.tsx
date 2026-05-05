@@ -12,6 +12,7 @@ import {
   Building2,
   Check,
   ExternalLink,
+  Loader2,
   Mail,
   Save,
   Send,
@@ -71,7 +72,7 @@ export function OutboundReview({
   );
   const [manualSentState, manualSentAction, isManualSentPending] =
     useActionState(markMessageSentManuallyAction, initialActionState);
-  const [rejectingId, setRejectingId] = useState<string | null>(null);
+  const [redraftingId, setRedraftingId] = useState<string | null>(null);
   const [rejectionReasons, setRejectionReasons] = useState<
     Record<string, OutboundRejectionReason>
   >({});
@@ -201,7 +202,17 @@ export function OutboundReview({
           </Button>
         </div>
 
-        {rejectingId === message.id ? (
+        {redraftingId === message.id ? (
+        <div className="mt-4 rounded-lg border border-cyan-200 bg-cyan-50 p-6 text-sm">
+          <div className="flex items-center gap-3">
+            <Loader2 className="size-5 animate-spin text-cyan-600" />
+            <div>
+              <div className="font-medium text-cyan-900">Redactando nuevo borrador...</div>
+              <div className="text-xs text-cyan-700">Aplicando feedback y generando versión mejorada</div>
+            </div>
+          </div>
+        </div>
+      ) : rejectingId === message.id ? (
           <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm">
             <div className="grid gap-3 md:grid-cols-[16rem_1fr]">
               <label className="space-y-1">
@@ -259,6 +270,12 @@ export function OutboundReview({
                 size="sm"
                 type="submit"
                 variant="outline"
+                onClick={() => {
+                  if (rejectionReason === "bad_copy") {
+                    setRedraftingId(message.id);
+                    setRejectingId(null);
+                  }
+                }}
               >
                 <X className="size-4" />
                 {rejectionReason === "bad_copy"
