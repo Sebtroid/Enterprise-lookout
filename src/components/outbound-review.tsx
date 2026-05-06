@@ -76,6 +76,7 @@ export function OutboundReview({
     useActionState(markMessageSentManuallyAction, initialActionState);
   const [redraftingId, setRedraftingId] = useState<string | null>(null);
   const [sendingGmailId, setSendingGmailId] = useState<string | null>(null);
+  const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [rejectionReasons, setRejectionReasons] = useState<
     Record<string, OutboundRejectionReason>
   >({});
