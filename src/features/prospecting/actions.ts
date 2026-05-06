@@ -41,6 +41,7 @@ const outboundRejectionReasonSchema = z.enum([
 const companyDecisionSchema = z.enum(["fit", "maybe", "not_fit"]);
 const senderStatusSchema = z.enum(["active", "paused", "disabled"]);
 const senderAccountTypeSchema = z.enum(["gmail", "outlook", "smtp", "manual"]);
+const projectStatusSchema = z.enum(["draft", "active", "paused"]);
 
 const importRowSchema = z.object({
   companyName: z.string(),
@@ -475,7 +476,7 @@ export async function classifyCompanyForCampaignAction(
   if (!scope || isAllCampaignsScope(scope)) {
     return {
       ok: false,
-      message: "Elige una campaña concreta para clasificar la empresa.",
+      message: "Elige un proyecto concreto para clasificar la empresa.",
     };
   }
 
@@ -567,7 +568,7 @@ export async function classifyCompanyForCampaignAction(
   });
 
   if (result.kind === "missing_campaign") {
-    return { ok: false, message: "No encontré esa campaña." };
+    return { ok: false, message: "No encontré ese proyecto." };
   }
 
   if (result.kind === "missing_company") {
@@ -584,7 +585,124 @@ export async function classifyCompanyForCampaignAction(
   revalidateProspectingPaths(result.campaignSlug);
   return {
     ok: true,
-    message: `${result.companyName} actualizada para esta campaña.`,
+    message: `${result.companyName} actualizada para este proyecto.`,
+  };
+}
+
+export async function createProjectAction(
+  _previousState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const sql = getPostgresClient();
+  if (!sql) return { ok: false, message: initialError };
+
+  const name = readFormString(formData, "name");
+  const organization = readFormString(formData, "organization");
+  const valueProposition = readFormString(formData, "valueProposition");
+  const startsOn = nullIfEmpty(readFormString(formData, "startsOn"));
+  const senderEmail = normalizeEmail(
+    readFormString(formData, "senderEmail") || "sawitting@miuandes.cl",
+  );
+  const status = projectStatusSchema.safeParse(
+    readFormString(formData, "status") || "active",
+  );
+
+  if (!name || !organization || !valueProposition || !status.success) {
+    return {
+      ok: false,
+      message: "Completa nombre, organización/contexto y propuesta del proyecto.",
+    };
+  }
+
+  const baseSlug = slugifyProjectName(name);
+  if (!baseSlug) {
+    return { ok: false, message: "El nombre no permite crear un slug válido." };
+  }
+
+  const result = await sql.begin(async (tx) => {
+    const slug = await getUniqueCampaignSlug(tx, baseSlug);
+    const campaignRows = await tx`
+      insert into campaigns (
+        slug,
+        name,
+        organization,
+        description,
+        value_proposition,
+        status,
+        starts_on
+      ) values (
+        ${slug},
+        ${name},
+        ${organization},
+        ${valueProposition},
+        ${valueProposition},
+        ${status.data}::campaign_status,
+        ${startsOn}
+      )
+      returning id, slug
+    `;
+    const campaign = campaignRows[0];
+
+    let senderRows = await tx`
+      select id
+      from sender_accounts
+      where email = ${senderEmail}
+      limit 1
+    `;
+
+    if (!senderRows[0]) {
+      senderRows = await tx`
+        insert into sender_accounts (
+          email,
+          display_name,
+          organization,
+          account_type,
+          signature,
+          status,
+          daily_limit
+        ) values (
+          ${senderEmail},
+          'Sebastian Witting',
+          ${organization},
+          'gmail',
+          ${`Sebastian Witting\nJefatura de Recursos Financieros\n${organization}`},
+          'active',
+          25
+        )
+        returning id
+      `;
+    }
+
+    const senderAccountId = senderRows[0].id;
+
+    await tx`
+      insert into campaign_sender_accounts (
+        campaign_id,
+        sender_account_id,
+        priority,
+        campaign_daily_limit,
+        is_default
+      ) values (
+        ${campaign.id},
+        ${senderAccountId},
+        1,
+        25,
+        true
+      )
+      on conflict (campaign_id, sender_account_id) do update
+      set
+        priority = excluded.priority,
+        campaign_daily_limit = excluded.campaign_daily_limit,
+        is_default = true
+    `;
+
+    return { slug: String(campaign.slug) };
+  });
+
+  revalidateProspectingPaths(result.slug);
+  return {
+    ok: true,
+    message: `Proyecto creado. Entra a /campaigns/${result.slug} para cargar empresas.`,
   };
 }
 
@@ -603,42 +721,130 @@ export async function updateReplyDraftAction(
     return { ok: false, message: "Faltan datos para actualizar la respuesta." };
   }
 
-  const rows = await sql`
-    select status::text as status
-    from messages
-    where id = ${replyId}
-      and kind = 'inbound_reply'
-    limit 1
-  `;
+  const result = await sql.begin(async (tx) => {
+    const rows = await tx`
+      select
+        m.id,
+        m.thread_id,
+        m.campaign_id,
+        c.slug as campaign_slug,
+        m.company_id,
+        m.contact_id,
+        m.sender_account_id,
+        coalesce(m.subject_final, m.subject_draft, '(sin asunto)') as subject,
+        coalesce(m.gmail_thread_id, t.gmail_thread_id) as gmail_thread_id,
+        m.status::text as status
+      from messages m
+      join campaigns c on c.id = m.campaign_id
+      left join threads t on t.id = m.thread_id
+      where m.id = ${replyId}
+        and m.kind = 'inbound_reply'
+      limit 1
+    `;
+    const reply = rows[0];
 
-  if (!rows[0]) {
+    if (!reply) return { kind: "missing" as const };
+    if (reply.status === "sent") return { kind: "sent" as const };
+
+    const nextStatus = intent.data === "save" ? reply.status : intent.data;
+
+    await tx`
+      update messages
+      set
+        status = ${nextStatus}::message_status,
+        body_final = ${draft},
+        approved_at = case
+          when ${nextStatus}::message_status = 'approved' then now()
+          when ${nextStatus}::message_status = 'rejected' then null
+          else approved_at
+        end,
+        updated_at = now()
+      where id = ${replyId}
+    `;
+
+    if (intent.data !== "approved") {
+      return {
+        kind: intent.data,
+        campaignSlug: String(reply.campaign_slug),
+      };
+    }
+
+    const existingOutboundReply = await tx`
+      select id
+      from messages
+      where kind = 'outbound_reply'
+        and position(${replyId} in coalesce(future_note, '')) > 0
+      limit 1
+    `;
+
+    if (!existingOutboundReply[0]) {
+      await tx`
+        insert into messages (
+          thread_id,
+          campaign_id,
+          company_id,
+          contact_id,
+          sender_account_id,
+          kind,
+          status,
+          subject_draft,
+          subject_final,
+          body_draft,
+          body_final,
+          gmail_thread_id,
+          approved_at,
+          future_note
+        ) values (
+          ${reply.thread_id},
+          ${reply.campaign_id},
+          ${reply.company_id},
+          ${reply.contact_id},
+          ${reply.sender_account_id},
+          'outbound_reply',
+          'approved',
+          ${reply.subject},
+          ${reply.subject},
+          ${draft},
+          ${draft},
+          ${reply.gmail_thread_id},
+          now(),
+          ${`Respuesta creada desde reply ${replyId}. Enviar usando el thread Gmail existente: ${reply.gmail_thread_id ?? "sin thread_id registrado"}.`}
+        )
+      `;
+    }
+
+    await tx`
+      update campaign_contacts cc
+      set
+        status = 'approved_to_send',
+        updated_at = now()
+      where cc.campaign_id = ${reply.campaign_id}
+        and cc.company_id = ${reply.company_id}
+        and (cc.contact_id = ${reply.contact_id} or cc.contact_id is null)
+    `;
+
+    return {
+      kind: "approved",
+      campaignSlug: String(reply.campaign_slug),
+    };
+  });
+
+  if (result.kind === "missing") {
     return { ok: false, message: "No encontré esa respuesta en la base." };
   }
 
-  const nextStatus = intent.data === "save" ? rows[0].status : intent.data;
+  if (result.kind === "sent") {
+    return { ok: false, message: "Esa respuesta ya fue enviada." };
+  }
 
-  await sql`
-    update messages
-    set
-      status = ${nextStatus}::message_status,
-      body_final = ${draft},
-      approved_at = case
-        when ${nextStatus}::message_status = 'approved' then now()
-        when ${nextStatus}::message_status = 'rejected' then null
-        else approved_at
-      end,
-      updated_at = now()
-    where id = ${replyId}
-  `;
-
-  revalidateProspectingPaths();
+  revalidateProspectingPaths(result.campaignSlug);
   return {
     ok: true,
     message:
       intent.data === "save"
         ? "Draft guardado."
         : intent.data === "approved"
-          ? "Respuesta aprobada."
+          ? "Respuesta aprobada. La dejé en Mails > Aprobados para enviar y saldrá en el mismo hilo."
           : "Respuesta rechazada.",
   };
 }
@@ -667,7 +873,7 @@ export async function createLeadAction(
     extractDomain(email);
 
   if (!campaignSlug) {
-    return { ok: false, message: "El lead necesita una campaña." };
+    return { ok: false, message: "El lead necesita un proyecto." };
   }
 
   if (!companyName && !domain) {
@@ -836,7 +1042,7 @@ export async function createLeadAction(
   });
 
   revalidateProspectingPaths(campaignSlug);
-  return { ok: true, message: "Lead creado y linkeado a la campaña." };
+  return { ok: true, message: "Lead creado y linkeado al proyecto." };
 }
 
 export async function createSenderAction(
@@ -866,7 +1072,7 @@ export async function createSenderAction(
   const isDefault = formData.get("isDefault") === "on";
 
   if (!campaignSlug) {
-    return { ok: false, message: "El remitente necesita una campaña." };
+    return { ok: false, message: "El remitente necesita un proyecto." };
   }
 
   if (!email || !displayName || !status.success || !accountType.success) {
@@ -1262,4 +1468,33 @@ function revalidateProspectingPaths(scope?: string) {
     revalidatePath(`/campaigns/${scope}/review/replies`);
     revalidatePath(`/campaigns/${scope}/settings/senders`);
   }
+}
+
+// postgres.js transaction tags have helper overloads that are stricter than
+// this helper needs; we only use the tagged-template query surface here.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function getUniqueCampaignSlug(tx: any, baseSlug: string) {
+  for (let index = 0; index < 50; index += 1) {
+    const candidate = index === 0 ? baseSlug : `${baseSlug}-${index + 1}`;
+    const rows = await tx`
+      select 1
+      from campaigns
+      where slug = ${candidate}
+      limit 1
+    `;
+
+    if (!rows[0]) return candidate;
+  }
+
+  return `${baseSlug}-${Date.now()}`;
+}
+
+function slugifyProjectName(value: string) {
+  return value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 56);
 }

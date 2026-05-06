@@ -168,6 +168,11 @@ export function OutboundReview({
                   Redactado de nuevo
                 </span>
               ) : null}
+              {message.kind === "outbound_reply" ? (
+                <span className="rounded-md bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700">
+                  Respuesta en hilo
+                </span>
+              ) : null}
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -413,6 +418,11 @@ export function OutboundReview({
                   <div className="flex flex-wrap items-center gap-2">
                     <h2 className="font-semibold">{message.subject}</h2>
                     <StatusBadge status={message.localStatus} />
+                    {message.kind === "outbound_reply" ? (
+                      <span className="rounded-md bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700">
+                        Mismo hilo
+                      </span>
+                    ) : null}
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2">

@@ -20,7 +20,7 @@ export function getCampaignScope(scope: string) {
 }
 
 export function getScopeLabel(scope: string) {
-  return getCampaignScope(scope)?.name ?? "Todas las campañas";
+  return getCampaignScope(scope)?.name ?? "Todos los proyectos";
 }
 
 export function getCampaignRouteParams() {

@@ -3,7 +3,11 @@ import { z } from "zod";
 
 import { getAllowedUser } from "@/lib/auth/request";
 import { isAllowedEmail } from "@/lib/auth/allowed-emails";
-import { buildMimeMessage, encodeRawMessage } from "@/lib/gmail/mime";
+import {
+  buildGmailSendBody,
+  buildMimeMessage,
+  encodeRawMessage,
+} from "@/lib/gmail/mime";
 import { decryptToken, encryptToken } from "@/lib/gmail/token-crypto";
 import { getPostgresClient } from "@/lib/supabase/postgres";
 
@@ -31,6 +35,8 @@ export async function POST(req: NextRequest) {
     const messageRows = await sql`
       select
         m.id::text as id,
+        m.thread_id,
+        m.kind::text as kind,
         m.status::text as status,
         m.campaign_id,
         m.company_id,
@@ -41,10 +47,12 @@ export async function POST(req: NextRequest) {
         ct.email::text as to_email,
         coalesce(m.subject_final, m.subject_draft) as subject,
         coalesce(m.body_final, m.body_draft) as email_body,
+        coalesce(m.gmail_thread_id, t.gmail_thread_id) as gmail_thread_id,
         coalesce(co.do_not_contact, false) as company_do_not_contact,
         coalesce(ct.do_not_contact, false) as contact_do_not_contact
       from messages m
       join sender_accounts sa on sa.id = m.sender_account_id
+      left join threads t on t.id = m.thread_id
       left join companies co on co.id = m.company_id
       left join contacts ct on ct.id = m.contact_id
       where m.id = ${messageId}
@@ -140,6 +148,8 @@ export async function POST(req: NextRequest) {
         to: message.to_email,
       }),
     );
+    const sendThreadId =
+      message.kind === "outbound_reply" ? message.gmail_thread_id : null;
 
     const sendResponse = await fetch(
       "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
@@ -149,7 +159,12 @@ export async function POST(req: NextRequest) {
           Authorization: `Bearer ${access_token}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ raw: encodedMessage }),
+        body: JSON.stringify(
+          buildGmailSendBody({
+            raw: encodedMessage,
+            threadId: sendThreadId,
+          }),
+        ),
       }
     );
 
@@ -170,15 +185,73 @@ export async function POST(req: NextRequest) {
           status = 'sent',
           sent_at = now(),
           gmail_message_id = ${sendResult.id},
-          gmail_thread_id = ${sendResult.threadId},
+          gmail_thread_id = coalesce(${sendResult.threadId}, ${sendThreadId}, gmail_thread_id),
           future_note = concat_ws(' ', nullif(future_note, ''), 'Enviado vía Gmail API.'),
           updated_at = now()
         where id = ${messageId}
           and status = 'approved'
-        returning campaign_id, company_id, contact_id
+        returning id, thread_id, campaign_id, company_id, contact_id, sender_account_id, gmail_thread_id
       `;
 
       if (updated[0]) {
+        const sentThreadId = sendResult.threadId ?? sendThreadId ?? null;
+        let threadId = updated[0].thread_id;
+
+        if (!threadId && sentThreadId) {
+          const existingThread = await tx`
+            select id
+            from threads
+            where campaign_id = ${updated[0].campaign_id}
+              and gmail_thread_id = ${sentThreadId}
+            order by created_at desc
+            limit 1
+          `;
+          threadId = existingThread[0]?.id ?? null;
+        }
+
+        if (!threadId) {
+          const insertedThread = await tx`
+            insert into threads (
+              campaign_id,
+              company_id,
+              contact_id,
+              sender_account_id,
+              gmail_thread_id,
+              subject,
+              status,
+              last_message_at
+            ) values (
+              ${updated[0].campaign_id},
+              ${updated[0].company_id},
+              ${updated[0].contact_id},
+              ${updated[0].sender_account_id},
+              ${sentThreadId},
+              ${message.subject},
+              'open',
+              now()
+            )
+            returning id
+          `;
+          threadId = insertedThread[0]?.id ?? null;
+        }
+
+        if (threadId) {
+          await tx`
+            update threads
+            set
+              gmail_thread_id = coalesce(${sentThreadId}, gmail_thread_id),
+              status = 'open',
+              last_message_at = now()
+            where id = ${threadId}
+          `;
+
+          await tx`
+            update messages
+            set thread_id = ${threadId}
+            where id = ${updated[0].id}
+          `;
+        }
+
         await tx`
           update campaign_contacts cc
           set

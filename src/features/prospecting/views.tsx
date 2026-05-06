@@ -8,6 +8,7 @@ import { NewLeadForm } from "@/components/new-lead-form";
 import { OutboundReview } from "@/components/outbound-review";
 import { PageHeader } from "@/components/page-header";
 import { PipelineBoard } from "@/components/pipeline-board";
+import { ProjectForm } from "@/components/project-form";
 import { RepliesReview } from "@/components/replies-review";
 import { SenderForm } from "@/components/sender-form";
 import { StatusBadge } from "@/components/status-badge";
@@ -24,6 +25,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { GmailConnectButton } from "@/components/gmail-connect-button";
+import { GmailSyncRepliesButton } from "@/components/gmail-sync-replies-button";
 import { getContactPriority } from "@/lib/prospecting/demo-data";
 import { getPostgresClient } from "@/lib/supabase/postgres";
 import type { AppMessage, AppReply } from "@/lib/prospecting/demo-data";
@@ -44,7 +46,8 @@ export async function CampaignsIndexView() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Elige campaña" eyebrow="Workspace">
+      <PageHeader title="Elige proyecto" eyebrow="Workspace">
+        <ProjectForm />
         <Link
           href={`/campaigns/${ALL_CAMPAIGNS_SCOPE}`}
           className={buttonVariants()}
@@ -81,7 +84,7 @@ export async function CampaignsIndexView() {
               <div className="mt-5 grid grid-cols-3 gap-3 text-sm">
                 <Metric label="Empresas" value={stats.activeCompanies} />
                 <Metric label="Mails" value={stats.pendingMessages} />
-                <Metric label="Replies" value={stats.repliesPending} />
+                <Metric label="Respuestas" value={stats.repliesPending} />
               </div>
               <div className="mt-4 flex items-center gap-2 text-sm text-muted-foreground">
                 <MailCheck className="size-4" />
@@ -104,7 +107,7 @@ export async function CampaignOverviewView({ scope }: { scope: string }) {
     <div className="space-y-6">
       <PageHeader
         title={title}
-        eyebrow={campaign?.organization ?? "Todas las campañas"}
+        eyebrow={campaign?.organization ?? "Todos los proyectos"}
       >
         <NewLeadForm scope={scope} campaigns={campaigns} />
       </PageHeader>
@@ -134,6 +137,26 @@ export async function CampaignOverviewView({ scope }: { scope: string }) {
           { label: "Replies por aprobar", value: stats.repliesPending },
         ]}
       />
+
+      {campaign ? (
+        <section className="grid gap-3 md:grid-cols-3">
+          <QuickAction
+            href={`/campaigns/${campaign.id}/companies`}
+            label="Clasificar empresas"
+            description="Ver base general, filtrar sin evaluar y marcar Sirve / Investigar / No sirve."
+          />
+          <QuickAction
+            href={`/campaigns/${campaign.id}/review/outbound`}
+            label="Revisar mails"
+            description="Editar borradores, aprobarlos y enviarlos con Gmail si el remitente está conectado."
+          />
+          <QuickAction
+            href={`/campaigns/${campaign.id}/review/replies`}
+            label="Responder interesados"
+            description="Aprobar respuestas; quedan listas para enviarse en el mismo hilo."
+          />
+        </section>
+      ) : null}
 
       <section className="rounded-lg border border-border bg-card">
         <Table>
@@ -180,7 +203,7 @@ export async function CampaignOverviewView({ scope }: { scope: string }) {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Campaña</TableHead>
+                <TableHead>Proyecto</TableHead>
                 <TableHead>Organización</TableHead>
                 <TableHead>Estado</TableHead>
                 <TableHead>Remitente default</TableHead>
@@ -248,7 +271,7 @@ export async function CompaniesView({ scope }: { scope: string }) {
     <div className="space-y-6">
       <PageHeader
         title="Empresas"
-        eyebrow={campaign?.name ?? "Todas las campañas"}
+        eyebrow={campaign?.name ?? "Todos los proyectos"}
       />
       <CompanyExplorer
         scope={scope}
@@ -396,17 +419,22 @@ export async function OutboundReviewView({ scope }: { scope: string }) {
 
 export async function RepliesReviewView({ scope }: { scope: string }) {
   const snapshot = await getProspectingSnapshot(scope);
+  const pendingReplies = snapshot.replies.filter(
+    (reply) => reply.approvalStatus === "needs_review",
+  );
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Respuestas por aprobar" eyebrow={getScopeLabel(snapshot)} />
+      <PageHeader title="Respuestas por aprobar" eyebrow={getScopeLabel(snapshot)}>
+        <GmailSyncRepliesButton scope={scope} />
+      </PageHeader>
       <RepliesReview
-        key={snapshot.replies
+        key={pendingReplies
           .map((reply) => `${reply.id}:${reply.approvalStatus}:${reply.draftResponse}`)
           .join("|")}
         companies={snapshot.companies}
         contacts={snapshot.contacts}
-        replies={snapshot.replies}
+        replies={pendingReplies}
         senders={snapshot.senders}
       />
     </div>
@@ -426,7 +454,7 @@ export async function SendersView({ scope }: { scope: string }) {
           <TableHeader>
             <TableRow>
               <TableHead>Correo</TableHead>
-              <TableHead>Campaña</TableHead>
+              <TableHead>Proyecto</TableHead>
               <TableHead>Estado</TableHead>
               <TableHead>Límite diario</TableHead>
               <TableHead>Prioridad</TableHead>
@@ -490,7 +518,7 @@ function formatSenderProvider(provider: string) {
 }
 
 function getScopeLabel(snapshot: ProspectingSnapshot) {
-  return snapshot.campaign?.name ?? "Todas las campañas";
+  return snapshot.campaign?.name ?? "Todos los proyectos";
 }
 
 function getStatsForCampaign(snapshot: ProspectingSnapshot, campaignId: string) {
@@ -528,6 +556,27 @@ function Metric({ label, value }: { label: string; value: number }) {
       <div className="text-xs text-muted-foreground">{label}</div>
       <div className="mt-1 text-xl font-semibold">{value}</div>
     </div>
+  );
+}
+
+function QuickAction({
+  description,
+  href,
+  label,
+}: {
+  description: string;
+  href: string;
+  label: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className="rounded-lg border border-border bg-background p-4 text-sm transition-colors hover:border-primary/40 hover:bg-muted/40"
+      prefetch
+    >
+      <div className="font-medium">{label}</div>
+      <p className="mt-1 text-muted-foreground">{description}</p>
+    </Link>
   );
 }
 
@@ -610,10 +659,11 @@ export async function GmailSettingsView() {
           </p>
           <p>
             2. Cuando apruebes un mail en &quot;Mails&quot;, Dom puede enviarlo directamente
-            en vez de abrir Outlook Web.
+            con Gmail.
           </p>
           <p>
-            3. Los replies se monitorean automáticamente y aparecen en &quot;Respuestas&quot;.
+            3. Las respuestas aparecen en &quot;Respuestas&quot;; al aprobarlas se crea
+            un mail de vuelta listo para enviar en el mismo hilo.
           </p>
           <p>
             4. Puedes revocar el acceso en cualquier momento desde{" "}

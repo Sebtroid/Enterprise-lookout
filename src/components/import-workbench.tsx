@@ -147,7 +147,7 @@ export function ImportWorkbench({
       {scope === "all" && campaigns.length ? (
         <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
           En la vista “Todas”, el import crea contactos globales sin linkearlos a
-          una campaña. Para Pastoral, importa desde la campaña Pastoral.
+          un proyecto. Para Pastoral, importa desde el proyecto Pastoral.
         </div>
       ) : null}
 

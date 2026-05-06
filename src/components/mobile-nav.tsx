@@ -36,7 +36,7 @@ export function MobileNav() {
               href="/campaigns"
               className="rounded-md px-3 py-2 font-medium hover:bg-muted"
             >
-              Cambiar campaña
+              Cambiar proyecto
             </Link>
             {ITEMS.map(([label, path]) => {
               const href = `${baseHref}${path}`;

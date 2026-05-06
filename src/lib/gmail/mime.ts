@@ -1,15 +1,26 @@
 type MimeMessageInput = {
   body: string;
   from: string;
+  inReplyTo?: string | null;
+  references?: string | null;
   subject: string;
   to: string;
 };
 
-export function buildMimeMessage({ body, from, subject, to }: MimeMessageInput) {
+export function buildMimeMessage({
+  body,
+  from,
+  inReplyTo,
+  references,
+  subject,
+  to,
+}: MimeMessageInput) {
   const lines = [
     `To: ${sanitizeHeader(to)}`,
     `From: ${sanitizeHeader(from)}`,
     `Subject: ${encodeSubject(subject)}`,
+    ...(inReplyTo ? [`In-Reply-To: ${sanitizeHeader(inReplyTo)}`] : []),
+    ...(references ? [`References: ${sanitizeHeader(references)}`] : []),
     "MIME-Version: 1.0",
     "Content-Type: text/plain; charset=utf-8",
     "Content-Transfer-Encoding: 8bit",
@@ -18,6 +29,16 @@ export function buildMimeMessage({ body, from, subject, to }: MimeMessageInput) 
   ];
 
   return lines.join("\r\n");
+}
+
+export function buildGmailSendBody({
+  raw,
+  threadId,
+}: {
+  raw: string;
+  threadId?: string | null;
+}) {
+  return threadId ? { raw, threadId } : { raw };
 }
 
 export function encodeRawMessage(mimeMessage: string) {

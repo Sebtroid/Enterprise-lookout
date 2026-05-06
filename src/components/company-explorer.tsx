@@ -66,7 +66,7 @@ const membershipOptions: Array<{
   label: string;
 }> = [
   { value: "all", label: "Toda la base" },
-  { value: "in_campaign", label: "En esta campaña" },
+  { value: "in_campaign", label: "En este proyecto" },
   { value: "not_evaluated", label: "Sin evaluar aquí" },
 ];
 
@@ -192,7 +192,7 @@ export function CompanyExplorer({
         <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
           <span>{filteredRecords.length} empresas visibles</span>
           <span>·</span>
-          <span>{inCampaignCount} en esta campaña</span>
+          <span>{inCampaignCount} en este proyecto</span>
           {canClassify ? (
             <>
               <span>·</span>
@@ -383,7 +383,7 @@ function CompanyRow({
             </>
           ) : (
             <span className="text-sm text-muted-foreground">
-              Entra a una campaña para clasificar.
+              Entra a un proyecto para clasificar.
             </span>
           )}
         </div>
@@ -401,7 +401,7 @@ function CompanyRow({
               items={[
                 company.notes,
                 record.campaignCompany?.campaignNotes
-                  ? `Campaña: ${record.campaignCompany.campaignNotes}`
+                  ? `Proyecto: ${record.campaignCompany.campaignNotes}`
                   : null,
                 record.campaignCompany?.futureNotes
                   ? `Futuro: ${record.campaignCompany.futureNotes}`

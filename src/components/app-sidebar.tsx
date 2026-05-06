@@ -50,7 +50,7 @@ export function AppSidebar() {
           href="/campaigns"
           className="mt-6 block rounded-md border border-sidebar-border bg-background/60 px-3 py-2 text-xs font-medium text-muted-foreground hover:text-foreground"
         >
-          Cambiar campaña
+          Cambiar proyecto
         </Link>
 
         <nav className="mt-8 space-y-1">
@@ -80,7 +80,7 @@ export function AppSidebar() {
 
         <div className="mt-auto rounded-md border border-sidebar-border bg-background/60 p-3 text-xs text-muted-foreground">
           <div className="font-medium text-foreground">Workspace privado</div>
-          <div className="mt-1">Campañas, contactos y aprobaciones.</div>
+          <div className="mt-1">Proyectos, contactos y aprobaciones.</div>
         </div>
       </div>
     </aside>

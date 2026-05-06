@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Prospección de Auspicios",
-  description: "Dashboard privado para campañas, contactos y mails aprobados.",
+  description: "Dashboard privado para proyectos, contactos y mails aprobados.",
 };
 
 export default function RootLayout({

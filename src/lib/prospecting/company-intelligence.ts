@@ -209,7 +209,7 @@ export function getCampaignCompanyDecisionPatch(
       fitScore: 75,
       priorityScore: 70,
       selectedContactReason: "Marcada como fit desde la base general.",
-      campaignNotes: "Sirve para esta campaña.",
+      campaignNotes: "Sirve para este proyecto.",
     };
   }
 
@@ -227,8 +227,8 @@ export function getCampaignCompanyDecisionPatch(
     status: "closed_negative",
     fitScore: 0,
     priorityScore: 0,
-    selectedContactReason: "Descartada para esta campaña desde la base general.",
-    campaignNotes: "No sirve para esta campaña.",
+    selectedContactReason: "Descartada para este proyecto desde la base general.",
+    campaignNotes: "No sirve para este proyecto.",
   };
 }
 

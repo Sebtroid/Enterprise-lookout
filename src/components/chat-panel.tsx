@@ -21,7 +21,7 @@ export function ChatPanel() {
     {
       id: "welcome",
       role: "assistant",
-      content: "Hola. Soy Dom, tu asistente de prospección.\n\nPuedo:\n• Buscar empresas para una campaña\n• Redactar mails de outreach\n• Revisar y responder correos\n• Investigar contactos\n\n¿Qué necesitas?",
+      content: "Hola. Soy Dom, tu asistente de prospección.\n\nPuedo:\n• Buscar empresas para un proyecto\n• Redactar mails de outreach\n• Revisar respuestas\n• Preparar siguientes pasos con el historial\n\n¿Qué necesitas?",
       status: "completed",
     },
   ]);

@@ -2,29 +2,23 @@
 
 import { useActionState, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus } from "lucide-react";
+import { FolderPlus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
-  createLeadAction,
+  createProjectAction,
   type ActionState,
 } from "@/features/prospecting/actions";
-import type { AppCampaign } from "@/lib/prospecting/demo-data";
 
 const initialActionState: ActionState = { ok: false, message: "" };
 
-export function NewLeadForm({
-  campaigns,
-  scope,
-}: {
-  campaigns: AppCampaign[];
-  scope: string;
-}) {
+export function ProjectForm() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [state, formAction, isPending] = useActionState(
-    createLeadAction,
+    createProjectAction,
     initialActionState,
   );
 
@@ -37,68 +31,67 @@ export function NewLeadForm({
   return (
     <div className="relative">
       <Button type="button" onClick={() => setOpen((current) => !current)}>
-        <Plus className="size-4" />
-        Nuevo lead
+        <FolderPlus className="size-4" />
+        Nuevo proyecto
       </Button>
 
       {open ? (
-        <div className="absolute right-0 top-10 z-30 w-[min(92vw,34rem)] rounded-lg border border-border bg-popover p-4 text-popover-foreground shadow-lg">
+        <div className="absolute right-0 top-10 z-30 w-[min(92vw,38rem)] rounded-lg border border-border bg-popover p-4 text-popover-foreground shadow-lg">
           <form action={formAction} className="space-y-3">
-            <input type="hidden" name="scope" value={scope} />
             <div>
-              <h2 className="font-semibold">Nuevo lead</h2>
+              <h2 className="font-semibold">Nuevo proyecto</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                Crea empresa, contacto y vínculo con proyecto.
+                Define el contexto para que empresas, mails y respuestas queden separados.
               </p>
             </div>
 
-            {scope === "all" ? (
-              <Field label="Proyecto">
-                <select
-                  className="h-8 w-full rounded-lg border border-input bg-background px-2 text-sm"
-                  name="campaignSlug"
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Nombre">
+                <Input
+                  name="name"
+                  placeholder="Liga SCI, Gala, Torneo de pádel..."
                   required
-                >
-                  {campaigns.map((campaign) => (
-                    <option key={campaign.id} value={campaign.id}>
-                      {campaign.name}
-                    </option>
-                  ))}
-                </select>
+                />
               </Field>
-            ) : null}
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Empresa">
-                <Input name="companyName" required />
+              <Field label="Organización/contexto">
+                <Input
+                  name="organization"
+                  placeholder="CAA U Andes, Trabajo País..."
+                  required
+                />
               </Field>
-              <Field label="Dominio">
-                <Input name="domain" placeholder="empresa.cl" />
+              <Field label="Fecha estimada">
+                <Input name="startsOn" type="date" />
               </Field>
-              <Field label="Sitio web">
-                <Input name="website" placeholder="https://..." />
-              </Field>
-              <Field label="Fuente">
-                <Input name="source" defaultValue="dashboard" />
+              <Field label="Remitente default">
+                <Input
+                  name="senderEmail"
+                  defaultValue="sawitting@miuandes.cl"
+                  type="email"
+                />
               </Field>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Contacto">
-                <Input name="contactName" required />
-              </Field>
-              <Field label="Email">
-                <Input name="email" type="email" />
-              </Field>
-            </div>
-
-            <Field label="Cargo">
-              <Input name="role" />
+            <Field label="Qué se necesita conseguir">
+              <Textarea
+                className="min-h-24"
+                name="valueProposition"
+                placeholder="Ej: auspicios para hidratación, comida, premios, copete, activaciones o aporte en especie..."
+                required
+              />
             </Field>
 
-            <label className="flex items-center gap-2 text-sm">
-              <input name="isDecisionMaker" type="checkbox" />
-              Es decisor o contacto prioritario
+            <label className="space-y-1 text-sm">
+              <span className="font-medium">Estado</span>
+              <select
+                className="h-9 w-full rounded-lg border border-input bg-background px-2 text-sm"
+                name="status"
+                defaultValue="active"
+              >
+                <option value="active">Activo</option>
+                <option value="draft">Borrador</option>
+                <option value="paused">Pausado</option>
+              </select>
             </label>
 
             {state.message ? <ActionMessage state={state} /> : null}
@@ -112,7 +105,7 @@ export function NewLeadForm({
                 Cancelar
               </Button>
               <Button disabled={isPending} type="submit">
-                {isPending ? "Guardando" : "Crear lead"}
+                {isPending ? "Creando" : "Crear proyecto"}
               </Button>
             </div>
           </form>

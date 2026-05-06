@@ -5,7 +5,7 @@ import {
   encryptToken,
   isEncryptedToken,
 } from "../token-crypto";
-import { buildMimeMessage, encodeRawMessage } from "../mime";
+import { buildGmailSendBody, buildMimeMessage, encodeRawMessage } from "../mime";
 import { signOAuthState, verifyOAuthState } from "../oauth-state";
 import { isAllowedEmail } from "../../auth/allowed-emails";
 
@@ -50,6 +50,23 @@ describe("Gmail security helpers", () => {
     expect(raw).not.toContain("+");
     expect(raw).not.toContain("/");
     expect(raw).not.toContain("=");
+  });
+
+  it("keeps approved replies in the original Gmail thread", () => {
+    const raw = encodeRawMessage(
+      buildMimeMessage({
+        body: "Gracias, seguimos por acá.",
+        from: "sawitting@miuandes.cl",
+        subject: "Re: Auspicio para liga SCI",
+        to: "alianzas@empresa.cl",
+      }),
+    );
+
+    expect(buildGmailSendBody({ raw, threadId: "gmail-thread-123" })).toEqual({
+      raw,
+      threadId: "gmail-thread-123",
+    });
+    expect(buildGmailSendBody({ raw })).toEqual({ raw });
   });
 
   it("checks allowlisted emails case-insensitively", () => {
