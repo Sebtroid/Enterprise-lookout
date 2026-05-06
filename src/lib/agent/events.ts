@@ -6,14 +6,18 @@
 export type AgentEventType =
   | "lead_created"
   | "lead_updated"
+  | "company_classified"
+  | "mail_created"
   | "mail_rejected"
   | "mail_approved"
   | "mail_sent"
+  | "reply_received"
   | "campaign_created"
   | "campaign_updated"
   | "contact_added"
   | "research_needed"
   | "draft_needed"
+  | "dom_task_created"
   | "followup_needed"
   | "user_chat_message";
 
@@ -30,9 +34,9 @@ export interface AgentEventInput {
 
 export async function sendAgentEvent(input: AgentEventInput) {
   try {
-    const response = await fetch("/api/agent/events", {
+    const response = await fetch(getAgentEventsUrl(), {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: getAgentEventHeaders(),
       body: JSON.stringify({
         event: input.event,
         campaign_id: input.campaignId,
@@ -55,4 +59,29 @@ export async function sendAgentEvent(input: AgentEventInput) {
     console.error("[sendAgentEvent] error:", err);
     return { ok: false, error: err instanceof Error ? err.message : "unknown" };
   }
+}
+
+function getAgentEventsUrl() {
+  if (typeof window !== "undefined") return "/api/agent/events";
+
+  if (process.env.NODE_ENV === "development") {
+    return `http://localhost:${process.env.PORT || "3001"}/api/agent/events`;
+  }
+
+  const baseUrl =
+    process.env.AGENT_EVENTS_BASE_URL ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null);
+
+  if (!baseUrl) return "/api/agent/events";
+  return new URL("/api/agent/events", baseUrl).toString();
+}
+
+function getAgentEventHeaders() {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (typeof window === "undefined") {
+    const token = process.env.AGENT_API_TOKEN || process.env.DOM_API_TOKEN;
+    if (token) headers.Authorization = `Bearer ${token}`;
+  }
+  return headers;
 }

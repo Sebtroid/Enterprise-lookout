@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { getAllowedUser } from "@/lib/auth/request";
 import { isAllowedEmail } from "@/lib/auth/allowed-emails";
+import { sendAgentEvent } from "@/lib/agent/events";
 import {
   buildGmailSendBody,
   buildMimeMessage,
@@ -263,6 +264,24 @@ export async function POST(req: NextRequest) {
             and (cc.contact_id = ${updated[0].contact_id} or cc.contact_id is null)
         `;
       }
+    });
+
+    await sendAgentEvent({
+      event: "mail_sent",
+      campaignId: String(message.campaign_id),
+      companyId: String(message.company_id ?? ""),
+      contactId: String(message.contact_id ?? ""),
+      messageId,
+      data: {
+        gmail_message_id: sendResult.id,
+        gmail_thread_id: sendResult.threadId ?? sendThreadId ?? null,
+        sender_email: String(message.sender_email),
+        recipient_email: String(message.to_email),
+        subject: String(message.subject),
+        same_gmail_thread: Boolean(sendThreadId),
+      },
+      priority: "normal",
+      source: "gmail_send_api",
     });
 
     return NextResponse.json({

@@ -24,6 +24,8 @@ create type automation_status as enum ('running', 'succeeded', 'failed', 'skippe
 create type contact_verification_status as enum ('unverified', 'verified', 'bounced', 'invalid');
 create type dom_task_status as enum ('pending', 'in_progress', 'completed', 'blocked');
 create type chat_message_role as enum ('user', 'dom', 'system');
+create type agent_event_status as enum ('pending', 'in_progress', 'completed', 'failed');
+create type agent_event_priority as enum ('low', 'normal', 'high', 'urgent');
 
 create table campaigns (
   id uuid primary key default gen_random_uuid(),
@@ -270,6 +272,22 @@ create table gmail_tokens (
   updated_at timestamptz not null default now()
 );
 
+create table agent_inbox (
+  id uuid primary key default gen_random_uuid(),
+  event_type text not null,
+  campaign_id uuid references campaigns(id) on delete set null,
+  company_id uuid references companies(id) on delete set null,
+  contact_id uuid references contacts(id) on delete set null,
+  message_id uuid references messages(id) on delete set null,
+  payload jsonb not null default '{}',
+  priority agent_event_priority not null default 'normal',
+  source text not null default 'app',
+  status agent_event_status not null default 'pending',
+  result jsonb,
+  created_at timestamptz not null default now(),
+  processed_at timestamptz
+);
+
 create table automation_runs (
   id uuid primary key default gen_random_uuid(),
   campaign_id uuid references campaigns(id) on delete set null,
@@ -295,6 +313,9 @@ create index suppression_email_idx on suppression_list (email);
 create index suppression_domain_idx on suppression_list (domain);
 create index chat_messages_thread_created_idx on chat_messages (thread_id, created_at);
 create index dom_tasks_campaign_status_idx on dom_tasks (campaign_id, status, updated_at desc);
+create index agent_inbox_status_priority_idx on agent_inbox (status, priority, created_at);
+create index agent_inbox_campaign_idx on agent_inbox (campaign_id, status);
+create index agent_inbox_created_idx on agent_inbox (created_at desc);
 
 alter table campaigns enable row level security;
 alter table sender_accounts enable row level security;
@@ -313,6 +334,7 @@ alter table chat_threads enable row level security;
 alter table chat_messages enable row level security;
 alter table dom_tasks enable row level security;
 alter table gmail_tokens enable row level security;
+alter table agent_inbox enable row level security;
 alter table automation_runs enable row level security;
 
 -- V1 policy: authenticated users can operate the private workspace.
@@ -334,9 +356,11 @@ create policy "authenticated workspace access" on chat_threads for all using (au
 create policy "authenticated workspace access" on chat_messages for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 create policy "authenticated workspace access" on dom_tasks for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 create policy "authenticated workspace access" on gmail_tokens for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+create policy "authenticated workspace access" on agent_inbox for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 create policy "authenticated workspace access" on automation_runs for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 
 grant select, insert, update, delete on chat_threads to authenticated;
 grant select, insert, update, delete on chat_messages to authenticated;
 grant select, insert, update, delete on dom_tasks to authenticated;
 grant select, insert, update, delete on gmail_tokens to authenticated;
+grant select, insert, update, delete on agent_inbox to authenticated;
