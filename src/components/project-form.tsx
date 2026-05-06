@@ -72,6 +72,15 @@ export function ProjectForm() {
               </Field>
             </div>
 
+            <Field label="Qué es el proyecto">
+              <Textarea
+                className="min-h-28"
+                name="description"
+                placeholder="Ej: Liga de Ingeniería del CDI con 110 personas, 10 equipos y cerca de 20 partidos. Explica la dinámica, público, fechas y por qué alguien querría estar presente."
+                required
+              />
+            </Field>
+
             <Field label="Qué se necesita conseguir">
               <Textarea
                 className="min-h-24"

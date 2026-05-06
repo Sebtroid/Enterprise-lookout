@@ -289,6 +289,7 @@ function buildSearchText({
       company.website,
       company.industry,
       company.region,
+      company.description,
       company.notes,
       campaignCompany?.campaignNotes,
       campaignCompany?.futureNotes,

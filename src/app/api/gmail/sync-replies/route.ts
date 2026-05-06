@@ -21,7 +21,7 @@ const syncBodySchema = z.object({
 
 export async function POST(req: NextRequest) {
   try {
-    const user = await getAllowedUser();
+    const user = await getAllowedUser({ allowDemoUser: true });
     const sql = getPostgresClient();
     if (!user || !sql) {
       return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });

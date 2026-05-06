@@ -598,6 +598,7 @@ export async function createProjectAction(
 
   const name = readFormString(formData, "name");
   const organization = readFormString(formData, "organization");
+  const description = readFormString(formData, "description");
   const valueProposition = readFormString(formData, "valueProposition");
   const startsOn = nullIfEmpty(readFormString(formData, "startsOn"));
   const senderEmail = normalizeEmail(
@@ -607,10 +608,10 @@ export async function createProjectAction(
     readFormString(formData, "status") || "active",
   );
 
-  if (!name || !organization || !valueProposition || !status.success) {
+  if (!name || !organization || !description || !valueProposition || !status.success) {
     return {
       ok: false,
-      message: "Completa nombre, organización/contexto y propuesta del proyecto.",
+      message: "Completa nombre, organización/contexto, descripción y necesidad del proyecto.",
     };
   }
 
@@ -634,7 +635,7 @@ export async function createProjectAction(
         ${slug},
         ${name},
         ${organization},
-        ${valueProposition},
+        ${description},
         ${valueProposition},
         ${status.data}::campaign_status,
         ${startsOn}
@@ -925,6 +926,7 @@ export async function createLeadAction(
               website,
               industry,
               region,
+              description,
               global_notes
             ) values (
               ${companyName || domain || "Empresa sin nombre"},
@@ -933,6 +935,7 @@ export async function createLeadAction(
               ${website},
               'Por clasificar',
               'Por definir',
+              ${role ? `Empresa/contacto creado manualmente. Contacto principal: ${fullName}, ${role}.` : "Empresa creada manualmente; falta descripción breve."},
               'Creado manualmente desde dashboard.'
             )
             returning id
@@ -1252,6 +1255,7 @@ export async function applyImportAction(
                   website,
                   industry,
                   region,
+                  description,
                   global_notes
                 ) values (
                   ${companyName},
@@ -1260,6 +1264,7 @@ export async function applyImportAction(
                   ${domain ? `https://${domain}` : null},
                   'Por clasificar',
                   'Por definir',
+                  ${row.role ? `Empresa importada con contacto ${contactName}, ${row.role}.` : "Empresa importada; falta descripción breve."},
                   'Creado desde import.'
                 )
                 returning id

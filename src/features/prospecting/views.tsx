@@ -117,9 +117,24 @@ export async function CampaignOverviewView({ scope }: { scope: string }) {
           <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div>
               <StatusBadge status={campaign.status} />
-              <p className="mt-3 max-w-3xl text-sm text-muted-foreground">
-                {campaign.valueProposition}
-              </p>
+              <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                <div>
+                  <div className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                    Qué es
+                  </div>
+                  <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
+                    {campaign.description || "Sin descripción del proyecto."}
+                  </p>
+                </div>
+                <div>
+                  <div className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                    Qué se necesita conseguir
+                  </div>
+                  <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
+                    {campaign.valueProposition}
+                  </p>
+                </div>
+              </div>
             </div>
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <CalendarDays className="size-4" />

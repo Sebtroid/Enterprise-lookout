@@ -73,6 +73,7 @@ create table companies (
   website text,
   industry text,
   region text,
+  description text,
   global_notes text,
   do_not_contact boolean not null default false,
   created_at timestamptz not null default now(),

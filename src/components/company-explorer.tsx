@@ -300,6 +300,9 @@ function CompanyRow({
           <div className="mt-2 text-sm text-muted-foreground">
             {company.industry} · {company.region}
           </div>
+          <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">
+            {company.description || "Sin descripción breve de la empresa."}
+          </p>
         </div>
 
         <div className="space-y-2 text-sm">
@@ -324,6 +327,10 @@ function CompanyRow({
               </span>
             )}
           </div>
+          <p className="line-clamp-2 text-xs text-muted-foreground">
+            {record.campaignCompany?.selectedContactReason ??
+              "Sin razón de fit registrada todavía."}
+          </p>
         </div>
 
         <div>
@@ -397,20 +404,25 @@ function CompanyRow({
           <div className="space-y-3">
             <InfoBlock
               icon={<StickyNote className="size-4" />}
-              title="Notas"
+              title="Descripción y fit"
               items={[
-                company.notes,
+                company.description
+                  ? `Qué hace: ${company.description}`
+                  : "Qué hace: falta una descripción breve para la IA.",
+                record.campaignCompany?.selectedContactReason
+                  ? `Por qué podría calzar: ${record.campaignCompany.selectedContactReason}`
+                  : record.membership === "in_campaign"
+                    ? "Por qué podría calzar: falta razón específica para este proyecto."
+                    : "Por qué podría calzar: aún no evaluada en este proyecto.",
+                company.notes ? `Notas globales: ${company.notes}` : null,
                 record.campaignCompany?.campaignNotes
-                  ? `Proyecto: ${record.campaignCompany.campaignNotes}`
+                  ? `Notas del proyecto: ${record.campaignCompany.campaignNotes}`
                   : null,
                 record.campaignCompany?.futureNotes
                   ? `Futuro: ${record.campaignCompany.futureNotes}`
                   : null,
-                record.campaignCompany?.selectedContactReason
-                  ? `Razón: ${record.campaignCompany.selectedContactReason}`
-                  : null,
               ]}
-              empty="Sin notas registradas."
+              empty="Sin descripción ni análisis registrado."
             />
 
             <InfoBlock
