@@ -369,7 +369,7 @@ export async function OutboundReviewView({ scope }: { scope: string }) {
   let gmailConnectedEmails: string[] = [];
   if (sql) {
     const tokenRows = await sql`select user_email from gmail_tokens`;
-    gmailConnectedEmails = tokenRows.map((r: { user_email: string }) => r.user_email);
+    gmailConnectedEmails = tokenRows.map((r) => r.user_email as string);
   }
 
   return (
