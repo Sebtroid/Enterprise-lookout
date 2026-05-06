@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
+import { sendAgentEvent } from "@/lib/agent/events";
 import {
   ALL_CAMPAIGNS_SCOPE,
   isAllCampaignsScope,
@@ -84,6 +85,7 @@ export async function updateOutboundMessageAction(
   const rows = await sql`
     select
       m.id,
+      m.campaign_id::text as campaign_id,
       c.slug as campaign_slug,
       m.company_id::text as company_id,
       m.contact_id::text as contact_id,
@@ -174,6 +176,20 @@ export async function updateOutboundMessageAction(
         contact_email: String(message.contact_email ?? ""),
         subject: String(message.subject ?? ""),
       },
+    });
+    await sendAgentEvent({
+      event: "mail_approved",
+      campaignId: String(message.campaign_id),
+      companyId: String(message.company_id ?? ""),
+      contactId: String(message.contact_id ?? ""),
+      messageId: String(message.id),
+      data: {
+        subject: String(message.subject ?? ""),
+        company_name: String(message.company_name ?? ""),
+        contact_email: String(message.contact_email ?? ""),
+      },
+      priority: "high",
+      source: "outbound_review",
     });
   }
 
@@ -278,7 +294,10 @@ export async function markMessageSentManuallyAction(
         updated_at = now()
       where id = ${messageId}
         and status = 'approved'
-      returning campaign_id, company_id, contact_id
+        returning
+          campaign_id::text as campaign_id,
+          company_id::text as company_id,
+          contact_id::text as contact_id
     `;
 
     if (!updated[0]) return [];
@@ -298,6 +317,22 @@ export async function markMessageSentManuallyAction(
   });
 
   revalidateProspectingPaths();
+
+  const sentMessage = rows[0] as
+    | { campaign_id: string; company_id: string | null; contact_id: string | null }
+    | undefined;
+  if (sentMessage) {
+    await sendAgentEvent({
+      event: "mail_sent",
+      campaignId: sentMessage.campaign_id,
+      companyId: sentMessage.company_id ?? "",
+      contactId: sentMessage.contact_id ?? "",
+      messageId,
+      data: { sent_manually: true },
+      priority: "normal",
+      source: "manual_mark_sent",
+    });
+  }
 
   return rows[0]
     ? { ok: true, message: "Mensaje marcado como enviado." }
@@ -337,10 +372,10 @@ export async function rejectOutboundMessageAction(
     const rows = await tx`
       select
         m.id,
-        m.campaign_id,
+        m.campaign_id::text as campaign_id,
         c.slug as campaign_slug,
-        m.company_id,
-        m.contact_id,
+        m.company_id::text as company_id,
+        m.contact_id::text as contact_id,
         m.sender_account_id,
         m.kind::text as kind,
         coalesce(m.subject_final, m.subject_draft, '(sin asunto)') as subject,
@@ -409,7 +444,13 @@ export async function rejectOutboundMessageAction(
           and (contact_id = ${message.contact_id} or contact_id is null)
       `;
 
-      return { kind: "closed" as const, campaign_slug: message.campaign_slug };
+      return {
+        kind: "closed" as const,
+        campaign_slug: message.campaign_slug,
+        campaignId: String(message.campaign_id),
+        companyId: String(message.company_id ?? ""),
+        contactId: String(message.contact_id ?? ""),
+      };
     }
 
     const rememberedRows = await tx`
@@ -464,6 +505,9 @@ export async function rejectOutboundMessageAction(
     return {
       kind: "redrafted" as const,
       campaign_slug: message.campaign_slug,
+      campaignId: String(message.campaign_id),
+      companyId: String(message.company_id ?? ""),
+      contactId: String(message.contact_id ?? ""),
       messageId: newMessage[0]?.id,
     };
   });
@@ -483,6 +527,21 @@ export async function rejectOutboundMessageAction(
   }
 
   if (result.kind === "closed") {
+    await sendAgentEvent({
+      event: "mail_rejected",
+      campaignId: result.campaignId,
+      companyId: result.companyId,
+      contactId: result.contactId,
+      messageId,
+      data: {
+        reason: reason.data,
+        comment,
+        remember_for_future: rememberForFuture,
+        outcome: "company_closed_negative",
+      },
+      priority: "high",
+      source: "outbound_review",
+    });
     return {
       ok: true,
       message: "Mail rechazado y empresa/contacto cerrado por falta de fit.",
@@ -490,6 +549,21 @@ export async function rejectOutboundMessageAction(
   }
 
   if (result.kind === "redrafted" && result.campaign_slug) {
+    await sendAgentEvent({
+      event: "mail_rejected",
+      campaignId: result.campaignId,
+      companyId: result.companyId,
+      contactId: result.contactId,
+      messageId,
+      data: {
+        reason: reason.data,
+        comment,
+        remember_for_future: rememberForFuture,
+        redraft_message_id: String(result.messageId ?? ""),
+      },
+      priority: "high",
+      source: "outbound_review",
+    });
     await notifyDomEventForCampaignSlug({
       event: "mail_created",
       scope: String(result.campaign_slug),
@@ -500,6 +574,21 @@ export async function rejectOutboundMessageAction(
         feedback: comment,
         remember_for_future: rememberForFuture,
       },
+    });
+    await sendAgentEvent({
+      event: "mail_created",
+      campaignId: result.campaignId,
+      companyId: result.companyId,
+      contactId: result.contactId,
+      messageId: String(result.messageId ?? ""),
+      data: {
+        source_message_id: messageId,
+        source: "outbound_rejection_redraft",
+        reason: reason.data,
+        feedback: comment,
+      },
+      priority: "normal",
+      source: "outbound_review",
     });
   }
 
@@ -610,6 +699,8 @@ export async function classifyCompanyForCampaignAction(
 
     return {
       kind: "updated" as const,
+      campaignId: String(campaign.id),
+      companyId,
       campaignSlug: String(campaign.slug),
       companyName: String(company.canonical_name),
       decision: decision.data,
@@ -645,6 +736,17 @@ export async function classifyCompanyForCampaignAction(
             ? "Usuario marcó esta empresa como fit para el proyecto."
             : "Usuario pidió investigar esta empresa para el proyecto.",
       },
+    });
+    await sendAgentEvent({
+      event: "company_classified",
+      campaignId: result.campaignId,
+      companyId: result.companyId,
+      data: {
+        company_name: result.companyName,
+        classification: result.decision === "fit" ? "sirve" : "investigar",
+      },
+      priority: result.decision === "fit" ? "high" : "normal",
+      source: "company_explorer",
     });
   }
 
@@ -786,6 +888,19 @@ export async function createResearchRequestAction(
       notes,
     },
   });
+  await sendAgentEvent({
+    event: "research_needed",
+    campaignId: String(campaign.id),
+    data: {
+      task_id: String(taskRows[0]?.id ?? ""),
+      source_mode: sourceMode.data,
+      rubrics,
+      notes,
+      instructions: getKimiDeepResearchInstructions(),
+    },
+    priority: "high",
+    source: "research_request_form",
+  });
 
   return {
     ok: true,
@@ -874,6 +989,17 @@ export async function createDomTaskAction(
       context,
       source: "manual_task_form",
     },
+  });
+  await sendAgentEvent({
+    event: "dom_task_created",
+    campaignId: campaignContext.dbId,
+    data: {
+      task_id: String(rows[0]?.id ?? ""),
+      description,
+      context,
+    },
+    priority: "normal",
+    source: "manual_task_form",
   });
 
   return { ok: true, message: "Tarea creada y enviada a Dom." };
@@ -987,10 +1113,25 @@ export async function createProjectAction(
         is_default = true
     `;
 
-    return { slug: String(campaign.slug) };
+    return { id: String(campaign.id), slug: String(campaign.slug) };
   });
 
   revalidateProspectingPaths(result.slug);
+  await sendAgentEvent({
+    event: "campaign_created",
+    campaignId: result.id,
+    data: {
+      slug: result.slug,
+      name,
+      organization,
+      description,
+      value_proposition: valueProposition,
+      starts_on: startsOn,
+      default_sender: senderEmail,
+    },
+    priority: "normal",
+    source: "project_form",
+  });
   return {
     ok: true,
     message: `Proyecto creado. Entra a /campaigns/${result.slug} para cargar empresas.`,
@@ -1017,10 +1158,10 @@ export async function updateReplyDraftAction(
       select
         m.id,
         m.thread_id,
-        m.campaign_id,
+        m.campaign_id::text as campaign_id,
         c.slug as campaign_slug,
-        m.company_id,
-        m.contact_id,
+        m.company_id::text as company_id,
+        m.contact_id::text as contact_id,
         m.sender_account_id,
         coalesce(m.subject_final, m.subject_draft, '(sin asunto)') as subject,
         coalesce(m.gmail_thread_id, t.gmail_thread_id) as gmail_thread_id,
@@ -1116,6 +1257,9 @@ export async function updateReplyDraftAction(
 
     return {
       kind: "approved",
+      campaignId: String(reply.campaign_id),
+      companyId: String(reply.company_id ?? ""),
+      contactId: String(reply.contact_id ?? ""),
       campaignSlug: String(reply.campaign_slug),
     };
   });
@@ -1143,6 +1287,19 @@ export async function updateReplyDraftAction(
         source: "reply_review",
         note: "Usuario aprobó una respuesta para enviar en el mismo hilo.",
       },
+    });
+    await sendAgentEvent({
+      event: "mail_approved",
+      campaignId: result.campaignId,
+      companyId: result.companyId,
+      contactId: result.contactId,
+      messageId: replyId,
+      data: {
+        source: "reply_review",
+        same_gmail_thread: true,
+      },
+      priority: "high",
+      source: "reply_review",
     });
   }
 
@@ -1198,7 +1355,7 @@ export async function createLeadAction(
   const normalizedName = normalizeCompanyName(companyName || domain || "");
   const fullName = contactName || "Contacto por definir";
 
-  await sql.begin(async (tx) => {
+  const result = await sql.begin(async (tx) => {
     const campaignRows = await tx`
       select id
       from campaigns
@@ -1376,9 +1533,31 @@ export async function createLeadAction(
         end,
         updated_at = now()
     `;
+
+    return {
+      campaignId: String(campaignId),
+      companyId: String(companyId),
+      contactId: String(contactId),
+    };
   });
 
   revalidateProspectingPaths(campaignSlug);
+  await sendAgentEvent({
+    event: "lead_created",
+    campaignId: result.campaignId,
+    companyId: result.companyId,
+    contactId: result.contactId,
+    data: {
+      company_name: companyName || domain || "Empresa sin nombre",
+      contact_name: fullName,
+      email,
+      source,
+      is_decision_maker_hint: isDecisionMaker,
+      verification_status: "unverified",
+    },
+    priority: "normal",
+    source: "new_lead_form",
+  });
   return { ok: true, message: "Lead creado y linkeado al proyecto." };
 }
 

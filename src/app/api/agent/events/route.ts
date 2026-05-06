@@ -1,18 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import { getAllowedUser } from "@/lib/auth/request";
 import { getPostgresClient } from "@/lib/supabase/postgres";
 
 const VALID_EVENT_TYPES = [
   "lead_created",
   "lead_updated",
+  "company_classified",
+  "mail_created",
   "mail_rejected",
   "mail_approved",
   "mail_sent",
+  "reply_received",
   "campaign_created",
   "campaign_updated",
   "contact_added",
   "research_needed",
   "draft_needed",
+  "dom_task_created",
   "followup_needed",
   "user_chat_message",
 ] as const;
@@ -38,6 +43,13 @@ interface AgentEventPayload {
  * Dom revisa esta tabla periódicamente y procesa lo que encuentre.
  */
 export async function POST(req: NextRequest) {
+  const user = isAuthorizedAgentRequest(req)
+    ? { email: "agent" }
+    : await getAllowedUser({ allowDemoUser: true, request: req });
+  if (!user) {
+    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  }
+
   const body = (await req.json().catch(() => ({}))) as Partial<AgentEventPayload>;
 
   // Validar mínimo
@@ -57,6 +69,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    const payload = (body.data ?? {}) as Parameters<typeof sql.json>[0];
     const [row] = await sql`
       insert into agent_inbox (
         event_type,
@@ -74,10 +87,10 @@ export async function POST(req: NextRequest) {
         ${body.company_id ?? null},
         ${body.contact_id ?? null},
         ${body.message_id ?? null},
-        ${sql.json(body.data ?? {})},
+        ${sql.json(payload)},
         ${body.priority ?? "normal"},
         ${body.source ?? "app"},
-        "pending"
+        'pending'
       )
       returning id, created_at
     `;
@@ -103,6 +116,10 @@ export async function POST(req: NextRequest) {
  * ?status=pending&limit=20
  */
 export async function GET(req: NextRequest) {
+  if (!isAuthorizedAgentRequest(req)) {
+    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  }
+
   const { searchParams } = new URL(req.url);
   const status = searchParams.get("status") ?? "pending";
   const limit = Math.min(parseInt(searchParams.get("limit") ?? "20", 10), 100);
@@ -151,6 +168,10 @@ export async function GET(req: NextRequest) {
  * Body: { ids: ["uuid", ...], status: "completed" | "in_progress" | "failed" }
  */
 export async function PATCH(req: NextRequest) {
+  if (!isAuthorizedAgentRequest(req)) {
+    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  }
+
   const body = (await req.json().catch(() => ({}))) as {
     ids?: string[];
     status?: "pending" | "in_progress" | "completed" | "failed";
@@ -170,11 +191,14 @@ export async function PATCH(req: NextRequest) {
   }
 
   try {
+    const result = body.result
+      ? (body.result as Parameters<typeof sql.json>[0])
+      : null;
     await sql`
       update agent_inbox
       set
         status = ${body.status},
-        result = ${body.result ? sql.json(body.result) : null},
+        result = ${result ? sql.json(result) : null},
         processed_at = ${body.status === "completed" || body.status === "failed" ? new Date().toISOString() : null}
       where id = any(${body.ids}::uuid[])
     `;
@@ -187,4 +211,10 @@ export async function PATCH(req: NextRequest) {
       { status: 500 },
     );
   }
+}
+
+function isAuthorizedAgentRequest(req: NextRequest) {
+  const token = process.env.AGENT_API_TOKEN || process.env.DOM_API_TOKEN;
+  const authorization = req.headers.get("authorization");
+  return Boolean(token && authorization === `Bearer ${token}`);
 }

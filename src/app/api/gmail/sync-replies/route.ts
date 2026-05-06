@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
+import { sendAgentEvent } from "@/lib/agent/events";
 import { getAllowedUser } from "@/lib/auth/request";
 import { notifyDomEventForCampaignId } from "@/lib/dom/client";
 import { decryptToken, encryptToken } from "@/lib/gmail/token-crypto";
@@ -428,6 +429,26 @@ async function insertInboundReply({
         subject: record.subject,
         received_at: record.receivedAt,
       },
+    });
+    await sendAgentEvent({
+      event: "reply_received",
+      campaignId: record.campaignId,
+      companyId: record.companyId,
+      contactId: record.contactId,
+      data: {
+        gmail_message_id: record.gmailMessageId,
+        original_message_id: record.originalMessageId,
+        gmail_thread_id: record.gmailThreadId,
+        classification: record.classification,
+        subject: record.subject,
+        received_at: record.receivedAt,
+      },
+      priority:
+        record.classification === "interested" ||
+        record.classification === "needs_info"
+          ? "high"
+          : "normal",
+      source: "gmail_sync_replies",
     });
   }
 
