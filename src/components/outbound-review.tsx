@@ -123,10 +123,6 @@ export function OutboundReview({
       ),
     );
   }
-        item.id === id ? { ...item, localStatus: status } : item,
-      ),
-    );
-  }
 
   function updateBody(id: string, body: string) {
     setItems((current) =>
