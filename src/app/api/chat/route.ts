@@ -16,7 +16,7 @@ const sql = postgres(process.env.SUPABASE_DB_URL!, {
 export async function POST(req: NextRequest) {
   try {
     const body: ChatRequest = await req.json();
-    const { message, scope, history } = body;
+    const { message, scope } = body;
 
     // Detectar intención del mensaje
     const intent = detectIntent(message);
@@ -108,7 +108,7 @@ async function handleSendEmail(message: string, scope: string) {
       actionType: "send_email",
       actionPayload: { approvedCount: count, scope },
     });
-  } catch (error) {
+  } catch {
     return NextResponse.json({
       content: "Error consultando mails aprobados.",
       actionType: "error",
@@ -135,7 +135,7 @@ async function handleListPending(scope: string) {
       actionType: "list_pending",
       actionPayload: stats,
     });
-  } catch (error) {
+  } catch {
     return NextResponse.json({
       content: "Error consultando estado.",
       actionType: "error",

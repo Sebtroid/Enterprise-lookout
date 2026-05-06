@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getAllowedUser } from "@/lib/auth/request";
+import { signOAuthState } from "@/lib/gmail/oauth-state";
 
 /**
  * Gmail OAuth2 Flow
@@ -22,17 +24,26 @@ const GMAIL_CLIENT_SECRET = process.env.GMAIL_CLIENT_SECRET;
 const REDIRECT_URI = `${process.env.NEXT_PUBLIC_APP_URL || "https://enterprise-lookout.vercel.app"}/api/gmail/callback`;
 
 export async function GET(req: NextRequest) {
+  const user = await getAllowedUser();
+  if (!user) {
+    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  }
+
+  if (!GMAIL_CLIENT_ID || !GMAIL_CLIENT_SECRET) {
+    return NextResponse.json(
+      { ok: false, error: "Missing Gmail OAuth configuration" },
+      { status: 500 },
+    );
+  }
+
   const { searchParams } = new URL(req.url);
   const action = searchParams.get("action");
 
   if (action === "url") {
-    // Generar URL de autorización
-    const state = Buffer.from(
-      JSON.stringify({ 
-        redirect: "/campaigns", 
-        nonce: crypto.randomUUID() 
-      })
-    ).toString("base64");
+    const state = signOAuthState({
+      redirect: "/campaigns",
+      userEmail: user.email,
+    });
 
     const scopes = [
       "https://www.googleapis.com/auth/gmail.send",
@@ -40,7 +51,7 @@ export async function GET(req: NextRequest) {
     ].join(" ");
 
     const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
-    authUrl.searchParams.set("client_id", GMAIL_CLIENT_ID || "");
+    authUrl.searchParams.set("client_id", GMAIL_CLIENT_ID);
     authUrl.searchParams.set("redirect_uri", REDIRECT_URI);
     authUrl.searchParams.set("response_type", "code");
     authUrl.searchParams.set("scope", scopes);
@@ -54,40 +65,9 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ error: "Invalid action" }, { status: 400 });
 }
 
-export async function POST(req: NextRequest) {
-  const { searchParams } = new URL(req.url);
-  const action = searchParams.get("action");
-
-  if (action === "exchange") {
-    const { code } = await req.json();
-    
-    // Intercambiar código por tokens
-    const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        code,
-        client_id: GMAIL_CLIENT_ID || "",
-        client_secret: GMAIL_CLIENT_SECRET || "",
-        redirect_uri: REDIRECT_URI,
-        grant_type: "authorization_code",
-      }),
-    });
-
-    const tokens = await tokenResponse.json();
-    
-    if (tokens.error) {
-      return NextResponse.json({ error: tokens.error }, { status: 400 });
-    }
-
-    // Guardar tokens en DB
-    return NextResponse.json({ 
-      ok: true, 
-      access_token: tokens.access_token,
-      refresh_token: tokens.refresh_token,
-      expires_in: tokens.expires_in,
-    });
-  }
-
-  return NextResponse.json({ error: "Invalid action" }, { status: 400 });
+export async function POST() {
+  return NextResponse.json(
+    { ok: false, error: "Token exchange is handled by the OAuth callback." },
+    { status: 405 },
+  );
 }

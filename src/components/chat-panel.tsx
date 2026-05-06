@@ -97,7 +97,7 @@ export function ChatPanel() {
       if (data.actionTaken) {
         window.location.reload();
       }
-    } catch (error) {
+    } catch {
       setMessages((prev) =>
         prev.map((m) =>
           m.id === assistantId

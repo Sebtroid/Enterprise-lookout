@@ -17,7 +17,7 @@ export function GmailConnectButton() {
       } else {
         alert("Error generando URL de autorización");
       }
-    } catch (err) {
+    } catch {
       alert("Error de red");
     } finally {
       setLoading(false);

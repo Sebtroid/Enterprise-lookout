@@ -110,7 +110,7 @@ export function OutboundReview({
       } else {
         alert(`Error enviando mail: ${data.error}`);
       }
-    } catch (err) {
+    } catch {
       alert("Error de red al enviar mail.");
     } finally {
       setSendingGmailId(null);

@@ -39,3 +39,10 @@ create table gmail_tokens (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table chat_sessions enable row level security;
+alter table chat_messages enable row level security;
+alter table gmail_tokens enable row level security;
+
+-- These tables are accessed by trusted server routes through the database
+-- connection, not directly by browser Supabase clients. No public policies.
