@@ -17,7 +17,7 @@ const sendBodySchema = z.object({
 
 export async function POST(req: NextRequest) {
   try {
-    const user = await getAllowedUser({ allowDemoUser: true });
+    const user = await getAllowedUser({ allowDemoUser: true, request: req });
     const sql = getPostgresClient();
     if (!user || !sql) {
       return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
