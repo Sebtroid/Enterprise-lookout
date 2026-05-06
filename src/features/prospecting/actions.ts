@@ -22,6 +22,10 @@ import {
   normalizeDomain,
   normalizeEmail,
 } from "@/lib/prospecting/normalize";
+import {
+  getKimiDeepResearchInstructions,
+  kimiDeepResearchJobName,
+} from "@/lib/prospecting/kimi-research";
 import { getPostgresClient } from "@/lib/supabase/postgres";
 
 export type ActionState = {
@@ -42,6 +46,11 @@ const companyDecisionSchema = z.enum(["fit", "maybe", "not_fit"]);
 const senderStatusSchema = z.enum(["active", "paused", "disabled"]);
 const senderAccountTypeSchema = z.enum(["gmail", "outlook", "smtp", "manual"]);
 const projectStatusSchema = z.enum(["draft", "active", "paused"]);
+const researchSourceSchema = z.enum([
+  "new_companies",
+  "existing_and_new",
+  "existing_only",
+]);
 
 const importRowSchema = z.object({
   companyName: z.string(),
@@ -589,6 +598,86 @@ export async function classifyCompanyForCampaignAction(
   };
 }
 
+export async function createResearchRequestAction(
+  _previousState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const sql = getPostgresClient();
+  if (!sql) return { ok: false, message: initialError };
+
+  const scope = readFormString(formData, "scope");
+  const rubrics = readFormString(formData, "rubrics");
+  const notes = readFormString(formData, "notes");
+  const sourceMode = researchSourceSchema.safeParse(
+    readFormString(formData, "sourceMode") || "existing_and_new",
+  );
+
+  if (!scope || isAllCampaignsScope(scope)) {
+    return {
+      ok: false,
+      message: "Elige un proyecto concreto para pedir investigación.",
+    };
+  }
+
+  if (!rubrics || !sourceMode.success) {
+    return {
+      ok: false,
+      message: "Escribe rubros, tipos de empresa o criterios de búsqueda.",
+    };
+  }
+
+  const campaignRows = await sql`
+    select id, slug, name, organization, description, value_proposition
+    from campaigns
+    where slug = ${scope}
+    limit 1
+  `;
+  const campaign = campaignRows[0];
+
+  if (!campaign) {
+    return { ok: false, message: "No encontré ese proyecto." };
+  }
+
+  await sql`
+    insert into automation_runs (
+      campaign_id,
+      job_name,
+      status,
+      input_summary,
+      output_summary
+    ) values (
+      ${campaign.id},
+      ${kimiDeepResearchJobName},
+      'running',
+      ${sql.json({
+        requestedBy: "dashboard",
+        sourceMode: sourceMode.data,
+        rubrics,
+        notes,
+        project: {
+          slug: campaign.slug,
+          name: campaign.name,
+          organization: campaign.organization,
+          description: campaign.description,
+          valueProposition: campaign.value_proposition,
+        },
+        instructions: getKimiDeepResearchInstructions(),
+      })},
+      ${sql.json({
+        nextStep:
+          "KimiClaw debe investigar, guardar empresas/contactos no verificados y dejar evidencia.",
+      })}
+    )
+  `;
+
+  revalidateProspectingPaths(scope);
+  return {
+    ok: true,
+    message:
+      "Pedido guardado para KimiClaw. Prioridad: empresas nuevas con investigación profunda y evidencia.",
+  };
+}
+
 export async function createProjectAction(
   _previousState: ActionState,
   formData: FormData,
@@ -968,6 +1057,7 @@ export async function createLeadAction(
             email,
             source,
             confidence,
+            verification_status,
             is_decision_maker,
             global_notes
           ) values (
@@ -979,7 +1069,8 @@ export async function createLeadAction(
             ${email},
             ${source},
             0.6,
-            ${isDecisionMaker},
+            'unverified',
+            false,
             'Creado manualmente desde dashboard.'
           )
           on conflict (email) do update
@@ -990,7 +1081,10 @@ export async function createLeadAction(
             role = coalesce(excluded.role, contacts.role),
             category = coalesce(excluded.category, contacts.category),
             source = coalesce(excluded.source, contacts.source),
-            is_decision_maker = contacts.is_decision_maker or excluded.is_decision_maker,
+            is_decision_maker = case
+              when contacts.verification_status = 'verified' then contacts.is_decision_maker or excluded.is_decision_maker
+              else contacts.is_decision_maker
+            end,
             updated_at = now()
           returning id
         `
@@ -1003,6 +1097,7 @@ export async function createLeadAction(
             category,
             source,
             confidence,
+            verification_status,
             is_decision_maker,
             global_notes
           ) values (
@@ -1013,7 +1108,8 @@ export async function createLeadAction(
             ${role ? "Por cargo" : "Por clasificar"},
             ${source},
             0.45,
-            ${isDecisionMaker},
+            'unverified',
+            false,
             'Creado manualmente desde dashboard.'
           )
           returning id
@@ -1036,14 +1132,30 @@ export async function createLeadAction(
         ${companyId},
         ${contactId},
         50,
-        ${isDecisionMaker ? 70 : 50},
+        45,
         'new',
         'Lead creado manualmente desde dashboard.',
-        ${source}
+        ${[
+          source,
+          isDecisionMaker
+            ? "Marcado como posible decisor, pero queda sin validar hasta recibir respuesta real."
+            : null,
+        ]
+          .filter(Boolean)
+          .join(" ")}
       )
       on conflict (campaign_id, company_id, contact_id) do update
       set
-        priority_score = greatest(campaign_contacts.priority_score, excluded.priority_score),
+        priority_score = case
+          when exists (
+            select 1
+            from contacts
+            where contacts.id = excluded.contact_id
+              and contacts.verification_status = 'verified'
+          )
+          then greatest(campaign_contacts.priority_score, excluded.priority_score)
+          else least(campaign_contacts.priority_score, excluded.priority_score)
+        end,
         updated_at = now()
     `;
   });
@@ -1297,6 +1409,7 @@ export async function applyImportAction(
                   email,
                   source,
                   confidence,
+                  verification_status,
                   is_decision_maker,
                   global_notes
                 ) values (
@@ -1308,7 +1421,8 @@ export async function applyImportAction(
                   ${email},
                   ${row.source || "import"},
                   0.55,
-                  ${row.isDecisionMaker},
+                  'unverified',
+                  false,
                   'Creado desde import.'
                 )
                 on conflict (email) do update
@@ -1316,7 +1430,6 @@ export async function applyImportAction(
                   company_id = excluded.company_id,
                   role = coalesce(excluded.role, contacts.role),
                   source = coalesce(excluded.source, contacts.source),
-                  is_decision_maker = contacts.is_decision_maker or excluded.is_decision_maker,
                   updated_at = now()
                 returning id
               `
@@ -1331,6 +1444,7 @@ export async function applyImportAction(
                   category,
                   source,
                   confidence,
+                  verification_status,
                   is_decision_maker,
                   global_notes
                 ) values (
@@ -1341,7 +1455,8 @@ export async function applyImportAction(
                   ${row.role ? "Por cargo" : "Por clasificar"},
                   ${row.source || "import"},
                   0.4,
-                  ${row.isDecisionMaker},
+                  'unverified',
+                  false,
                   'Creado desde import.'
                 )
                 returning id
@@ -1364,10 +1479,17 @@ export async function applyImportAction(
               ${companyId},
               ${contactId},
               50,
-              ${row.isDecisionMaker ? 70 : 45},
+              45,
               'new',
               'Lead importado desde archivo.',
-              ${sourceName}
+              ${[
+                sourceName,
+                row.isDecisionMaker
+                  ? "El archivo lo marcaba como posible decisor; validar solo si responde."
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(" ")}
             )
             on conflict (campaign_id, company_id, contact_id) do update
             set updated_at = now()

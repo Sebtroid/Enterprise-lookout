@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import {
+  getKimiDeepResearchInstructions,
+  kimiDeepResearchJobName,
+} from "@/lib/prospecting/kimi-research";
 import { getPostgresClient } from "@/lib/supabase/postgres";
 
 interface ChatRequest {
@@ -64,13 +68,77 @@ function detectIntent(message: string): { type: string } {
 }
 
 async function handleResearchCompanies(message: string, scope: string) {
-  // Extraer rubro/proyecto del mensaje
-  const industry = extractIndustry(message);
-  
+  const sql = getPostgresClient();
+  const rubrics = extractIndustry(message) ?? message;
+
+  if (!sql) {
+    return NextResponse.json({
+      content: "Falta SUPABASE_DB_URL para dejar esta investigación en la cola de KimiClaw.",
+      actionType: "error",
+    });
+  }
+
+  if (scope === "all") {
+    return NextResponse.json({
+      content:
+        "Elige un proyecto concreto primero. La investigación depende del contexto: qué es el proyecto, público y qué se necesita conseguir.",
+      actionType: "research_companies",
+      actionPayload: { rubrics, scope },
+    });
+  }
+
+  const campaignRows = await sql`
+    select id, slug, name, organization, description, value_proposition
+    from campaigns
+    where slug = ${scope}
+    limit 1
+  `;
+  const campaign = campaignRows[0];
+
+  if (!campaign) {
+    return NextResponse.json({
+      content: "No encontré ese proyecto. Crea o abre el proyecto antes de pedir investigación.",
+      actionType: "error",
+    });
+  }
+
+  await sql`
+    insert into automation_runs (
+      campaign_id,
+      job_name,
+      status,
+      input_summary,
+      output_summary
+    ) values (
+      ${campaign.id},
+      ${kimiDeepResearchJobName},
+      'running',
+      ${sql.json({
+        requestedBy: "dom-chat",
+        sourceMode: "existing_and_new",
+        rubrics,
+        originalMessage: message,
+        project: {
+          slug: campaign.slug,
+          name: campaign.name,
+          organization: campaign.organization,
+          description: campaign.description,
+          valueProposition: campaign.value_proposition,
+        },
+        instructions: getKimiDeepResearchInstructions(),
+      })},
+      ${sql.json({
+        nextStep:
+          "KimiClaw debe investigar empresas nuevas con evidencia y revisar fit de la base existente.",
+      })}
+    )
+  `;
+
   return NextResponse.json({
-    content: `Investigación preparada${industry ? ` para ${industry}` : ""}${scope !== "all" ? ` en ${scope}` : ""}.\n\nFlujo recomendado:\n1. Revisa "Empresas" y filtra "Sin evaluar aquí".\n2. Marca Sirve / Investigar / No sirve.\n3. Si faltan opciones, dime rubros concretos y preparo una lista para investigación externa.\n\nPara que Kimi/Dom investigue de verdad falta conectar el motor de búsqueda/escritura automática.`,
+    content: `Listo. Dejé una tarea para KimiClaw: investigar ${rubrics} con investigación profunda para ${campaign.name}.\n\nCriterio guardado: primero empresas nuevas útiles, después revisar la base existente. Los contactos quedan no verificados hasta que respondan.`,
     actionType: "research_companies",
-    actionPayload: { industry, scope },
+    actionPayload: { rubrics, scope, jobName: kimiDeepResearchJobName },
+    actionTaken: true,
   });
 }
 

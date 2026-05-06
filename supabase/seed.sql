@@ -181,14 +181,17 @@ insert into contacts (
   email,
   source,
   confidence,
+  verification_status,
+  verified_at,
+  bounce_count,
   is_decision_maker,
   global_notes
 ) values
-  ('00000000-0000-4000-8000-000000002001', '00000000-0000-4000-8000-000000001001', 'Beatriz Rojas', 'beatriz rojas', 'Subgerenta de Sostenibilidad', 'Sostenibilidad', 'beatriz.rojas@bancoestado.cl', 'Notion histórico', 0.82, true, 'Decisora marcada en base antigua.'),
-  ('00000000-0000-4000-8000-000000002002', '00000000-0000-4000-8000-000000001002', 'Martín Fernández', 'martin fernandez', 'Jefe de Comunicaciones Corporativas', 'Comunicaciones', 'martin.fernandez@colun.cl', 'Google Sheets', 0.74, false, 'Buen cargo para derivación interna.'),
-  ('00000000-0000-4000-8000-000000002003', '00000000-0000-4000-8000-000000001003', 'Paula Herrera', 'paula herrera', 'Gerenta de Asuntos Corporativos', 'Asuntos corporativos', 'paula.herrera@cencosud.com', 'Excel eventos 2025', 0.88, true, 'Pidió más información en una campaña anterior.'),
-  ('00000000-0000-4000-8000-000000002004', '00000000-0000-4000-8000-000000001004', 'Ignacio Valdés', 'ignacio valdes', 'Especialista de Comunidad', 'Comunidad', 'ignacio.valdes@sodimac.cl', 'Investigación web', 0.68, false, 'Contacto operativo para donaciones en especie.'),
-  ('00000000-0000-4000-8000-000000002005', '00000000-0000-4000-8000-000000001005', 'Francisca Morales', 'francisca morales', 'Brand Partnerships Manager', 'Marketing', 'francisca.morales@notco.com', 'Excel eventos 2025', 0.71, false, 'Contacto más orientado a eventos y activaciones universitarias.')
+  ('00000000-0000-4000-8000-000000002001', '00000000-0000-4000-8000-000000001001', 'Beatriz Rojas', 'beatriz rojas', 'Subgerenta de Sostenibilidad', 'Sostenibilidad', 'beatriz.rojas@bancoestado.cl', 'Notion histórico', 0.82, 'unverified', null, 0, false, 'Decisora marcada en base antigua; falta respuesta real.'),
+  ('00000000-0000-4000-8000-000000002002', '00000000-0000-4000-8000-000000001002', 'Martín Fernández', 'martin fernandez', 'Jefe de Comunicaciones Corporativas', 'Comunicaciones', 'martin.fernandez@colun.cl', 'Google Sheets', 0.74, 'unverified', null, 0, false, 'Buen cargo para derivación interna; falta respuesta real.'),
+  ('00000000-0000-4000-8000-000000002003', '00000000-0000-4000-8000-000000001003', 'Paula Herrera', 'paula herrera', 'Gerenta de Asuntos Corporativos', 'Asuntos corporativos', 'paula.herrera@cencosud.com', 'Excel eventos 2025', 0.88, 'verified', '2026-05-03T11:30:00Z', 0, true, 'Pidió más información en una campaña anterior.'),
+  ('00000000-0000-4000-8000-000000002004', '00000000-0000-4000-8000-000000001004', 'Ignacio Valdés', 'ignacio valdes', 'Especialista de Comunidad', 'Comunidad', 'ignacio.valdes@sodimac.cl', 'Investigación web', 0.68, 'verified', '2026-05-04T15:30:00Z', 0, false, 'Contacto operativo para donaciones en especie.'),
+  ('00000000-0000-4000-8000-000000002005', '00000000-0000-4000-8000-000000001005', 'Francisca Morales', 'francisca morales', 'Brand Partnerships Manager', 'Marketing', 'francisca.morales@notco.com', 'Excel eventos 2025', 0.71, 'unverified', null, 0, false, 'Contacto más orientado a eventos y activaciones universitarias; falta respuesta real.')
 on conflict do nothing;
 
 insert into campaign_contacts (
@@ -202,12 +205,12 @@ insert into campaign_contacts (
   selected_contact_reason,
   campaign_notes
 ) values
-  ('00000000-0000-4000-8000-000000003001', '00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000001001', '00000000-0000-4000-8000-000000002001', 91, 88, 'draft_ready', 'Decisora de sostenibilidad con buen fit territorial.', 'Prioridad alta para Pastoral.'),
-  ('00000000-0000-4000-8000-000000003002', '00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000001002', '00000000-0000-4000-8000-000000002002', 87, 70, 'approved_to_send', 'Comunicaciones corporativas puede derivar internamente.', 'Aprobado para envío.'),
+  ('00000000-0000-4000-8000-000000003001', '00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000001001', '00000000-0000-4000-8000-000000002001', 91, 45, 'draft_ready', 'Posible sostenibilidad con buen fit territorial; contacto no verificado.', 'Prioridad sube solo si responde.'),
+  ('00000000-0000-4000-8000-000000003002', '00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000001002', '00000000-0000-4000-8000-000000002002', 87, 45, 'approved_to_send', 'Comunicaciones corporativas puede derivar internamente; contacto no verificado.', 'Aprobado para envío, pero no verificado hasta respuesta.'),
   ('00000000-0000-4000-8000-000000003003', '00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000001003', '00000000-0000-4000-8000-000000002003', 82, 92, 'replied', 'Asuntos corporativos y experiencia previa.', 'Pidió más información.'),
   ('00000000-0000-4000-8000-000000003004', '00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000001004', '00000000-0000-4000-8000-000000002004', 79, 64, 'followup_due', 'Contacto operativo para donaciones en especie.', 'Follow-up pendiente.'),
   ('00000000-0000-4000-8000-000000003005', '00000000-0000-4000-8000-000000000002', '00000000-0000-4000-8000-000000001003', '00000000-0000-4000-8000-000000002003', 78, 92, 'qualified', 'Puede servir para eventos y marcas de consumo.', 'Revisar para eventos.'),
-  ('00000000-0000-4000-8000-000000003006', '00000000-0000-4000-8000-000000000002', '00000000-0000-4000-8000-000000001005', '00000000-0000-4000-8000-000000002005', 76, 69, 'draft_ready', 'Rol de partnerships para activaciones universitarias.', 'Borrador listo para revisión.')
+  ('00000000-0000-4000-8000-000000003006', '00000000-0000-4000-8000-000000000002', '00000000-0000-4000-8000-000000001005', '00000000-0000-4000-8000-000000002005', 76, 45, 'draft_ready', 'Rol de partnerships para activaciones universitarias; contacto no verificado.', 'Borrador listo para revisión.')
 on conflict do nothing;
 
 insert into messages (

@@ -21,6 +21,7 @@ create type message_status as enum ('needs_review', 'approved', 'rejected', 'sen
 create type message_kind as enum ('outbound_initial', 'outbound_followup', 'inbound_reply', 'outbound_reply');
 create type import_status as enum ('uploaded', 'parsed', 'needs_review', 'applied', 'failed');
 create type automation_status as enum ('running', 'succeeded', 'failed', 'skipped');
+create type contact_verification_status as enum ('unverified', 'verified', 'bounced', 'invalid');
 
 create table campaigns (
   id uuid primary key default gen_random_uuid(),
@@ -95,6 +96,10 @@ create table contacts (
   linkedin_url text,
   source text,
   confidence numeric(4, 3) not null default 0.5 check (confidence >= 0 and confidence <= 1),
+  verification_status contact_verification_status not null default 'unverified',
+  verified_at timestamptz,
+  last_bounced_at timestamptz,
+  bounce_count integer not null default 0,
   is_decision_maker boolean not null default false,
   do_not_contact boolean not null default false,
   global_notes text,

@@ -396,16 +396,11 @@ async function insertInboundReply({
 
     if (!inserted[0]) return "duplicate" as const;
 
-    await tx`
-      update campaign_contacts
-      set
-        status = 'replied',
-        future_notes = concat_ws(E'\n', nullif(future_notes, ''), ${record.futureNote}),
-        updated_at = now()
-      where campaign_id = ${record.campaignId}
-        and company_id = ${record.companyId}
-        and (contact_id = ${record.contactId} or contact_id is null)
-    `;
+    if (record.classification === "bounced") {
+      await handleBouncedContact({ record, sentMessage: match.message, tx });
+    } else {
+      await markContactVerified({ record, tx });
+    }
 
     await tx`
       update threads
@@ -418,6 +413,268 @@ async function insertInboundReply({
 
     return "inserted" as const;
   });
+}
+
+async function markContactVerified({
+  record,
+  tx,
+}: {
+  record: ReturnType<typeof prepareInboundReplyRecord>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  tx: any;
+}) {
+  await tx`
+    update contacts
+    set
+      verification_status = 'verified',
+      verified_at = coalesce(verified_at, now()),
+      confidence = greatest(confidence, 0.85),
+      updated_at = now()
+    where id = ${record.contactId}
+  `;
+
+  await tx`
+    update campaign_contacts
+    set
+      status = 'replied',
+      future_notes = concat_ws(E'\n', nullif(future_notes, ''), ${record.futureNote}),
+      updated_at = now()
+    where campaign_id = ${record.campaignId}
+      and company_id = ${record.companyId}
+      and (contact_id = ${record.contactId} or contact_id is null)
+  `;
+}
+
+async function handleBouncedContact({
+  record,
+  sentMessage,
+  tx,
+}: {
+  record: ReturnType<typeof prepareInboundReplyRecord>;
+  sentMessage: SentMessageMatchInput;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  tx: any;
+}) {
+  await tx`
+    update contacts
+    set
+      verification_status = 'bounced',
+      last_bounced_at = now(),
+      bounce_count = bounce_count + 1,
+      confidence = least(confidence, 0.2),
+      global_notes = concat_ws(E'\n', nullif(global_notes, ''), 'Rebotó email; buscar patrón alternativo.'),
+      updated_at = now()
+    where id = ${record.contactId}
+  `;
+
+  await tx`
+    update campaign_contacts
+    set
+      status = 'needs_research',
+      future_notes = concat_ws(
+        E'\n',
+        nullif(future_notes, ''),
+        'Email rebotó. Crear un intento nuevo con otro patrón de dominio; no responder en el hilo del rebote.'
+      ),
+      updated_at = now()
+    where campaign_id = ${record.campaignId}
+      and company_id = ${record.companyId}
+      and (contact_id = ${record.contactId} or contact_id is null)
+  `;
+
+  await createAlternatePatternDraft({ record, sentMessage, tx });
+}
+
+async function createAlternatePatternDraft({
+  record,
+  sentMessage,
+  tx,
+}: {
+  record: ReturnType<typeof prepareInboundReplyRecord>;
+  sentMessage: SentMessageMatchInput;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  tx: any;
+}) {
+  const rows = await tx`
+    select
+      ct.full_name,
+      ct.normalized_name,
+      ct.role,
+      ct.category,
+      co.domain,
+      coalesce(m.subject_final, m.subject_draft, ${sentMessage.subject}) as subject,
+      coalesce(m.body_final, m.body_draft, '') as body
+    from contacts ct
+    join companies co on co.id = ct.company_id
+    left join messages m on m.id = ${sentMessage.id}
+    where ct.id = ${record.contactId}
+    limit 1
+  `;
+  const current = rows[0];
+  if (!current?.domain || !current?.full_name) return;
+
+  const candidateEmail = await getNextEmailPattern({
+    domain: String(current.domain),
+    fullName: String(current.full_name),
+    originalEmail: sentMessage.contactEmail,
+    tx,
+  });
+  if (!candidateEmail) return;
+
+  const contactRows = await tx`
+    insert into contacts (
+      company_id,
+      full_name,
+      normalized_name,
+      role,
+      category,
+      email,
+      source,
+      confidence,
+      verification_status,
+      is_decision_maker,
+      global_notes
+    ) values (
+      ${record.companyId},
+      ${current.full_name},
+      ${current.normalized_name},
+      ${current.role},
+      ${current.category},
+      ${candidateEmail},
+      'pattern_after_bounce',
+      0.25,
+      'unverified',
+      false,
+      ${`Patrón alternativo creado automáticamente después del rebote de ${sentMessage.contactEmail}.`}
+    )
+    on conflict (email) do update
+    set
+      source = coalesce(contacts.source, excluded.source),
+      verification_status = case
+        when contacts.verification_status = 'verified' then contacts.verification_status
+        else 'unverified'::contact_verification_status
+      end,
+      updated_at = now()
+    returning id
+  `;
+  const alternateContactId = contactRows[0]?.id;
+  if (!alternateContactId) return;
+
+  await tx`
+    insert into campaign_contacts (
+      campaign_id,
+      company_id,
+      contact_id,
+      fit_score,
+      priority_score,
+      status,
+      selected_contact_reason,
+      campaign_notes
+    ) values (
+      ${record.campaignId},
+      ${record.companyId},
+      ${alternateContactId},
+      35,
+      35,
+      'draft_ready',
+      'Patrón alternativo generado tras rebote del primer email.',
+      'Revisar antes de enviar; contacto no verificado hasta recibir respuesta.'
+    )
+    on conflict (campaign_id, company_id, contact_id) do update
+    set
+      status = 'draft_ready',
+      updated_at = now()
+  `;
+
+  await tx`
+    insert into messages (
+      campaign_id,
+      company_id,
+      contact_id,
+      sender_account_id,
+      kind,
+      status,
+      subject_draft,
+      body_draft,
+      future_note
+    ) values (
+      ${record.campaignId},
+      ${record.companyId},
+      ${alternateContactId},
+      ${record.senderId},
+      'outbound_initial',
+      'needs_review',
+      ${removeReplyPrefix(String(current.subject || sentMessage.subject))},
+      ${String(current.body || '')},
+      ${`Nuevo intento creado tras rebote de ${sentMessage.contactEmail}. Enviar como mail nuevo; no usar thread del rebote.`}
+    )
+  `;
+}
+
+async function getNextEmailPattern({
+  domain,
+  fullName,
+  originalEmail,
+  tx,
+}: {
+  domain: string;
+  fullName: string;
+  originalEmail: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  tx: any;
+}) {
+  const candidates = buildEmailPatterns(fullName, domain).filter(
+    (email) => email.toLowerCase() !== originalEmail.toLowerCase(),
+  );
+
+  for (const email of candidates) {
+    const rows = await tx`
+      select 1
+      from contacts
+      where email = ${email}
+      limit 1
+    `;
+    if (!rows[0]) return email;
+  }
+
+  return null;
+}
+
+function buildEmailPatterns(fullName: string, domain: string) {
+  const parts = normalizePersonParts(fullName);
+  const [first, ...rest] = parts;
+  const last = rest.at(-1);
+
+  if (!first || !last || !domain) return [];
+
+  const patterns = [
+    `${first}.${last}`,
+    first,
+    `${first}${last}`,
+    `${first[0]}${last}`,
+    `${first}_${last}`,
+    `${last}.${first}`,
+    `${first}-${last}`,
+  ];
+
+  return Array.from(new Set(patterns))
+    .filter(Boolean)
+    .map((localPart) => `${localPart}@${domain.toLowerCase()}`);
+}
+
+function normalizePersonParts(value: string) {
+  return value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .split(/\s+/)
+    .map((part) => part.replace(/[^a-z0-9]/g, ""))
+    .filter((part) => part.length > 1);
+}
+
+function removeReplyPrefix(subject: string) {
+  const clean = subject.replace(/^(\s*(re|fw|fwd)\s*:\s*)+/i, "").trim();
+  return clean || subject || "(sin asunto)";
 }
 
 async function getOrCreateThread({

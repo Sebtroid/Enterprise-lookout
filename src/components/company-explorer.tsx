@@ -433,7 +433,11 @@ function CompanyRow({
                   contact.name,
                   contact.role,
                   contact.email,
-                  contact.isDecisionMaker ? "decisor" : null,
+                  `estado: ${formatVerification(contact.verificationStatus)}`,
+                  contact.verificationStatus === "verified" && contact.isDecisionMaker
+                    ? "decisor verificado"
+                    : null,
+                  contact.bounceCount > 0 ? `${contact.bounceCount} rebote(s)` : null,
                 ]
                   .filter(Boolean)
                   .join(" · "),
@@ -583,4 +587,15 @@ function formatDate(value: string) {
     month: "2-digit",
     year: "2-digit",
   });
+}
+
+function formatVerification(status: AppContact["verificationStatus"]) {
+  const labels: Record<AppContact["verificationStatus"], string> = {
+    bounced: "rebotó",
+    invalid: "inválido",
+    unverified: "no verificado",
+    verified: "verificado",
+  };
+
+  return labels[status] ?? status;
 }

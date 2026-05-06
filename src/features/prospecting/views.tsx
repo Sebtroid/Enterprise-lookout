@@ -10,6 +10,7 @@ import { PageHeader } from "@/components/page-header";
 import { PipelineBoard } from "@/components/pipeline-board";
 import { ProjectForm } from "@/components/project-form";
 import { RepliesReview } from "@/components/replies-review";
+import { ResearchRequestForm } from "@/components/research-request-form";
 import { SenderForm } from "@/components/sender-form";
 import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
@@ -288,6 +289,7 @@ export async function CompaniesView({ scope }: { scope: string }) {
         title="Empresas"
         eyebrow={campaign?.name ?? "Todos los proyectos"}
       />
+      <ResearchRequestForm campaign={campaign} scope={scope} />
       <CompanyExplorer
         scope={scope}
         campaigns={campaigns}
@@ -316,6 +318,7 @@ export async function ContactsView({ scope }: { scope: string }) {
               <TableHead>Empresa</TableHead>
               <TableHead>Cargo</TableHead>
               <TableHead>Email</TableHead>
+              <TableHead>Verificación</TableHead>
               <TableHead>Prioridad</TableHead>
               <TableHead>Fuente</TableHead>
             </TableRow>
@@ -331,7 +334,7 @@ export async function ContactsView({ scope }: { scope: string }) {
                   <TableCell>
                     <div className="font-medium">{contact.name}</div>
                     <div className="mt-1 flex gap-2">
-                      {contact.isDecisionMaker ? (
+                      {contact.verificationStatus === "verified" && contact.isDecisionMaker ? (
                         <Badge variant="outline">Decisor</Badge>
                       ) : null}
                       {contact.doNotContact ? (
@@ -342,7 +345,21 @@ export async function ContactsView({ scope }: { scope: string }) {
                   <TableCell>{company?.name}</TableCell>
                   <TableCell>{contact.role}</TableCell>
                   <TableCell>{contact.email}</TableCell>
-                  <TableCell>{getContactPriority(contact)}</TableCell>
+                  <TableCell>
+                    <div className="flex flex-col gap-1">
+                      <StatusBadge status={contact.verificationStatus} />
+                      {contact.bounceCount > 0 ? (
+                        <span className="text-xs text-muted-foreground">
+                          {contact.bounceCount} rebote(s)
+                        </span>
+                      ) : null}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    {contact.verificationStatus === "verified"
+                      ? getContactPriority(contact)
+                      : "Por validar"}
+                  </TableCell>
                   <TableCell>{contact.source}</TableCell>
                 </TableRow>
               );

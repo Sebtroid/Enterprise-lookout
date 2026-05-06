@@ -66,6 +66,9 @@ export type AppContact = {
   phone: string | null;
   category: string;
   confidence: number;
+  verificationStatus: "unverified" | "verified" | "bounced" | "invalid";
+  verifiedAt: string | null;
+  bounceCount: number;
   source: string;
   isDecisionMaker: boolean;
   doNotContact: boolean;
@@ -93,7 +96,7 @@ export type AppReply = {
   companyId: string;
   contactId: string;
   senderId: string;
-  classification: "interested" | "needs_info" | "referred" | "not_now";
+  classification: "interested" | "needs_info" | "referred" | "not_now" | "bounced";
   receivedAt: string;
   body: string;
   draftResponse: string;
@@ -281,10 +284,13 @@ export const contacts: AppContact[] = [
     phone: null,
     category: "Sostenibilidad",
     confidence: 0.82,
+    verificationStatus: "unverified",
+    verifiedAt: null,
+    bounceCount: 0,
     source: "Notion histórico",
-    isDecisionMaker: true,
+    isDecisionMaker: false,
     doNotContact: false,
-    notes: "Decisora marcada en base antigua.",
+    notes: "Posible decisora marcada en base antigua; falta respuesta real.",
   },
   {
     id: "contact-martin",
@@ -295,6 +301,9 @@ export const contacts: AppContact[] = [
     phone: null,
     category: "Comunicaciones",
     confidence: 0.74,
+    verificationStatus: "unverified",
+    verifiedAt: null,
+    bounceCount: 0,
     source: "Google Sheets",
     isDecisionMaker: false,
     doNotContact: false,
@@ -309,6 +318,9 @@ export const contacts: AppContact[] = [
     phone: null,
     category: "Asuntos corporativos",
     confidence: 0.88,
+    verificationStatus: "verified",
+    verifiedAt: "2026-05-03T11:30:00.000Z",
+    bounceCount: 0,
     source: "Excel eventos 2025",
     isDecisionMaker: true,
     doNotContact: false,
@@ -323,6 +335,9 @@ export const contacts: AppContact[] = [
     phone: null,
     category: "Comunidad",
     confidence: 0.68,
+    verificationStatus: "verified",
+    verifiedAt: "2026-05-04T15:30:00.000Z",
+    bounceCount: 0,
     source: "Investigación web",
     isDecisionMaker: false,
     doNotContact: false,
@@ -337,6 +352,9 @@ export const contacts: AppContact[] = [
     phone: null,
     category: "Marketing",
     confidence: 0.71,
+    verificationStatus: "unverified",
+    verifiedAt: null,
+    bounceCount: 0,
     source: "Excel eventos 2025",
     isDecisionMaker: false,
     doNotContact: false,
@@ -445,6 +463,8 @@ export const importBatches: AppImportBatch[] = [
 ];
 
 export function getContactPriority(contact: AppContact) {
+  if (contact.verificationStatus !== "verified") return 0;
+
   return scoreContactPriority({
     role: contact.role,
     isDecisionMaker: contact.isDecisionMaker,
