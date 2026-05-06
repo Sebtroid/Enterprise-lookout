@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { getPostgresClient } from "@/lib/supabase/postgres";
+import { isAuthorizedDomRequest } from "@/lib/dom/client";
 
 const VALID_EVENT_TYPES = [
   "lead_created",
@@ -35,6 +36,7 @@ interface AgentEventPayload {
  *
  * Inbox de eventos para el agente (Dom).
  * La app dispara eventos acá cuando pasa algo relevante.
+ * No requiere auth (intra-app).
  * Dom revisa esta tabla periódicamente y procesa lo que encuentre.
  */
 export async function POST(req: NextRequest) {
@@ -100,9 +102,15 @@ export async function POST(req: NextRequest) {
  * GET /api/agent/events
  *
  * Para uso del agente (Dom). Devuelve eventos pendientes.
+ * Requiere Authorization: Bearer <DOM_API_TOKEN>.
  * ?status=pending&limit=20
  */
 export async function GET(req: NextRequest) {
+  const auth = req.headers.get("authorization");
+  if (!isAuthorizedDomRequest(auth)) {
+    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  }
+
   const { searchParams } = new URL(req.url);
   const status = searchParams.get("status") ?? "pending";
   const limit = Math.min(parseInt(searchParams.get("limit") ?? "20", 10), 100);
@@ -148,9 +156,15 @@ export async function GET(req: NextRequest) {
  * PATCH /api/agent/events
  *
  * Marcar eventos como procesados (o actualizar status).
+ * Requiere Authorization: Bearer <DOM_API_TOKEN>.
  * Body: { ids: ["uuid", ...], status: "completed" | "in_progress" | "failed" }
  */
 export async function PATCH(req: NextRequest) {
+  const auth = req.headers.get("authorization");
+  if (!isAuthorizedDomRequest(auth)) {
+    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  }
+
   const body = (await req.json().catch(() => ({}))) as {
     ids?: string[];
     status?: "pending" | "in_progress" | "completed" | "failed";
