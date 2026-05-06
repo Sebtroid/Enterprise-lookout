@@ -866,6 +866,9 @@ export async function createLeadAction(
   const role = nullIfEmpty(readFormString(formData, "role"));
   const email = normalizeEmail(readFormString(formData, "email"));
   const website = nullIfEmpty(readFormString(formData, "website"));
+  const companyDescription = nullIfEmpty(
+    readFormString(formData, "companyDescription"),
+  );
   const source = readFormString(formData, "source") || "dashboard";
   const isDecisionMaker = formData.get("isDecisionMaker") === "on";
   const domain =
@@ -935,7 +938,7 @@ export async function createLeadAction(
               ${website},
               'Por clasificar',
               'Por definir',
-              ${role ? `Empresa/contacto creado manualmente. Contacto principal: ${fullName}, ${role}.` : "Empresa creada manualmente; falta descripción breve."},
+              ${companyDescription ?? (role ? `Empresa/contacto creado manualmente. Contacto principal: ${fullName}, ${role}.` : "Empresa creada manualmente; falta descripción breve.")},
               'Creado manualmente desde dashboard.'
             )
             returning id
@@ -948,6 +951,7 @@ export async function createLeadAction(
         set
           website = coalesce(website, ${website}),
           domain = coalesce(domain, ${domain}),
+          description = coalesce(${companyDescription}, description),
           updated_at = now()
         where id = ${companyId}
       `;

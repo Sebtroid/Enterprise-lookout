@@ -6,6 +6,7 @@ import { Plus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   createLeadAction,
   type ActionState,
@@ -82,6 +83,14 @@ export function NewLeadForm({
                 <Input name="source" defaultValue="dashboard" />
               </Field>
             </div>
+
+            <Field label="Qué hace la empresa">
+              <Textarea
+                className="min-h-20"
+                name="companyDescription"
+                placeholder="Descripción corta para que la IA evalúe fit después."
+              />
+            </Field>
 
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Contacto">
