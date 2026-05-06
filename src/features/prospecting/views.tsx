@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CalendarDays, MailCheck } from "lucide-react";
+import { CalendarDays, MailCheck, Mail, Check, AlertTriangle, ExternalLink } from "lucide-react";
 
 import { CompanyExplorer } from "@/components/company-explorer";
 import { ImportWorkbench } from "@/components/import-workbench";
@@ -13,6 +13,7 @@ import { SenderForm } from "@/components/sender-form";
 import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import {
   Table,
@@ -526,5 +527,132 @@ function Metric({ label, value }: { label: string; value: number }) {
       <div className="text-xs text-muted-foreground">{label}</div>
       <div className="mt-1 text-xl font-semibold">{value}</div>
     </div>
+  );
+}
+
+export async function GmailSettingsView() {
+  const sql = getPostgresClient();
+  let tokens: { user_email: string; updated_at: string }[] = [];
+
+  if (sql) {
+    tokens = await sql`
+      select user_email, updated_at::text
+      from gmail_tokens
+      order by updated_at desc
+    `;
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-lg font-semibold">Gmail</h1>
+        <p className="text-sm text-muted-foreground">
+          Conecta tu cuenta de Gmail para enviar mails directamente desde Dom.
+        </p>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Mail className="size-5" />
+            Estado de conexión
+          </CardTitle>
+          <CardDescription>
+            {tokens.length > 0
+              ? `${tokens.length} cuenta(s) conectada(s)`
+              : "Ninguna cuenta conectada"}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {tokens.length > 0 ? (
+            <div className="space-y-3">
+              {tokens.map((token) => (
+                <div
+                  key={token.user_email}
+                  className="flex items-center justify-between rounded-lg border p-3"
+                >
+                  <div className="flex items-center gap-3">
+                    <Check className="size-4 text-emerald-500" />
+                    <div>
+                      <div className="font-medium">{token.user_email}</div>
+                      <div className="text-xs text-muted-foreground">
+                        Conectado el {new Date(token.updated_at).toLocaleDateString("es-CL")}
+                      </div>
+                    </div>
+                  </div>
+                  <Badge variant="outline">Activo</Badge>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="flex flex-col items-center gap-4 py-6">
+              <AlertTriangle className="size-8 text-amber-500" />
+              <div className="text-center">
+                <div className="font-medium">No hay cuentas conectadas</div>
+                <div className="text-sm text-muted-foreground">
+                  Conecta Gmail para que Dom pueda enviar mails como tú.
+                </div>
+              </div>
+              <GmailConnectButton />
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>¿Cómo funciona?</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm text-muted-foreground">
+          <p>
+            1. Conectas tu Gmail con OAuth (seguro, no guardamos tu contraseña).
+          </p>
+          <p>
+            2. Cuando apruebes un mail en &quot;Mails&quot;, Dom puede enviarlo directamente
+            en vez de abrir Outlook Web.
+          </p>
+          <p>
+            3. Los replies se monitorean automáticamente y aparecen en &quot;Respuestas&quot;.
+          </p>
+          <p>
+            4. Puedes revocar el acceso en cualquier momento desde{" "}
+            <a
+              href="https://myaccount.google.com/permissions"
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 text-primary hover:underline"
+            >
+              Google Account Settings
+              <ExternalLink className="size-3" />
+            </a>
+            .
+          </p>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function GmailConnectButton() {
+  return (
+    <form
+      action={async () => {
+        "use server";
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_APP_URL || ""}/api/gmail?action=url`,
+          { cache: "no-store" }
+        );
+        const data = await res.json();
+        if (data.url) {
+          return data.url;
+        }
+        return "";
+      }}
+    >
+      <Button type="submit" size="lg">
+        <Mail className="mr-2 size-4" />
+        Conectar Gmail
+      </Button>
+    </form>
   );
 }
