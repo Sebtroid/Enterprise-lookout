@@ -12,7 +12,7 @@ import { RepliesReview } from "@/components/replies-review";
 import { SenderForm } from "@/components/sender-form";
 import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
-import { buttonVariants } from "@/components/ui/button";
+import { buttonVariants, Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import {
