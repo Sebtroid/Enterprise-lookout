@@ -1,0 +1,451 @@
+import { getPostgresClient } from "@/lib/supabase/postgres";
+
+import {
+  ensureDomChatThread,
+  getActiveDomTasksForCampaign,
+  getDomCampaignContextById,
+  getDomCampaignContextBySlug,
+  getRecentDomChatHistory,
+} from "./repository";
+import type {
+  DomApiResponse,
+  DomCampaignContext,
+  DomChatPayload,
+  DomTaskStatus,
+  DomUser,
+  DomWebhookPayload,
+} from "./types";
+
+const defaultWebhookUrl =
+  "https://dom-assistant.vercel.app/api/webhook/enterprise-lookout";
+const defaultChatUrl =
+  "https://dom-assistant.vercel.app/api/chat/enterprise-lookout";
+
+export function getDomUser(): DomUser {
+  const email =
+    process.env.DOM_USER_EMAIL ||
+    process.env.APP_ALLOWED_EMAILS?.split(",").map((item) => item.trim())[0] ||
+    "sawitting@miuandes.cl";
+
+  return {
+    id: email.split("@")[0] || "sebastian",
+    email,
+  };
+}
+
+export function hasDomApiToken() {
+  return Boolean(process.env.DOM_API_TOKEN);
+}
+
+export function isAuthorizedDomRequest(authHeader: string | null) {
+  const token = process.env.DOM_API_TOKEN;
+  if (!token || !authHeader) return false;
+  return authHeader === `Bearer ${token}`;
+}
+
+export async function notifyDomEventForCampaignSlug({
+  data,
+  event,
+  scope,
+  user = getDomUser(),
+}: {
+  event: string;
+  scope: string;
+  data: Record<string, unknown>;
+  user?: DomUser;
+}) {
+  const campaign = await getDomCampaignContextBySlug(scope);
+  if (!campaign) return { ok: false, skipped: true, reason: "missing_campaign" };
+
+  return notifyDomEvent({ campaign, data, event, user });
+}
+
+export async function notifyDomEventForCampaignId({
+  campaignId,
+  data,
+  event,
+  user = getDomUser(),
+}: {
+  event: string;
+  campaignId: string;
+  data: Record<string, unknown>;
+  user?: DomUser;
+}) {
+  const campaign = await getDomCampaignContextById(campaignId);
+  if (!campaign) return { ok: false, skipped: true, reason: "missing_campaign" };
+
+  return notifyDomEvent({ campaign, data, event, user });
+}
+
+export async function notifyDomEvent({
+  campaign,
+  data,
+  event,
+  user = getDomUser(),
+}: {
+  event: string;
+  campaign: DomCampaignContext;
+  data: Record<string, unknown>;
+  user?: DomUser;
+}) {
+  const payload: DomWebhookPayload = {
+    event,
+    timestamp: new Date().toISOString(),
+    campaign,
+    data,
+    user,
+  };
+
+  const response = await postToDom(
+    process.env.DOM_WEBHOOK_URL || defaultWebhookUrl,
+    payload,
+  );
+
+  if (response.data) {
+    await persistDomApiResponse({
+      campaign,
+      event,
+      metadata: data,
+      response: response.data,
+      source: "webhook",
+    });
+  }
+
+  return response;
+}
+
+export async function sendChatMessageToDom({
+  campaign,
+  message,
+  threadId,
+  user = getDomUser(),
+}: {
+  campaign: DomCampaignContext;
+  threadId: string;
+  message: string;
+  user?: DomUser;
+}) {
+  const [history, tasks] = await Promise.all([
+    getRecentDomChatHistory(threadId, 20),
+    getActiveDomTasksForCampaign(campaign.dbId),
+  ]);
+  const payload: DomChatPayload = {
+    event: "chat_message",
+    thread_id: threadId,
+    campaign,
+    message,
+    history,
+    tasks,
+    user,
+  };
+
+  const response = await postToDom(
+    process.env.DOM_CHAT_URL || defaultChatUrl,
+    payload,
+  );
+
+  if (response.data) {
+    await persistDomApiResponse({
+      campaign,
+      event: "chat_message",
+      metadata: { threadId },
+      response: response.data,
+      source: "chat",
+      threadId,
+    });
+  }
+
+  return response;
+}
+
+export async function persistDomApiResponse({
+  campaign,
+  event,
+  metadata,
+  response,
+  source,
+  threadId,
+}: {
+  campaign: DomCampaignContext;
+  event: string;
+  metadata?: Record<string, unknown>;
+  response: DomApiResponse;
+  source: "chat" | "webhook" | "callback";
+  threadId?: string | null;
+}) {
+  const sql = getPostgresClient();
+  if (!sql) return;
+
+  const thread =
+    threadId
+      ? { id: threadId }
+      : await ensureDomChatThread(campaign.dbId, campaign.name);
+  if (!thread?.id) return;
+
+  await sql.begin(async (tx) => {
+    if (response.message) {
+      await tx`
+        insert into chat_messages (
+          thread_id,
+          role,
+          content,
+          metadata
+        ) values (
+          ${thread.id},
+          'dom',
+          ${response.message},
+          ${tx.json({ event, source, ...metadata })}
+        )
+      `;
+    }
+
+    for (const task of response.tasks_created ?? []) {
+      const description = String(task.description ?? "").trim();
+      if (!description) continue;
+
+      await tx`
+        insert into dom_tasks (
+          campaign_id,
+          description,
+          status,
+          created_by,
+          context,
+          chat_thread_id
+        ) values (
+          ${campaign.dbId},
+          ${description},
+          ${normalizeDomTaskStatus(task.status)}::dom_task_status,
+          'dom',
+          ${tx.json({
+            externalId: task.id ?? null,
+            event,
+            source,
+            ...metadata,
+          })},
+          ${thread.id}
+        )
+      `;
+    }
+
+    await applyDomActionsInTransaction({
+      actions: response.actions ?? [],
+      campaign,
+      source,
+      threadId: thread.id,
+      tx,
+    });
+
+    await tx`
+      update chat_threads
+      set updated_at = now()
+      where id = ${thread.id}
+    `;
+  });
+}
+
+export async function persistDomCallbackResponse({
+  campaign,
+  event,
+  response,
+  threadId,
+}: {
+  campaign: DomCampaignContext;
+  event: string;
+  response: DomApiResponse;
+  threadId?: string | null;
+}) {
+  await persistDomApiResponse({
+    campaign,
+    event,
+    response,
+    source: "callback",
+    threadId,
+  });
+}
+
+async function applyDomActionsInTransaction({
+  actions,
+  campaign,
+  source,
+  threadId,
+  tx,
+}: {
+  actions: Array<Record<string, unknown>>;
+  campaign: DomCampaignContext;
+  source: string;
+  threadId: string;
+  // postgres.js transaction tags have helper overloads stricter than this use.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  tx: any;
+}) {
+  for (const action of actions) {
+    const type = String(action.type ?? "");
+
+    if (type === "update_task" && action.task_id) {
+      await tx`
+        update dom_tasks
+        set
+          status = ${normalizeDomTaskStatus(action.status)}::dom_task_status,
+          result = coalesce(${nullableText(action.result)}, result),
+          updated_at = now()
+        where id = ${String(action.task_id)}
+      `;
+    }
+
+    if (type === "create_task" && action.description) {
+      await tx`
+        insert into dom_tasks (
+          campaign_id,
+          description,
+          status,
+          created_by,
+          context,
+          chat_thread_id
+        ) values (
+          ${campaign.dbId},
+          ${String(action.description)},
+          ${normalizeDomTaskStatus(action.status)}::dom_task_status,
+          'dom',
+          ${tx.json({ action, source })},
+          ${threadId}
+        )
+      `;
+    }
+
+    if (type === "create_draft") {
+      await createDraftFromDomAction({ action, campaign, source, threadId, tx });
+    }
+  }
+}
+
+async function createDraftFromDomAction({
+  action,
+  campaign,
+  source,
+  threadId,
+  tx,
+}: {
+  action: Record<string, unknown>;
+  campaign: DomCampaignContext;
+  source: string;
+  threadId: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  tx: any;
+}) {
+  const companyId = nullableText(action.company_id);
+  const subject = nullableText(action.subject);
+  const body = nullableText(action.body);
+  if (!companyId || !subject || !body) return;
+
+  const contactRows = action.contact_id
+    ? await tx`
+        select id
+        from contacts
+        where id = ${String(action.contact_id)}
+        limit 1
+      `
+    : await tx`
+        select id
+        from contacts
+        where company_id = ${companyId}
+          and do_not_contact = false
+        order by
+          (verification_status = 'verified') desc,
+          confidence desc nulls last,
+          created_at asc
+        limit 1
+      `;
+  const contactId = contactRows[0]?.id ?? null;
+
+  const senderRows = await tx`
+    select csa.sender_account_id
+    from campaign_sender_accounts csa
+    join sender_accounts sa on sa.id = csa.sender_account_id
+    where csa.campaign_id = ${campaign.dbId}
+      and sa.status = 'active'
+    order by csa.is_default desc, csa.priority asc
+    limit 1
+  `;
+  const senderId = senderRows[0]?.sender_account_id ?? null;
+  if (!senderId) return;
+
+  await tx`
+    insert into messages (
+      campaign_id,
+      company_id,
+      contact_id,
+      sender_account_id,
+      kind,
+      status,
+      subject_draft,
+      body_draft,
+      future_note
+    ) values (
+      ${campaign.dbId},
+      ${companyId},
+      ${contactId},
+      ${senderId},
+      'outbound_initial',
+      'needs_review',
+      ${subject},
+      ${body},
+      ${`Borrador creado por Dom desde ${source}; chat_thread_id=${threadId}.`}
+    )
+  `;
+}
+
+async function postToDom(url: string, payload: Record<string, unknown>) {
+  const token = process.env.DOM_API_TOKEN;
+  if (!token) {
+    console.info("DOM_API_TOKEN missing; skipped Dom POST", {
+      event: payload.event,
+    });
+    return { ok: false, skipped: true, reason: "missing_dom_token" };
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15_000);
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    const data = (await response.json().catch(() => null)) as DomApiResponse | null;
+    return {
+      ok: response.ok && data?.ok !== false,
+      status: response.status,
+      data,
+    };
+  } catch (error) {
+    clearTimeout(timeout);
+    console.error("Dom POST failed:", error);
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "unknown_error",
+    };
+  }
+}
+
+function normalizeDomTaskStatus(value: unknown): DomTaskStatus {
+  if (
+    value === "pending" ||
+    value === "in_progress" ||
+    value === "completed" ||
+    value === "blocked"
+  ) {
+    return value;
+  }
+
+  return "pending";
+}
+
+function nullableText(value: unknown) {
+  const text = value == null ? "" : String(value).trim();
+  return text || null;
+}

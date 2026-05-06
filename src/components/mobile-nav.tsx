@@ -12,6 +12,7 @@ const ITEMS = [
   ["Imports", "/imports"],
   ["Mails", "/review/outbound"],
   ["Respuestas", "/review/replies"],
+  ["Dom", "/tasks"],
   ["Remitentes", "/settings/senders"],
 ];
 

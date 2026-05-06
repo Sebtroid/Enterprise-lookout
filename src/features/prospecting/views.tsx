@@ -1,7 +1,17 @@
 import Link from "next/link";
-import { CalendarDays, MailCheck, Mail, Check, AlertTriangle, ExternalLink } from "lucide-react";
+import {
+  AlertTriangle,
+  Bot,
+  CalendarDays,
+  Check,
+  ExternalLink,
+  MailCheck,
+  Mail,
+} from "lucide-react";
 
+import { CampaignDomChat } from "@/components/campaign-dom-chat";
 import { CompanyExplorer } from "@/components/company-explorer";
+import { DomTaskForm } from "@/components/dom-task-form";
 import { ImportWorkbench } from "@/components/import-workbench";
 import { MetricStrip } from "@/components/metric-strip";
 import { NewLeadForm } from "@/components/new-lead-form";
@@ -29,6 +39,7 @@ import { GmailConnectButton } from "@/components/gmail-connect-button";
 import { GmailSyncRepliesButton } from "@/components/gmail-sync-replies-button";
 import { getContactPriority } from "@/lib/prospecting/demo-data";
 import { getPostgresClient } from "@/lib/supabase/postgres";
+import { getDomWorkspaceData } from "@/lib/dom/repository";
 import type { AppMessage, AppReply } from "@/lib/prospecting/demo-data";
 import {
   ALL_CAMPAIGNS_SCOPE,
@@ -155,7 +166,7 @@ export async function CampaignOverviewView({ scope }: { scope: string }) {
       />
 
       {campaign ? (
-        <section className="grid gap-3 md:grid-cols-3">
+        <section className="grid gap-3 md:grid-cols-4">
           <QuickAction
             href={`/campaigns/${campaign.id}/companies`}
             label="Clasificar empresas"
@@ -170,6 +181,11 @@ export async function CampaignOverviewView({ scope }: { scope: string }) {
             href={`/campaigns/${campaign.id}/review/replies`}
             label="Responder interesados"
             description="Aprobar respuestas; quedan listas para enviarse en el mismo hilo."
+          />
+          <QuickAction
+            href={`/campaigns/${campaign.id}/tasks`}
+            label="Dom y tareas"
+            description="Ver tareas, pedir acciones y hablar con Dom con contexto de este proyecto."
           />
         </section>
       ) : null}
@@ -266,6 +282,82 @@ export async function PipelineView({ scope }: { scope: string }) {
     <div className="space-y-6">
       <PageHeader title="Pipeline" eyebrow={getScopeLabel(snapshot)} />
       <PipelineBoard companies={snapshot.companies} />
+    </div>
+  );
+}
+
+export async function TasksView({ scope }: { scope: string }) {
+  const data = await getDomWorkspaceData(scope);
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="Dom y tareas"
+        eyebrow={data.campaign?.name ?? "Todos los proyectos"}
+      >
+        {data.campaign ? <DomTaskForm scope={scope} /> : null}
+      </PageHeader>
+
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(24rem,0.9fr)]">
+        <section className="rounded-lg border border-border bg-card">
+          <div className="flex items-center gap-2 border-b border-border px-4 py-3 font-semibold">
+            <Bot className="size-4" />
+            Tareas de Dom
+          </div>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Tarea</TableHead>
+                <TableHead>Proyecto</TableHead>
+                <TableHead>Estado</TableHead>
+                <TableHead>Creada</TableHead>
+                <TableHead>Última acción</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {data.tasks.map((task) => (
+                <TableRow key={task.id}>
+                  <TableCell className="min-w-72 whitespace-normal">
+                    <div className="font-medium">{task.description}</div>
+                    {task.result ? (
+                      <div className="mt-1 line-clamp-2 text-sm text-muted-foreground">
+                        {task.result}
+                      </div>
+                    ) : null}
+                  </TableCell>
+                  <TableCell>{task.campaignName ?? "Sin proyecto"}</TableCell>
+                  <TableCell>
+                    <StatusBadge status={task.status} />
+                  </TableCell>
+                  <TableCell>{formatDomDate(task.createdAt)}</TableCell>
+                  <TableCell>{formatDomDate(task.updatedAt)}</TableCell>
+                </TableRow>
+              ))}
+              {!data.tasks.length ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-muted-foreground">
+                    Sin tareas para Dom todavía.
+                  </TableCell>
+                </TableRow>
+              ) : null}
+            </TableBody>
+          </Table>
+        </section>
+
+        {data.campaign ? (
+          <CampaignDomChat
+            campaignName={data.campaign.name}
+            initialMessages={data.messages}
+            initialTasks={data.tasks}
+            scope={scope}
+            threadId={data.thread?.id ?? null}
+          />
+        ) : (
+          <section className="rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground">
+            Entra a un proyecto concreto para abrir el chat de campaña con Dom.
+          </section>
+        )}
+      </div>
     </div>
   );
 }
@@ -547,6 +639,18 @@ function formatSenderProvider(provider: string) {
   };
 
   return labels[provider] ?? provider;
+}
+
+function formatDomDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Sin fecha";
+
+  return date.toLocaleString("es-CL", {
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    month: "2-digit",
+  });
 }
 
 function getScopeLabel(snapshot: ProspectingSnapshot) {

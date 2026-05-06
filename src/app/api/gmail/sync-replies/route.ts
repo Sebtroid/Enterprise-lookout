@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
 import { getAllowedUser } from "@/lib/auth/request";
+import { notifyDomEventForCampaignId } from "@/lib/dom/client";
 import { decryptToken, encryptToken } from "@/lib/gmail/token-crypto";
 import {
   buildGmailReplySearchQuery,
@@ -354,7 +355,7 @@ async function insertInboundReply({
 }) {
   const record = prepareInboundReplyRecord(candidate, match.message);
 
-  return sql.begin(async (tx) => {
+  const result = await sql.begin(async (tx) => {
     const thread = await getOrCreateThread({ record, sentMessage: match.message, tx });
     const inserted = await tx`
       insert into messages (
@@ -413,6 +414,24 @@ async function insertInboundReply({
 
     return "inserted" as const;
   });
+
+  if (result === "inserted") {
+    await notifyDomEventForCampaignId({
+      event: "reply_received",
+      campaignId: record.campaignId,
+      data: {
+        message_id: record.gmailMessageId,
+        original_message_id: record.originalMessageId,
+        company_id: record.companyId,
+        contact_id: record.contactId,
+        classification: record.classification,
+        subject: record.subject,
+        received_at: record.receivedAt,
+      },
+    });
+  }
+
+  return result;
 }
 
 async function markContactVerified({

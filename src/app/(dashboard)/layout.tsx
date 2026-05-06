@@ -1,6 +1,5 @@
 import { AppSidebar } from "@/components/app-sidebar";
 import { MobileNav } from "@/components/mobile-nav";
-import { ChatPanel } from "@/components/chat-panel";
 
 export default function DashboardLayout({
   children,
@@ -18,7 +17,6 @@ export default function DashboardLayout({
           </main>
         </div>
       </div>
-      <ChatPanel />
     </div>
   );
 }

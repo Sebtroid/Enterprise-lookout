@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Building2,
+  Bot,
   ContactRound,
   FileDown,
   Inbox,
@@ -24,6 +25,7 @@ const NAV_ITEMS = [
   { path: "/imports", label: "Imports", icon: FileDown },
   { path: "/review/outbound", label: "Mails", icon: Send },
   { path: "/review/replies", label: "Respuestas", icon: Inbox },
+  { path: "/tasks", label: "Dom", icon: Bot },
   { path: "/settings/senders", label: "Remitentes", icon: MailCheck },
   { path: "/settings/gmail", label: "Gmail", icon: Mail },
 ];

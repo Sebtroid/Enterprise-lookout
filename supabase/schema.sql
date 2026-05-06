@@ -22,6 +22,8 @@ create type message_kind as enum ('outbound_initial', 'outbound_followup', 'inbo
 create type import_status as enum ('uploaded', 'parsed', 'needs_review', 'applied', 'failed');
 create type automation_status as enum ('running', 'succeeded', 'failed', 'skipped');
 create type contact_verification_status as enum ('unverified', 'verified', 'bounced', 'invalid');
+create type dom_task_status as enum ('pending', 'in_progress', 'completed', 'blocked');
+create type chat_message_role as enum ('user', 'dom', 'system');
 
 create table campaigns (
   id uuid primary key default gen_random_uuid(),
@@ -227,6 +229,47 @@ create table suppression_list (
   created_at timestamptz not null default now()
 );
 
+create table chat_threads (
+  id uuid primary key default gen_random_uuid(),
+  campaign_id uuid not null references campaigns(id) on delete cascade,
+  title text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (campaign_id)
+);
+
+create table chat_messages (
+  id uuid primary key default gen_random_uuid(),
+  thread_id uuid not null references chat_threads(id) on delete cascade,
+  role chat_message_role not null,
+  content text not null,
+  metadata jsonb,
+  created_at timestamptz not null default now()
+);
+
+create table dom_tasks (
+  id uuid primary key default gen_random_uuid(),
+  campaign_id uuid references campaigns(id) on delete cascade,
+  description text not null,
+  status dom_task_status not null default 'pending',
+  created_by text not null check (created_by in ('user', 'dom', 'system')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  context jsonb,
+  result text,
+  chat_thread_id uuid references chat_threads(id) on delete set null
+);
+
+create table gmail_tokens (
+  id uuid primary key default gen_random_uuid(),
+  user_email citext not null unique,
+  access_token text not null,
+  refresh_token text not null,
+  expires_at timestamptz not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table automation_runs (
   id uuid primary key default gen_random_uuid(),
   campaign_id uuid references campaigns(id) on delete set null,
@@ -250,6 +293,8 @@ create index threads_gmail_idx on threads (gmail_thread_id);
 create index contacts_company_idx on contacts (company_id);
 create index suppression_email_idx on suppression_list (email);
 create index suppression_domain_idx on suppression_list (domain);
+create index chat_messages_thread_created_idx on chat_messages (thread_id, created_at);
+create index dom_tasks_campaign_status_idx on dom_tasks (campaign_id, status, updated_at desc);
 
 alter table campaigns enable row level security;
 alter table sender_accounts enable row level security;
@@ -264,6 +309,10 @@ alter table import_batches enable row level security;
 alter table import_rows enable row level security;
 alter table evidence_links enable row level security;
 alter table suppression_list enable row level security;
+alter table chat_threads enable row level security;
+alter table chat_messages enable row level security;
+alter table dom_tasks enable row level security;
+alter table gmail_tokens enable row level security;
 alter table automation_runs enable row level security;
 
 -- V1 policy: authenticated users can operate the private workspace.
@@ -281,4 +330,13 @@ create policy "authenticated workspace access" on import_batches for all using (
 create policy "authenticated workspace access" on import_rows for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 create policy "authenticated workspace access" on evidence_links for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 create policy "authenticated workspace access" on suppression_list for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+create policy "authenticated workspace access" on chat_threads for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+create policy "authenticated workspace access" on chat_messages for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+create policy "authenticated workspace access" on dom_tasks for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+create policy "authenticated workspace access" on gmail_tokens for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 create policy "authenticated workspace access" on automation_runs for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+
+grant select, insert, update, delete on chat_threads to authenticated;
+grant select, insert, update, delete on chat_messages to authenticated;
+grant select, insert, update, delete on dom_tasks to authenticated;
+grant select, insert, update, delete on gmail_tokens to authenticated;

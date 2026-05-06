@@ -29,6 +29,10 @@ const STATUS_LABELS: Record<string, string> = {
   verified: "Verificado",
   bounced: "Rebotó",
   invalid: "Inválido",
+  pending: "Pendiente",
+  in_progress: "En progreso",
+  completed: "Completada",
+  blocked: "Bloqueada",
 };
 
 const STATUS_CLASSNAMES: Record<string, string> = {
@@ -39,6 +43,7 @@ const STATUS_CLASSNAMES: Record<string, string> = {
   replied: "border-cyan-200 bg-cyan-50 text-cyan-700",
   needs_review: "border-amber-200 bg-amber-50 text-amber-800",
   needs_research: "border-amber-200 bg-amber-50 text-amber-800",
+  pending: "border-amber-200 bg-amber-50 text-amber-800",
   followup_due: "border-orange-200 bg-orange-50 text-orange-700",
   rejected: "border-rose-200 bg-rose-50 text-rose-700",
   failed: "border-rose-200 bg-rose-50 text-rose-700",
@@ -46,6 +51,9 @@ const STATUS_CLASSNAMES: Record<string, string> = {
   invalid: "border-rose-200 bg-rose-50 text-rose-700",
   do_not_contact: "border-rose-200 bg-rose-50 text-rose-700",
   verified: "border-emerald-200 bg-emerald-50 text-emerald-700",
+  completed: "border-emerald-200 bg-emerald-50 text-emerald-700",
+  in_progress: "border-sky-200 bg-sky-50 text-sky-700",
+  blocked: "border-rose-200 bg-rose-50 text-rose-700",
   unverified: "border-slate-200 bg-slate-50 text-slate-700",
   paused: "border-slate-200 bg-slate-50 text-slate-700",
   draft: "border-slate-200 bg-slate-50 text-slate-700",

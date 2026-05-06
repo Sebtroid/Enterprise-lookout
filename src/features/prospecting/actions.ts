@@ -26,6 +26,11 @@ import {
   getKimiDeepResearchInstructions,
   kimiDeepResearchJobName,
 } from "@/lib/prospecting/kimi-research";
+import { notifyDomEventForCampaignSlug } from "@/lib/dom/client";
+import {
+  ensureDomChatThread,
+  getDomCampaignContextBySlug,
+} from "@/lib/dom/repository";
 import { getPostgresClient } from "@/lib/supabase/postgres";
 
 export type ActionState = {
@@ -79,11 +84,17 @@ export async function updateOutboundMessageAction(
   const rows = await sql`
     select
       m.id,
+      c.slug as campaign_slug,
+      m.company_id::text as company_id,
+      m.contact_id::text as contact_id,
       m.status::text as status,
       coalesce(m.subject_final, m.subject_draft) as subject,
+      co.canonical_name as company_name,
+      ct.email::text as contact_email,
       co.do_not_contact as company_do_not_contact,
       ct.do_not_contact as contact_do_not_contact
     from messages m
+    join campaigns c on c.id = m.campaign_id
     left join companies co on co.id = m.company_id
     left join contacts ct on ct.id = m.contact_id
     where m.id = ${messageId}
@@ -151,6 +162,21 @@ export async function updateOutboundMessageAction(
   });
 
   revalidateProspectingPaths();
+  if (nextStatus === "approved") {
+    await notifyDomEventForCampaignSlug({
+      event: "mail_approved",
+      scope: String(message.campaign_slug),
+      data: {
+        message_id: String(message.id),
+        company_id: String(message.company_id ?? ""),
+        company_name: String(message.company_name ?? ""),
+        contact_id: String(message.contact_id ?? ""),
+        contact_email: String(message.contact_email ?? ""),
+        subject: String(message.subject ?? ""),
+      },
+    });
+  }
+
   return {
     ok: true,
     message:
@@ -463,6 +489,20 @@ export async function rejectOutboundMessageAction(
     };
   }
 
+  if (result.kind === "redrafted" && result.campaign_slug) {
+    await notifyDomEventForCampaignSlug({
+      event: "mail_created",
+      scope: String(result.campaign_slug),
+      data: {
+        message_id: String(result.messageId ?? ""),
+        source: "outbound_rejection_redraft",
+        reason: reason.data,
+        feedback: comment,
+        remember_for_future: rememberForFuture,
+      },
+    });
+  }
+
   return {
     ok: true,
     message: "Mail rechazado. Generé un nuevo borrador con el feedback.",
@@ -592,6 +632,22 @@ export async function classifyCompanyForCampaignAction(
   }
 
   revalidateProspectingPaths(result.campaignSlug);
+  if (result.decision === "fit" || result.decision === "maybe") {
+    await notifyDomEventForCampaignSlug({
+      event: "company_classified",
+      scope: result.campaignSlug,
+      data: {
+        company_id: companyId,
+        company_name: result.companyName,
+        classification: result.decision === "fit" ? "sirve" : "investigar",
+        reason:
+          result.decision === "fit"
+            ? "Usuario marcó esta empresa como fit para el proyecto."
+            : "Usuario pidió investigar esta empresa para el proyecto.",
+      },
+    });
+  }
+
   return {
     ok: true,
     message: `${result.companyName} actualizada para este proyecto.`,
@@ -670,12 +726,157 @@ export async function createResearchRequestAction(
     )
   `;
 
+  const campaignContext = await getDomCampaignContextBySlug(scope);
+  const thread = campaignContext
+    ? await ensureDomChatThread(campaignContext.dbId, campaignContext.name)
+    : null;
+  const taskRows = await sql`
+    insert into dom_tasks (
+      campaign_id,
+      description,
+      status,
+      created_by,
+      context,
+      chat_thread_id
+    ) values (
+      ${campaign.id},
+      ${`Investigar empresas: ${rubrics}`},
+      'pending',
+      'user',
+      ${sql.json({
+        sourceMode: sourceMode.data,
+        rubrics,
+        notes,
+        instructions: getKimiDeepResearchInstructions(),
+      })},
+      ${thread?.id ?? null}
+    )
+    returning id::text as id
+  `;
+
+  if (thread?.id) {
+    await sql`
+      insert into chat_messages (
+        thread_id,
+        role,
+        content,
+        metadata
+      ) values (
+        ${thread.id},
+        'user',
+        ${`Tarea para Dom: investigar empresas de ${rubrics}${notes ? ` (${notes})` : ""}`},
+        ${sql.json({
+          event: "dom_task_created",
+          taskId: taskRows[0]?.id ?? null,
+          source: "research_request_form",
+        })}
+      )
+    `;
+  }
+
   revalidateProspectingPaths(scope);
+  await notifyDomEventForCampaignSlug({
+    event: "dom_task_created",
+    scope,
+    data: {
+      task_id: String(taskRows[0]?.id ?? ""),
+      description: `Investigar empresas: ${rubrics}`,
+      source_mode: sourceMode.data,
+      rubrics,
+      notes,
+    },
+  });
+
   return {
     ok: true,
     message:
       "Pedido guardado para KimiClaw. Prioridad: empresas nuevas con investigación profunda y evidencia.",
   };
+}
+
+export async function createDomTaskAction(
+  _previousState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const sql = getPostgresClient();
+  if (!sql) return { ok: false, message: initialError };
+
+  const scope = readFormString(formData, "scope");
+  const description = readFormString(formData, "description");
+  const context = readFormString(formData, "context");
+
+  if (!scope || isAllCampaignsScope(scope)) {
+    return {
+      ok: false,
+      message: "Elige un proyecto concreto para crear una tarea de Dom.",
+    };
+  }
+
+  if (description.length < 4) {
+    return { ok: false, message: "Escribe una tarea clara para Dom." };
+  }
+
+  const campaignContext = await getDomCampaignContextBySlug(scope);
+  if (!campaignContext) {
+    return { ok: false, message: "No encontré ese proyecto." };
+  }
+
+  const thread = await ensureDomChatThread(campaignContext.dbId, campaignContext.name);
+  const rows = await sql`
+    insert into dom_tasks (
+      campaign_id,
+      description,
+      status,
+      created_by,
+      context,
+      chat_thread_id
+    ) values (
+      ${campaignContext.dbId},
+      ${description},
+      'pending',
+      'user',
+      ${sql.json({
+        context: context || null,
+        project: campaignContext,
+      })},
+      ${thread?.id ?? null}
+    )
+    returning id::text as id
+  `;
+
+  if (thread?.id) {
+    await sql`
+      insert into chat_messages (
+        thread_id,
+        role,
+        content,
+        metadata
+      ) values (
+        ${thread.id},
+        'user',
+        ${`Tarea para Dom: ${description}${context ? `\n\nContexto: ${context}` : ""}`},
+        ${sql.json({
+          event: "dom_task_created",
+          taskId: rows[0]?.id ?? null,
+          source: "manual_task_form",
+        })}
+      )
+    `;
+  }
+
+  revalidateProspectingPaths(scope);
+  await notifyDomEventForCampaignSlug({
+    event: "dom_task_created",
+    scope,
+    data: {
+      task_id: String(rows[0]?.id ?? ""),
+      description,
+      context,
+      source: "manual_task_form",
+    },
+  });
+
+  return { ok: true, message: "Tarea creada y enviada a Dom." };
 }
 
 export async function createProjectAction(
@@ -927,7 +1128,24 @@ export async function updateReplyDraftAction(
     return { ok: false, message: "Esa respuesta ya fue enviada." };
   }
 
-  revalidateProspectingPaths(result.campaignSlug);
+  const campaignSlug = result.campaignSlug;
+  if (!campaignSlug) {
+    return { ok: false, message: "No encontré el proyecto de esta respuesta." };
+  }
+
+  revalidateProspectingPaths(campaignSlug);
+  if (intent.data === "approved") {
+    await notifyDomEventForCampaignSlug({
+      event: "mail_approved",
+      scope: campaignSlug,
+      data: {
+        reply_id: replyId,
+        source: "reply_review",
+        note: "Usuario aprobó una respuesta para enviar en el mismo hilo.",
+      },
+    });
+  }
+
   return {
     ok: true,
     message:
@@ -1595,6 +1813,7 @@ function revalidateProspectingPaths(scope?: string) {
     revalidatePath(`/campaigns/${scope}/companies`);
     revalidatePath(`/campaigns/${scope}/imports`);
     revalidatePath(`/campaigns/${scope}/pipeline`);
+    revalidatePath(`/campaigns/${scope}/tasks`);
     revalidatePath(`/campaigns/${scope}/review/outbound`);
     revalidatePath(`/campaigns/${scope}/review/replies`);
     revalidatePath(`/campaigns/${scope}/settings/senders`);
