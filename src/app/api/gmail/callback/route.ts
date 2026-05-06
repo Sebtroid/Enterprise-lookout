@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAllowedUser } from "@/lib/auth/request";
 import { isAllowedEmail } from "@/lib/auth/allowed-emails";
 import { encryptToken } from "@/lib/gmail/token-crypto";
 import { verifyOAuthState } from "@/lib/gmail/oauth-state";
@@ -10,11 +9,10 @@ const GMAIL_CLIENT_SECRET = process.env.GMAIL_CLIENT_SECRET;
 const REDIRECT_URI = `${process.env.NEXT_PUBLIC_APP_URL || "https://enterprise-lookout.vercel.app"}/api/gmail/callback`;
 
 export async function GET(req: NextRequest) {
-  const user = await getAllowedUser();
   const sql = getPostgresClient();
-  if (!user || !sql) {
+  if (!sql) {
     return NextResponse.redirect(
-      new URL("/login?gmail_error=unauthorized", req.url),
+      new URL("/campaigns?gmail_error=missing_database_config", req.url),
     );
   }
 
@@ -34,7 +32,7 @@ export async function GET(req: NextRequest) {
   }
 
   const verifiedState = state ? verifyOAuthState(state) : null;
-  if (!verifiedState || verifiedState.userEmail.toLowerCase() !== user.email.toLowerCase()) {
+  if (!verifiedState) {
     return NextResponse.redirect(
       new URL("/campaigns?gmail_error=invalid_state", req.url),
     );

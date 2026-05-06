@@ -15,7 +15,7 @@ export function GmailConnectButton() {
       if (data.url) {
         window.location.href = data.url;
       } else {
-        alert("Error generando URL de autorización");
+        alert(data.error ?? "Error generando URL de autorización");
       }
     } catch {
       alert("Error de red");

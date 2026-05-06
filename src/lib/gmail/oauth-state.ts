@@ -1,8 +1,8 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 
 type OAuthStatePayload = {
   redirect: string;
-  userEmail: string;
+  userEmail?: string;
   nonce?: string;
   issuedAt?: number;
 };
@@ -16,7 +16,7 @@ export function signOAuthState(
   const completePayload = {
     ...payload,
     issuedAt: payload.issuedAt ?? Date.now(),
-    nonce: payload.nonce ?? crypto.randomUUID(),
+    nonce: payload.nonce ?? randomUUID(),
   };
   const encodedPayload = Buffer.from(JSON.stringify(completePayload), "utf8").toString(
     "base64url",
@@ -40,7 +40,7 @@ export function verifyOAuthState(
     const payload = JSON.parse(
       Buffer.from(encodedPayload, "base64url").toString("utf8"),
     ) as OAuthStatePayload;
-    if (!payload.userEmail || !payload.redirect) return null;
+    if (!payload.redirect) return null;
     if (!payload.issuedAt || Date.now() - payload.issuedAt > MAX_STATE_AGE_MS) {
       return null;
     }

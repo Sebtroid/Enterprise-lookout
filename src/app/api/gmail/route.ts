@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAllowedUser } from "@/lib/auth/request";
 import { signOAuthState } from "@/lib/gmail/oauth-state";
 
 /**
@@ -24,11 +23,6 @@ const GMAIL_CLIENT_SECRET = process.env.GMAIL_CLIENT_SECRET;
 const REDIRECT_URI = `${process.env.NEXT_PUBLIC_APP_URL || "https://enterprise-lookout.vercel.app"}/api/gmail/callback`;
 
 export async function GET(req: NextRequest) {
-  const user = await getAllowedUser();
-  if (!user) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
-  }
-
   if (!GMAIL_CLIENT_ID || !GMAIL_CLIENT_SECRET) {
     return NextResponse.json(
       { ok: false, error: "Missing Gmail OAuth configuration" },
@@ -42,7 +36,6 @@ export async function GET(req: NextRequest) {
   if (action === "url") {
     const state = signOAuthState({
       redirect: "/campaigns",
-      userEmail: user.email,
     });
 
     const scopes = [
