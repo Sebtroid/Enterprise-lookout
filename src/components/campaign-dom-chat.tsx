@@ -24,6 +24,7 @@ export function CampaignDomChat({
 }) {
   const [messages, setMessages] = useState(initialMessages);
   const [tasks, setTasks] = useState(initialTasks);
+  const [currentThreadId, setCurrentThreadId] = useState(threadId);
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState("");
@@ -44,18 +45,19 @@ export function CampaignDomChat({
   }, [messages]);
 
   useEffect(() => {
-    if (!threadId) return;
+    if (!currentThreadId) return;
     const interval = window.setInterval(async () => {
       const response = await fetch(`/api/dom/chat?scope=${encodeURIComponent(scope)}`);
       const data = await response.json().catch(() => null);
       if (data?.ok) {
         setMessages(data.messages ?? []);
         setTasks(data.tasks ?? []);
+        if (data.thread?.id) setCurrentThreadId(data.thread.id);
       }
     }, 8000);
 
     return () => window.clearInterval(interval);
-  }, [scope, threadId]);
+  }, [scope, currentThreadId]);
 
   async function sendMessage() {
     const message = input.trim();
@@ -68,7 +70,7 @@ export function CampaignDomChat({
       ...current,
       {
         id: `optimistic-${Date.now()}`,
-        threadId: threadId ?? "",
+        threadId: currentThreadId ?? "",
         role: "user",
         content: message,
         metadata: { optimistic: true },
@@ -80,7 +82,7 @@ export function CampaignDomChat({
       const response = await fetch("/api/dom/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message, scope, threadId }),
+        body: JSON.stringify({ message, scope, threadId: currentThreadId }),
       });
       const data = await response.json();
       if (!response.ok || !data.ok) {
@@ -89,8 +91,9 @@ export function CampaignDomChat({
 
       setMessages(data.messages ?? []);
       setTasks(data.tasks ?? []);
-      if (data.dom?.skipped) {
-        setError("Mensaje guardado. Falta configurar DOM_API_TOKEN para que Dom lo procese.");
+      if (data.threadId) setCurrentThreadId(data.threadId);
+      if (data.agentEvent?.ok === false) {
+        setError("Mensaje guardado, pero no se pudo avisar a Dom. Revisa el inbox de eventos.");
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error enviando mensaje.");

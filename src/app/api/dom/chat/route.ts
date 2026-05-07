@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
+import { sendAgentEvent } from "@/lib/agent/events";
 import { getAllowedUser } from "@/lib/auth/request";
 import {
   isAuthorizedDomRequest,
   persistDomCallbackResponse,
-  sendChatMessageToDom,
 } from "@/lib/dom/client";
 import {
   ensureDomChatThread,
@@ -21,7 +21,7 @@ import { getPostgresClient } from "@/lib/supabase/postgres";
 const userChatSchema = z.object({
   message: z.string().min(1),
   scope: z.string().min(1),
-  threadId: z.string().uuid().optional(),
+  threadId: z.string().uuid().nullable().optional(),
 });
 
 export async function GET(req: NextRequest) {
@@ -73,10 +73,9 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const thread =
-    threadId
-      ? { id: threadId }
-      : await ensureDomChatThread(campaign.dbId, campaign.name);
+  const thread = threadId
+    ? { id: threadId }
+    : await ensureDomChatThread(campaign.dbId, campaign.name);
   if (!thread?.id) {
     return NextResponse.json(
       { ok: false, error: "Could not create chat thread" },
@@ -84,7 +83,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  await sql`
+  const inserted = await sql`
     insert into chat_messages (
       thread_id,
       role,
@@ -94,14 +93,26 @@ export async function POST(req: NextRequest) {
       ${thread.id},
       'user',
       ${message},
-      ${sql.json({ source: "dashboard" })}
+      ${sql.json({ source: "dashboard", user_id: user.id, user_email: user.email })}
     )
+    returning id::text as id
   `;
+  const chatMessageId = String(inserted[0]?.id ?? "");
 
-  const domResult = await sendChatMessageToDom({
-    campaign,
-    message,
-    threadId: thread.id,
+  const agentEvent = await sendAgentEvent({
+    event: "user_chat_message",
+    campaignId: campaign.dbId,
+    data: {
+      campaign_id: campaign.dbId,
+      campaign_slug: campaign.id,
+      message,
+      user_id: user.id,
+      user_email: user.email,
+      chat_thread_id: thread.id,
+      chat_message_id: chatMessageId,
+    },
+    priority: "normal",
+    source: "app_chat",
   });
 
   const [messages, tasks] = await Promise.all([
@@ -111,7 +122,7 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({
     ok: true,
-    dom: domResult,
+    agentEvent,
     threadId: thread.id,
     messages,
     tasks,
