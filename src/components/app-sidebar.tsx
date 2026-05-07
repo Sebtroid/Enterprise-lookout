@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import type { MouseEvent } from "react";
 import {
   Building2,
   Bot,
@@ -51,6 +52,8 @@ export function AppSidebar() {
         <div className="mt-6 grid gap-2">
           <Link
             href="/campaigns"
+            data-native-navigation="true"
+            onClick={handleChangeProjectClick}
             className="block rounded-lg border border-sidebar-border bg-background/70 px-3 py-2 text-xs font-medium text-muted-foreground transition-all duration-200 hover:border-primary/25 hover:bg-background hover:text-foreground active:scale-[0.99]"
           >
             Cambiar proyecto
@@ -103,4 +106,20 @@ function getScopeFromPath(pathname: string) {
   const [first, second] = pathname.split("/").filter(Boolean);
   if (first === "campaigns" && second) return second;
   return "all";
+}
+
+function handleChangeProjectClick(event: MouseEvent<HTMLAnchorElement>) {
+  if (
+    event.defaultPrevented ||
+    event.button !== 0 ||
+    event.metaKey ||
+    event.altKey ||
+    event.ctrlKey ||
+    event.shiftKey
+  ) {
+    return;
+  }
+
+  event.preventDefault();
+  window.location.assign("/campaigns");
 }
