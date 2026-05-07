@@ -6,6 +6,7 @@ import { Bot, Loader2, Send, User } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { shouldReplaceDomCollection } from "@/lib/dom/chat-state";
 import type { DomChatMessage, DomTask } from "@/lib/dom/types";
 import { cn } from "@/lib/utils";
 
@@ -28,7 +29,8 @@ export function CampaignDomChat({
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState("");
-  const endRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const latestMessageId = messages.at(-1)?.id ?? "";
 
   const activityLabel = useMemo(() => {
     const activeTask = tasks.find((task) => task.status === "in_progress");
@@ -41,8 +43,14 @@ export function CampaignDomChat({
   }, [messages, tasks]);
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    container.scrollTo({
+      behavior: "smooth",
+      top: container.scrollHeight,
+    });
+  }, [latestMessageId, messages.length]);
 
   useEffect(() => {
     if (!currentThreadId) return;
@@ -50,8 +58,16 @@ export function CampaignDomChat({
       const response = await fetch(`/api/dom/chat?scope=${encodeURIComponent(scope)}`);
       const data = await response.json().catch(() => null);
       if (data?.ok) {
-        setMessages(data.messages ?? []);
-        setTasks(data.tasks ?? []);
+        const nextMessages = data.messages ?? [];
+        const nextTasks = data.tasks ?? [];
+        setMessages((current) =>
+          shouldReplaceDomCollection(current, nextMessages)
+            ? nextMessages
+            : current,
+        );
+        setTasks((current) =>
+          shouldReplaceDomCollection(current, nextTasks) ? nextTasks : current,
+        );
         if (data.thread?.id) setCurrentThreadId(data.thread.id);
       }
     }, 8000);
@@ -103,7 +119,7 @@ export function CampaignDomChat({
   }
 
   return (
-    <section className="flex min-h-[42rem] flex-col rounded-lg border border-border bg-card">
+    <section className="flex h-[42rem] max-h-[calc(100vh-10rem)] min-h-[34rem] flex-col rounded-lg border border-border bg-card">
       <div className="border-b border-border px-4 py-3">
         <div className="flex items-center gap-2 font-semibold">
           <Bot className="size-4" />
@@ -115,7 +131,10 @@ export function CampaignDomChat({
         </div>
       </div>
 
-      <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
+      <div
+        ref={messagesContainerRef}
+        className="flex-1 space-y-3 overflow-y-auto px-4 py-4"
+      >
         {messages.length ? (
           messages.map((message) => (
             <div
@@ -164,7 +183,6 @@ export function CampaignDomChat({
             Todavía no hay mensajes en esta campaña.
           </div>
         )}
-        <div ref={endRef} />
       </div>
 
       <div className="border-t border-border p-4">

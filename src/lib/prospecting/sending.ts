@@ -2,6 +2,7 @@ import {
   CampaignSender,
   SendGuardInput,
   SendGuardResult,
+  SenderStatus,
 } from "./types";
 
 export function chooseSenderForMessage({
@@ -39,4 +40,29 @@ export function canSendMessage(input: SendGuardInput): SendGuardResult {
   }
 
   return { ok: true };
+}
+
+export function shouldAutoSendAfterApproval({
+  connectedGmailEmails,
+  senderAccountType,
+  senderEmail,
+  senderStatus,
+}: {
+  connectedGmailEmails: string[];
+  senderAccountType: string | null | undefined;
+  senderEmail: string | null | undefined;
+  senderStatus: SenderStatus | string | null | undefined;
+}) {
+  if (
+    senderAccountType !== "gmail" ||
+    senderStatus !== "active" ||
+    !senderEmail
+  ) {
+    return false;
+  }
+
+  const normalizedSender = senderEmail.trim().toLowerCase();
+  return connectedGmailEmails.some(
+    (email) => email.trim().toLowerCase() === normalizedSender,
+  );
 }

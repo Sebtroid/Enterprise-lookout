@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { canSendMessage, chooseSenderForMessage } from "../sending";
+import {
+  canSendMessage,
+  chooseSenderForMessage,
+  shouldAutoSendAfterApproval,
+} from "../sending";
 
 describe("prospecting sending rules", () => {
   it("chooses the default campaign sender when under the daily cap", () => {
@@ -88,5 +92,34 @@ describe("prospecting sending rules", () => {
         hasSenderAccount: true,
       }),
     ).toEqual({ ok: true });
+  });
+
+  it("auto-sends approved messages only for connected active Gmail senders", () => {
+    expect(
+      shouldAutoSendAfterApproval({
+        connectedGmailEmails: ["SAWITTING@miuandes.cl"],
+        senderAccountType: "gmail",
+        senderEmail: "sawitting@miuandes.cl",
+        senderStatus: "active",
+      }),
+    ).toBe(true);
+
+    expect(
+      shouldAutoSendAfterApproval({
+        connectedGmailEmails: ["sawitting@miuandes.cl"],
+        senderAccountType: "outlook",
+        senderEmail: "sawitting@miuandes.cl",
+        senderStatus: "active",
+      }),
+    ).toBe(false);
+
+    expect(
+      shouldAutoSendAfterApproval({
+        connectedGmailEmails: [],
+        senderAccountType: "gmail",
+        senderEmail: "sawitting@miuandes.cl",
+        senderStatus: "active",
+      }),
+    ).toBe(false);
   });
 });

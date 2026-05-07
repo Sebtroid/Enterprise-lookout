@@ -1,9 +1,11 @@
 "use client";
 
 import {
+  useCallback,
   useActionState,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -42,6 +44,7 @@ import {
   splitOutboundReviewQueue,
   type OutboundRejectionReason,
 } from "@/lib/prospecting/review";
+import { shouldAutoSendAfterApproval } from "@/lib/prospecting/sending";
 
 type ReviewMessage = AppMessage & {
   localStatus: AppMessage["status"];
@@ -77,6 +80,8 @@ export function OutboundReview({
   );
   const [manualSentState, manualSentAction, isManualSentPending] =
     useActionState(markMessageSentManuallyAction, initialActionState);
+  const autoSendInFlightRef = useRef<string | null>(null);
+  const autoSendAfterApproveIdRef = useRef<string | null>(null);
   const [sendingGmailId, setSendingGmailId] = useState<string | null>(null);
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [rejectionReasons, setRejectionReasons] = useState<
@@ -90,34 +95,69 @@ export function OutboundReview({
     })),
   );
 
-  useEffect(() => {
-    if (reviewState.message || rejectState.message || manualSentState.message) {
-      router.refresh();
-    }
-  }, [reviewState, rejectState, manualSentState, router]);
-
   const queues = useMemo(() => splitOutboundReviewQueue(items), [items]);
 
-  async function sendWithGmail(messageId: string, to: string, subject: string, body: string, fromEmail: string) {
+  const sendWithGmail = useCallback(async (messageId: string) => {
     setSendingGmailId(messageId);
     try {
       const res = await fetch("/api/gmail/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ to, subject, body, fromEmail, messageId }),
+        body: JSON.stringify({ messageId }),
       });
       const data = await res.json();
       if (data.ok) {
-        updateStatus(messageId, "sent");
+        setItems((current) =>
+          current.map((item) =>
+            item.id === messageId ? { ...item, localStatus: "sent" } : item,
+          ),
+        );
+        return true;
       } else {
         alert(`Error enviando mail: ${data.error}`);
+        return false;
       }
     } catch {
       alert("Error de red al enviar mail.");
+      return false;
     } finally {
       setSendingGmailId(null);
     }
-  }
+  }, []);
+
+  useEffect(() => {
+    const autoSendAfterApproveId = autoSendAfterApproveIdRef.current;
+
+    if (reviewState.ok && autoSendAfterApproveId) {
+      const messageId = autoSendAfterApproveId;
+      if (autoSendInFlightRef.current === messageId) return;
+
+      autoSendInFlightRef.current = messageId;
+      autoSendAfterApproveIdRef.current = null;
+      void sendWithGmail(messageId).finally(() => {
+        autoSendInFlightRef.current = null;
+        router.refresh();
+      });
+      return;
+    }
+
+    if (reviewState.message && !reviewState.ok) {
+      autoSendAfterApproveIdRef.current = null;
+    }
+
+    if (
+      (reviewState.message || rejectState.message || manualSentState.message) &&
+      !autoSendInFlightRef.current
+    ) {
+      router.refresh();
+    }
+  }, [
+    manualSentState,
+    rejectState,
+    reviewState,
+    router,
+    sendWithGmail,
+  ]);
 
   function updateStatus(id: string, status: AppMessage["status"]) {
     setItems((current) =>
@@ -149,6 +189,12 @@ export function OutboundReview({
     const sender = senders.find((item) => item.id === message.senderId);
     const rejectionReason = rejectionReasons[message.id] ?? "bad_copy";
     const envelope = buildOutboundEnvelope({ company, contact, sender });
+    const autoSendsWithGmail = shouldAutoSendAfterApproval({
+      connectedGmailEmails: gmailConnectedEmails,
+      senderAccountType: sender?.accountType,
+      senderEmail: sender?.email,
+      senderStatus: sender?.status,
+    });
 
     return (
       <form
@@ -198,10 +244,15 @@ export function OutboundReview({
               type="submit"
               value="approved"
               size="sm"
-              onClick={() => updateStatus(message.id, "approved")}
+              onClick={() => {
+                updateStatus(message.id, "approved");
+                autoSendAfterApproveIdRef.current = autoSendsWithGmail
+                  ? message.id
+                  : null;
+              }}
             >
               <Check className="size-4" />
-              Aprobar
+              {autoSendsWithGmail ? "Aprobar y enviar" : "Aprobar"}
             </Button>
           </div>
         </div>
@@ -384,9 +435,9 @@ export function OutboundReview({
           description="Nuevos borradores hechos desde feedback."
         />
         <QueueSummary
-          label="Aprobados para enviar"
+          label="Aprobados sin enviar"
           value={queues.approved.length}
-          description="Abrir compose y marcar enviado."
+          description="Fallback si Gmail no está conectado o falló."
         />
         <QueueSummary
           label="Rechazados"
@@ -405,7 +456,8 @@ export function OutboundReview({
         <div>
           <div className="text-sm font-medium">Pendientes de revisión</div>
           <div className="text-sm text-muted-foreground">
-            Al aprobar, salen de esta bandeja y pasan a “Aprobados para enviar”.
+            Si el remitente tiene Gmail conectado, aprobar envía al tiro. Si no,
+            queda como aprobado sin enviar.
           </div>
         </div>
 
@@ -453,9 +505,10 @@ export function OutboundReview({
 
       <section className="space-y-3">
         <div>
-          <div className="text-sm font-medium">Aprobados para enviar</div>
+          <div className="text-sm font-medium">Aprobados sin enviar</div>
           <div className="text-sm text-muted-foreground">
-            Estos ya no necesitan aprobación; solo abrir compose y marcar enviado.
+            Solo aparecen acá cuando no se enviaron automáticamente: Gmail no
+            está conectado, el remitente no es Gmail o falló el envío.
           </div>
         </div>
 
@@ -480,7 +533,12 @@ export function OutboundReview({
                 })
               : null;
 
-          const hasGmail = sender?.email && gmailConnectedEmails.includes(sender.email);
+          const hasGmail = shouldAutoSendAfterApproval({
+            connectedGmailEmails: gmailConnectedEmails,
+            senderAccountType: sender?.accountType,
+            senderEmail: sender?.email,
+            senderStatus: sender?.status,
+          });
 
           return (
             <form
@@ -506,16 +564,7 @@ export function OutboundReview({
                       disabled={sendingGmailId === message.id}
                       size="sm"
                       type="button"
-                      onClick={() =>
-                        contact?.email && sender?.email &&
-                        sendWithGmail(
-                          message.id,
-                          contact.email,
-                          message.subject,
-                          message.localBody,
-                          sender.email
-                        )
-                      }
+                      onClick={() => void sendWithGmail(message.id)}
                     >
                       {sendingGmailId === message.id ? (
                         <Loader2 className="mr-2 size-4 animate-spin" />

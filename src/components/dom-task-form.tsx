@@ -38,7 +38,7 @@ export function DomTaskForm({ scope }: { scope: string }) {
       </Button>
 
       {open ? (
-        <div className="absolute right-0 top-10 z-30 w-[min(92vw,34rem)] rounded-lg border border-border bg-popover p-4 text-popover-foreground shadow-lg">
+        <div className="absolute right-0 top-10 z-30 max-h-[calc(100vh-8rem)] w-[min(92vw,34rem)] overflow-y-auto rounded-lg border border-border bg-popover p-4 text-popover-foreground shadow-lg">
           <form action={onSubmit} className="space-y-3">
             <input name="scope" type="hidden" value={scope} />
             <div>
@@ -53,7 +53,7 @@ export function DomTaskForm({ scope }: { scope: string }) {
             <label className="space-y-1 text-sm">
               <span className="font-medium">Qué quieres que haga</span>
               <Textarea
-                className="min-h-24"
+                className="h-36 min-h-0 resize-none [field-sizing:fixed]"
                 name="description"
                 placeholder="Ej: Busca empresas de chocolates para premios y propone contactos de marketing."
                 required
@@ -62,7 +62,7 @@ export function DomTaskForm({ scope }: { scope: string }) {
             <label className="space-y-1 text-sm">
               <span className="font-medium">Contexto extra</span>
               <Textarea
-                className="min-h-20"
+                className="h-24 min-h-0 resize-none [field-sizing:fixed]"
                 name="context"
                 placeholder="Ej: prioriza marcas que puedan entregar producto y que tengan presencia joven/universitaria."
               />
