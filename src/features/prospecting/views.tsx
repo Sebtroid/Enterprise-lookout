@@ -334,50 +334,72 @@ export async function TasksView({ scope }: { scope: string }) {
         {data.campaign ? <DomTaskForm scope={scope} /> : null}
       </PageHeader>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(24rem,0.9fr)]">
-        <section className="rounded-lg border border-border bg-card">
-          <div className="flex items-center gap-2 border-b border-border px-4 py-3 font-semibold">
-            <Bot className="size-4" />
-            Tareas de Dom
+      <div className="grid min-h-0 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(22rem,0.44fr)]">
+        <section className="min-w-0 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+          <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
+            <div>
+              <div className="flex items-center gap-2 font-semibold">
+                <Bot className="size-4" />
+                Tareas de Dom
+              </div>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Pedidos concretos para Dom, con estado y último avance.
+              </p>
+            </div>
+            <Badge variant="outline">{data.tasks.length} activas</Badge>
           </div>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Tarea</TableHead>
-                <TableHead>Proyecto</TableHead>
-                <TableHead>Estado</TableHead>
-                <TableHead>Creada</TableHead>
-                <TableHead>Última acción</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {data.tasks.map((task) => (
-                <TableRow key={task.id}>
-                  <TableCell className="min-w-72 whitespace-normal">
-                    <div className="font-medium">{task.description}</div>
-                    {task.result ? (
-                      <div className="mt-1 line-clamp-2 text-sm text-muted-foreground">
-                        {task.result}
-                      </div>
-                    ) : null}
-                  </TableCell>
-                  <TableCell>{task.campaignName ?? "Sin proyecto"}</TableCell>
-                  <TableCell>
+
+          <div className="divide-y divide-border">
+            {data.tasks.map((task, index) => (
+              <article
+                key={task.id}
+                className="group grid min-w-0 gap-3 px-5 py-4 transition-all duration-200 animate-in fade-in-0 slide-in-from-bottom-1 hover:bg-muted/35 md:grid-cols-[minmax(0,1fr)_auto]"
+                style={{ animationDelay: `${Math.min(index * 45, 180)}ms` }}
+              >
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
                     <StatusBadge status={task.status} />
-                  </TableCell>
-                  <TableCell>{formatDomDate(task.createdAt)}</TableCell>
-                  <TableCell>{formatDomDate(task.updatedAt)}</TableCell>
-                </TableRow>
-              ))}
-              {!data.tasks.length ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-muted-foreground">
-                    Sin tareas para Dom todavía.
-                  </TableCell>
-                </TableRow>
-              ) : null}
-            </TableBody>
-          </Table>
+                    <span className="text-xs font-medium text-muted-foreground">
+                      {task.campaignName ?? "Sin proyecto"}
+                    </span>
+                  </div>
+                  <h2 className="mt-2 max-w-[68ch] text-[0.98rem] font-semibold leading-6 break-words text-foreground [overflow-wrap:anywhere]">
+                    {task.description}
+                  </h2>
+                  {task.result ? (
+                    <p className="mt-2 max-w-[72ch] text-sm leading-6 break-words text-muted-foreground [overflow-wrap:anywhere]">
+                      {task.result}
+                    </p>
+                  ) : (
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      Dom todavía no registra resultado para esta tarea.
+                    </p>
+                  )}
+                </div>
+                <div className="grid content-start gap-2 text-xs text-muted-foreground md:min-w-40 md:text-right">
+                  <div>
+                    <span className="font-medium text-foreground">Creada</span>
+                    <div>{formatDomDate(task.createdAt)}</div>
+                  </div>
+                  <div>
+                    <span className="font-medium text-foreground">Última acción</span>
+                    <div>{formatDomDate(task.updatedAt)}</div>
+                  </div>
+                </div>
+              </article>
+            ))}
+            {!data.tasks.length ? (
+              <div className="px-5 py-10 text-sm text-muted-foreground">
+                <div className="font-medium text-foreground">
+                  Sin tareas para Dom todavía.
+                </div>
+                <p className="mt-1 max-w-[48ch]">
+                  Crea una tarea corta y accionable. Dom la verá con el contexto
+                  de este proyecto.
+                </p>
+              </div>
+            ) : null}
+          </div>
         </section>
 
         {data.campaign ? (

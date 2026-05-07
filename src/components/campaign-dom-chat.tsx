@@ -119,8 +119,8 @@ export function CampaignDomChat({
   }
 
   return (
-    <section className="flex h-[42rem] max-h-[calc(100vh-10rem)] min-h-[34rem] flex-col rounded-lg border border-border bg-card">
-      <div className="border-b border-border px-4 py-3">
+    <section className="sticky top-6 flex h-[min(42rem,calc(100dvh-8rem))] min-h-[34rem] min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+      <div className="shrink-0 border-b border-border px-4 py-3">
         <div className="flex items-center gap-2 font-semibold">
           <Bot className="size-4" />
           Chat con Dom
@@ -133,14 +133,14 @@ export function CampaignDomChat({
 
       <div
         ref={messagesContainerRef}
-        className="flex-1 space-y-3 overflow-y-auto px-4 py-4"
+        className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 py-4 scroll-smooth"
       >
         {messages.length ? (
           messages.map((message) => (
             <div
               key={message.id}
               className={cn(
-                "flex gap-2",
+                "flex min-w-0 animate-in fade-in-0 slide-in-from-bottom-1 duration-200",
                 message.role === "user" ? "justify-end" : "justify-start",
               )}
             >
@@ -151,7 +151,7 @@ export function CampaignDomChat({
               ) : null}
               <div
                 className={cn(
-                  "max-w-[82%] rounded-lg px-3 py-2 text-sm",
+                  "max-w-[82%] min-w-0 rounded-lg px-3 py-2 text-sm leading-relaxed shadow-[0_1px_0_rgba(15,23,42,0.04)]",
                   message.role === "user"
                     ? "bg-primary text-primary-foreground"
                     : message.role === "system"
@@ -159,7 +159,9 @@ export function CampaignDomChat({
                       : "bg-muted text-foreground",
                 )}
               >
-                <div className="whitespace-pre-wrap">{message.content}</div>
+                <div className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+                  {message.content}
+                </div>
                 <div
                   className={cn(
                     "mt-1 text-[11px]",
@@ -185,7 +187,7 @@ export function CampaignDomChat({
         )}
       </div>
 
-      <div className="border-t border-border p-4">
+      <div className="shrink-0 border-t border-border bg-card/95 p-4">
         {error ? (
           <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
             {error}
@@ -193,7 +195,7 @@ export function CampaignDomChat({
         ) : null}
         <div className="flex gap-2">
           <Textarea
-            className="min-h-20 resize-none"
+            className="h-20 min-h-0 resize-none [field-sizing:fixed]"
             disabled={isSending}
             onChange={(event) => setInput(event.target.value)}
             onKeyDown={(event) => {
@@ -206,7 +208,7 @@ export function CampaignDomChat({
             value={input}
           />
           <Button
-            className="shrink-0"
+            className="h-20 shrink-0 transition-transform hover:-translate-y-0.5 active:translate-y-px"
             disabled={!input.trim() || isSending}
             onClick={() => void sendMessage()}
             type="button"
