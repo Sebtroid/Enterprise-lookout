@@ -73,4 +73,32 @@ describe("PipelineBoard", () => {
     expect(title).toBeTruthy();
     expect(title?.className).not.toContain("truncate");
   });
+
+  it("raises hovered cards above sibling cards so hover details stay readable", () => {
+    render(
+      <PipelineBoard
+        campaigns={campaigns}
+        companies={[
+          longNameCompany,
+          {
+            ...longNameCompany,
+            id: "company-second",
+            name: "EcoPack Solidario para Kits Universitarios",
+          },
+        ]}
+        scopeLabel="Día del Ingeniero"
+      />,
+    );
+
+    const card = screen
+      .getAllByText(longNameCompany.name)
+      .find((element) => element.tagName === "H2")
+      ?.closest("article");
+    const column = screen.getByText("Borrador listo").closest("section");
+
+    expect(card?.className).toContain("hover:z-50");
+    expect(card?.className).toContain("focus-visible:z-50");
+    expect(column?.className).toContain("hover:z-20");
+    expect(column?.className).toContain("focus-within:z-20");
+  });
 });

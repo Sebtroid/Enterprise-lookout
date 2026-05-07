@@ -35,7 +35,7 @@ export function PipelineBoard({
   scopeLabel,
 }: PipelineBoardProps) {
   return (
-    <section className="rounded-xl border border-border/80 bg-card/70 p-3 shadow-sm">
+    <section className="isolate rounded-xl border border-border/80 bg-card/70 p-3 shadow-sm">
       <div className="overflow-x-auto pb-2 [scrollbar-gutter:stable]">
         <div className="grid min-w-[106rem] grid-cols-7 gap-4">
           {COLUMNS.map((status) => {
@@ -44,7 +44,7 @@ export function PipelineBoard({
             return (
               <section
                 key={status}
-                className="min-h-[28rem] rounded-xl border border-border/80 bg-background/80 p-3 transition-colors duration-200 hover:bg-background"
+                className="relative z-0 min-h-[28rem] rounded-xl border border-border/80 bg-background/80 p-3 transition-colors duration-200 hover:z-20 hover:bg-background focus-within:z-20"
               >
                 <div className="mb-4 flex items-center justify-between gap-2">
                   <StatusBadge status={status} />
@@ -96,7 +96,7 @@ function PipelineCompanyCard({
   return (
     <article
       aria-describedby={tooltipId}
-      className="group/card relative rounded-xl border border-border/90 bg-card p-3.5 shadow-sm outline-none transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-md focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30"
+      className="group/card relative z-0 rounded-xl border border-border/90 bg-card p-3.5 shadow-sm outline-none transition-all duration-200 ease-out hover:z-50 hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-md focus-visible:z-50 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30"
       style={{ animationDelay: `${Math.min(index * 35, 180)}ms` }}
       tabIndex={0}
     >
@@ -156,7 +156,7 @@ function CompanyHoverDetail({
 }) {
   return (
     <aside
-      className="pointer-events-none absolute left-3 top-[calc(100%+0.5rem)] z-30 grid w-[22rem] max-w-[calc(100vw-3rem)] translate-y-1 gap-3 rounded-xl border border-border bg-popover p-4 text-popover-foreground opacity-0 shadow-xl shadow-foreground/10 ring-1 ring-foreground/5 transition-all duration-150 ease-out invisible group-hover/card:visible group-hover/card:translate-y-0 group-hover/card:opacity-100 group-focus-visible/card:visible group-focus-visible/card:translate-y-0 group-focus-visible/card:opacity-100"
+      className="pointer-events-none absolute left-3 top-[calc(100%+0.5rem)] z-[60] grid w-[22rem] max-w-[calc(100vw-3rem)] translate-y-1 gap-3 rounded-xl border border-border bg-popover p-4 text-popover-foreground opacity-0 shadow-xl shadow-foreground/10 ring-1 ring-foreground/5 transition-all duration-150 ease-out invisible group-hover/card:visible group-hover/card:translate-y-0 group-hover/card:opacity-100 group-focus-visible/card:visible group-focus-visible/card:translate-y-0 group-focus-visible/card:opacity-100"
       id={tooltipId}
       role="tooltip"
     >
