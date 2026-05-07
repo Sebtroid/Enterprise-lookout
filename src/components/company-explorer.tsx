@@ -585,6 +585,7 @@ function formatDate(value: string) {
   return date.toLocaleDateString("es-CL", {
     day: "2-digit",
     month: "2-digit",
+    timeZone: "America/Santiago",
     year: "2-digit",
   });
 }

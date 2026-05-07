@@ -126,7 +126,10 @@ export function CampaignDomChat({
           Chat con Dom
         </div>
         <div className="mt-1 text-sm text-muted-foreground">{campaignName}</div>
-        <div className="mt-2 rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">
+        <div
+          className="mt-2 rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground"
+          suppressHydrationWarning
+        >
           {activityLabel}
         </div>
       </div>
@@ -169,6 +172,7 @@ export function CampaignDomChat({
                       ? "text-primary-foreground/70"
                       : "text-muted-foreground",
                   )}
+                  suppressHydrationWarning
                 >
                   {formatRelative(message.createdAt)}
                 </div>

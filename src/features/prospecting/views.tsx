@@ -718,6 +718,7 @@ function formatDomDate(value: string) {
     hour: "2-digit",
     minute: "2-digit",
     month: "2-digit",
+    timeZone: "America/Santiago",
   });
 }
 
@@ -830,7 +831,10 @@ export async function GmailSettingsView() {
                     <div>
                       <div className="font-medium">{token.user_email}</div>
                       <div className="text-xs text-muted-foreground">
-                        Conectado el {new Date(token.updated_at).toLocaleDateString("es-CL")}
+                        Conectado el{" "}
+                        {new Date(token.updated_at).toLocaleDateString("es-CL", {
+                          timeZone: "America/Santiago",
+                        })}
                       </div>
                     </div>
                   </div>
