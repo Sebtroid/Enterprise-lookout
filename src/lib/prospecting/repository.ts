@@ -115,15 +115,17 @@ export async function getProspectingSnapshot(
 ): Promise<ProspectingSnapshot> {
   const campaigns = await getCampaignsData();
   const scopeLookup = getScopeLookup(scope, campaigns);
-  const [companies, contacts, messages, replies, senders, importBatches] =
-    await Promise.all([
-      getCompaniesData(scope, scopeLookup.contextOrganizations),
-      getContactsData(scope, scopeLookup.contextOrganizations),
-      getMessagesData(scope, scopeLookup.contextOrganizations),
-      getRepliesData(scope, scopeLookup.contextOrganizations),
-      getSendersData(scope, scopeLookup.contextOrganizations),
-      getImportBatchesData(scope, scopeLookup.contextOrganizations),
-    ]);
+  // Keep batches within the Postgres pool size so streamed routes do not wait on queued queries forever.
+  const [companies, contacts, messages] = await Promise.all([
+    getCompaniesData(scope, scopeLookup.contextOrganizations),
+    getContactsData(scope, scopeLookup.contextOrganizations),
+    getMessagesData(scope, scopeLookup.contextOrganizations),
+  ]);
+  const [replies, senders, importBatches] = await Promise.all([
+    getRepliesData(scope, scopeLookup.contextOrganizations),
+    getSendersData(scope, scopeLookup.contextOrganizations),
+    getImportBatchesData(scope, scopeLookup.contextOrganizations),
+  ]);
 
   return {
     campaigns,
