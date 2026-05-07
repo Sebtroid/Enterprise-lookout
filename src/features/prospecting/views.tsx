@@ -313,11 +313,16 @@ export async function CampaignOverviewView({ scope }: { scope: string }) {
 
 export async function PipelineView({ scope }: { scope: string }) {
   const snapshot = await getProspectingSnapshot(scope);
+  const scopeLabel = getScopeLabel(snapshot);
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Pipeline" eyebrow={getScopeLabel(snapshot)} />
-      <PipelineBoard companies={snapshot.companies} />
+      <PageHeader title="Pipeline" eyebrow={scopeLabel} />
+      <PipelineBoard
+        campaigns={snapshot.campaigns}
+        companies={snapshot.companies}
+        scopeLabel={scopeLabel}
+      />
     </div>
   );
 }

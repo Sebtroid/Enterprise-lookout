@@ -46,6 +46,11 @@ export type ProspectingSnapshot = {
 };
 
 type DbRow = Record<string, unknown>;
+type ScopeLookup = {
+  campaign: AppCampaign | null;
+  context: ProjectContext | null;
+  contextOrganizations: string[];
+};
 
 export function isAllCampaignsScope(scope: string) {
   return scope === ALL_CAMPAIGNS_SCOPE;
@@ -109,24 +114,21 @@ export async function getProspectingSnapshot(
   scope: string,
 ): Promise<ProspectingSnapshot> {
   const campaigns = await getCampaignsData();
-  const companies = await getCompaniesData(scope);
-  const contacts = await getContactsData(scope);
-  const messages = await getMessagesData(scope);
-  const replies = await getRepliesData(scope);
-  const senders = await getSendersData(scope);
-  const importBatches = await getImportBatchesData(scope);
-
-  const campaign = isAllCampaignsScope(scope)
-    ? null
-    : campaigns.find((item) => item.id === scope) ?? null;
-  const context = isContextScope(scope)
-    ? getProjectContextsData(campaigns).find((item) => item.id === scope) ?? null
-    : null;
+  const scopeLookup = getScopeLookup(scope, campaigns);
+  const [companies, contacts, messages, replies, senders, importBatches] =
+    await Promise.all([
+      getCompaniesData(scope, scopeLookup.contextOrganizations),
+      getContactsData(scope, scopeLookup.contextOrganizations),
+      getMessagesData(scope, scopeLookup.contextOrganizations),
+      getRepliesData(scope, scopeLookup.contextOrganizations),
+      getSendersData(scope, scopeLookup.contextOrganizations),
+      getImportBatchesData(scope, scopeLookup.contextOrganizations),
+    ]);
 
   return {
     campaigns,
-    campaign,
-    context,
+    campaign: scopeLookup.campaign,
+    context: scopeLookup.context,
     companies,
     contacts,
     messages,
@@ -159,7 +161,10 @@ export function getProjectContextsData(campaigns: AppCampaign[]) {
   return [...grouped.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export async function getCompaniesData(scope: string) {
+export async function getCompaniesData(
+  scope: string,
+  contextOrganizationsOverride?: string[],
+) {
   const sql = getPostgresClient();
 
   if (!sql) {
@@ -167,7 +172,8 @@ export async function getCompaniesData(scope: string) {
   }
 
   try {
-    const contextOrganizations = await getContextOrganizationsForScope(scope);
+    const contextOrganizations =
+      contextOrganizationsOverride ?? (await getContextOrganizationsForScope(scope));
     const scopeFilter = isAllCampaignsScope(scope)
       ? sql``
       : isContextScope(scope)
@@ -229,7 +235,10 @@ export async function getCompaniesData(scope: string) {
   }
 }
 
-export async function getContactsData(scope: string) {
+export async function getContactsData(
+  scope: string,
+  contextOrganizationsOverride?: string[],
+) {
   const sql = getPostgresClient();
 
   if (!sql) {
@@ -237,7 +246,8 @@ export async function getContactsData(scope: string) {
   }
 
   try {
-    const contextOrganizations = await getContextOrganizationsForScope(scope);
+    const contextOrganizations =
+      contextOrganizationsOverride ?? (await getContextOrganizationsForScope(scope));
     const rows = isAllCampaignsScope(scope)
       ? await sql`
           select
@@ -318,7 +328,10 @@ export async function getContactsData(scope: string) {
   }
 }
 
-export async function getMessagesData(scope: string) {
+export async function getMessagesData(
+  scope: string,
+  contextOrganizationsOverride?: string[],
+) {
   const sql = getPostgresClient();
 
   if (!sql) {
@@ -326,7 +339,8 @@ export async function getMessagesData(scope: string) {
   }
 
   try {
-    const contextOrganizations = await getContextOrganizationsForScope(scope);
+    const contextOrganizations =
+      contextOrganizationsOverride ?? (await getContextOrganizationsForScope(scope));
     const scopeFilter = isAllCampaignsScope(scope)
       ? sql``
       : isContextScope(scope)
@@ -363,7 +377,10 @@ export async function getMessagesData(scope: string) {
   }
 }
 
-export async function getRepliesData(scope: string) {
+export async function getRepliesData(
+  scope: string,
+  contextOrganizationsOverride?: string[],
+) {
   const sql = getPostgresClient();
 
   if (!sql) {
@@ -371,7 +388,8 @@ export async function getRepliesData(scope: string) {
   }
 
   try {
-    const contextOrganizations = await getContextOrganizationsForScope(scope);
+    const contextOrganizations =
+      contextOrganizationsOverride ?? (await getContextOrganizationsForScope(scope));
     const scopeFilter = isAllCampaignsScope(scope)
       ? sql``
       : isContextScope(scope)
@@ -407,7 +425,10 @@ export async function getRepliesData(scope: string) {
   }
 }
 
-export async function getSendersData(scope: string) {
+export async function getSendersData(
+  scope: string,
+  contextOrganizationsOverride?: string[],
+) {
   const sql = getPostgresClient();
 
   if (!sql) {
@@ -415,7 +436,8 @@ export async function getSendersData(scope: string) {
   }
 
   try {
-    const contextOrganizations = await getContextOrganizationsForScope(scope);
+    const contextOrganizations =
+      contextOrganizationsOverride ?? (await getContextOrganizationsForScope(scope));
     const scopeFilter = isAllCampaignsScope(scope)
       ? sql``
       : isContextScope(scope)
@@ -461,7 +483,10 @@ export async function getSendersData(scope: string) {
   }
 }
 
-export async function getImportBatchesData(scope: string) {
+export async function getImportBatchesData(
+  scope: string,
+  contextOrganizationsOverride?: string[],
+) {
   const sql = getPostgresClient();
 
   if (!sql) {
@@ -469,7 +494,8 @@ export async function getImportBatchesData(scope: string) {
   }
 
   try {
-    const contextOrganizations = await getContextOrganizationsForScope(scope);
+    const contextOrganizations =
+      contextOrganizationsOverride ?? (await getContextOrganizationsForScope(scope));
     const rows = isAllCampaignsScope(scope)
       ? await sql`
           select
@@ -587,17 +613,8 @@ function filterDemoImportBatches(scope: string) {
 }
 
 async function getContextOrganizationsForScope(scope: string) {
-  if (!isContextScope(scope)) return [];
-
-  const contextSlug = getContextSlugFromScope(scope);
   const campaigns = await getCampaignsData();
-  return [
-    ...new Set(
-      campaigns
-        .filter((campaign) => slugifyContextName(campaign.organization) === contextSlug)
-        .map((campaign) => campaign.organization),
-    ),
-  ];
+  return getContextOrganizationsFromCampaigns(scope, campaigns);
 }
 
 function getDemoCampaignIdsForContextScope(scope: string) {
@@ -607,6 +624,39 @@ function getDemoCampaignIdsForContextScope(scope: string) {
       .filter((campaign) => slugifyContextName(campaign.organization) === contextSlug)
       .map((campaign) => campaign.id),
   );
+}
+
+function getScopeLookup(scope: string, campaigns: AppCampaign[]): ScopeLookup {
+  const campaign = isAllCampaignsScope(scope)
+    ? null
+    : campaigns.find((item) => item.id === scope) ?? null;
+  const context = isContextScope(scope)
+    ? getProjectContextsData(campaigns).find((item) => item.id === scope) ?? null
+    : null;
+
+  return {
+    campaign,
+    context,
+    contextOrganizations: getContextOrganizationsFromCampaigns(scope, campaigns),
+  };
+}
+
+function getContextOrganizationsFromCampaigns(
+  scope: string,
+  campaigns: AppCampaign[],
+) {
+  if (!isContextScope(scope)) return [];
+
+  const contextSlug = getContextSlugFromScope(scope);
+  return [
+    ...new Set(
+      campaigns
+        .filter(
+          (campaign) => slugifyContextName(campaign.organization) === contextSlug,
+        )
+        .map((campaign) => campaign.organization),
+    ),
+  ];
 }
 
 function getStats(

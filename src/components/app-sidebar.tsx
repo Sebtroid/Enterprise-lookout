@@ -36,10 +36,10 @@ export function AppSidebar() {
   const baseHref = `/campaigns/${scope}`;
 
   return (
-    <aside className="hidden min-h-screen w-64 shrink-0 border-r border-border bg-sidebar px-4 py-5 lg:block">
+    <aside className="hidden min-h-screen w-64 shrink-0 border-r border-border/80 bg-sidebar/95 px-4 py-5 lg:block">
       <div className="flex h-full flex-col">
         <Link href="/campaigns" className="flex items-center gap-3 px-2">
-          <div className="flex size-9 items-center justify-center rounded-md bg-primary text-primary-foreground">
+          <div className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
             <Settings className="size-4" />
           </div>
           <div>
@@ -51,13 +51,13 @@ export function AppSidebar() {
         <div className="mt-6 grid gap-2">
           <Link
             href="/campaigns"
-            className="block rounded-md border border-sidebar-border bg-background/60 px-3 py-2 text-xs font-medium text-muted-foreground hover:text-foreground"
+            className="block rounded-lg border border-sidebar-border bg-background/70 px-3 py-2 text-xs font-medium text-muted-foreground transition-all duration-200 hover:border-primary/25 hover:bg-background hover:text-foreground active:scale-[0.99]"
           >
             Cambiar proyecto
           </Link>
           <Link
             href="/campaigns/all"
-            className="block rounded-md border border-sidebar-border bg-background/60 px-3 py-2 text-xs font-medium text-muted-foreground hover:text-foreground"
+            className="block rounded-lg border border-sidebar-border bg-background/70 px-3 py-2 text-xs font-medium text-muted-foreground transition-all duration-200 hover:border-primary/25 hover:bg-background hover:text-foreground active:scale-[0.99]"
           >
             Ver todo
           </Link>
@@ -76,9 +76,11 @@ export function AppSidebar() {
                 key={item.path || "summary"}
                 href={href}
                 prefetch
+                aria-current={active ? "page" : undefined}
                 className={cn(
-                  "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-                  active && "bg-sidebar-accent text-sidebar-accent-foreground",
+                  "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-all duration-200 ease-out hover:bg-sidebar-accent hover:text-sidebar-accent-foreground active:scale-[0.99]",
+                  active &&
+                    "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm ring-1 ring-sidebar-border",
                 )}
               >
                 <Icon className="size-4" />
@@ -88,7 +90,7 @@ export function AppSidebar() {
           })}
         </nav>
 
-        <div className="mt-auto rounded-md border border-sidebar-border bg-background/60 p-3 text-xs text-muted-foreground">
+        <div className="mt-auto rounded-xl border border-sidebar-border bg-background/70 p-3 text-xs leading-5 text-muted-foreground shadow-sm">
           <div className="font-medium text-foreground">Workspace privado</div>
           <div className="mt-1">Proyectos, contactos y aprobaciones.</div>
         </div>

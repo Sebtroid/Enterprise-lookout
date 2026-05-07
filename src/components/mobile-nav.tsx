@@ -22,26 +22,26 @@ export function MobileNav() {
   const baseHref = `/campaigns/${scope}`;
 
   return (
-    <div className="sticky top-0 z-20 border-b border-border bg-background/95 px-4 py-3 backdrop-blur lg:hidden">
+    <div className="sticky top-0 z-20 border-b border-border/80 bg-background/95 px-4 py-3 backdrop-blur lg:hidden">
       <div className="flex items-center justify-between">
         <Link href="/campaigns" className="text-sm font-semibold">
           Prospección
         </Link>
         <details className="relative">
-          <summary className="flex size-8 cursor-pointer list-none items-center justify-center rounded-md border border-border bg-background">
+          <summary className="flex size-9 cursor-pointer list-none items-center justify-center rounded-lg border border-border bg-background shadow-sm transition-all duration-200 hover:bg-muted active:scale-[0.98]">
             <Menu className="size-4" />
             <span className="sr-only">Abrir navegación</span>
           </summary>
-          <nav className="absolute right-0 mt-2 grid w-56 gap-1 rounded-md border border-border bg-popover p-2 text-sm shadow-lg">
+          <nav className="absolute right-0 mt-2 grid w-60 gap-1 rounded-xl border border-border bg-popover p-2 text-sm shadow-xl">
             <Link
               href="/campaigns"
-              className="rounded-md px-3 py-2 font-medium hover:bg-muted"
+              className="rounded-lg px-3 py-2 font-medium transition-colors hover:bg-muted"
             >
               Cambiar proyecto
             </Link>
             <Link
               href="/campaigns/all"
-              className="rounded-md px-3 py-2 font-medium hover:bg-muted"
+              className="rounded-lg px-3 py-2 font-medium transition-colors hover:bg-muted"
             >
               Ver todo
             </Link>
@@ -52,7 +52,7 @@ export function MobileNav() {
                   key={href}
                   href={href}
                   prefetch
-                  className="rounded-md px-3 py-2 font-medium hover:bg-muted"
+                  className="rounded-lg px-3 py-2 font-medium transition-colors hover:bg-muted"
                 >
                   {label}
                 </Link>
