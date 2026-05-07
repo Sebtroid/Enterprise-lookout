@@ -33,6 +33,7 @@ import type {
   AppMessage,
   AppCompany,
   AppContact,
+  AppCampaign,
   AppSender,
 } from "@/lib/prospecting/demo-data";
 import {
@@ -50,12 +51,14 @@ type ReviewMessage = AppMessage & {
 const initialActionState: ActionState = { ok: false, message: "" };
 
 export function OutboundReview({
+  campaigns,
   companies,
   contacts,
   messages,
   senders,
   gmailConnectedEmails = [],
 }: {
+  campaigns: AppCampaign[];
   companies: AppCompany[];
   contacts: AppContact[];
   messages: AppMessage[];
@@ -142,6 +145,7 @@ export function OutboundReview({
   function renderReviewCard(message: ReviewMessage, variant: "pending" | "redraft") {
     const company = companies.find((item) => item.id === message.companyId);
     const contact = contacts.find((item) => item.id === message.contactId);
+    const campaign = campaigns.find((item) => item.id === message.campaignId);
     const sender = senders.find((item) => item.id === message.senderId);
     const rejectionReason = rejectionReasons[message.id] ?? "bad_copy";
     const envelope = buildOutboundEnvelope({ company, contact, sender });
@@ -207,8 +211,8 @@ export function OutboundReview({
           companyLabel={envelope.companyLabel}
           contactRole={contact?.role}
           recipientLabel={envelope.recipientLabel}
+          projectLabel={formatProjectDetail(campaign)}
           senderLabel={envelope.senderLabel}
-          senderOrganization={envelope.senderOrganization}
         />
 
         <Textarea
@@ -312,6 +316,7 @@ export function OutboundReview({
   ) {
     const company = companies.find((item) => item.id === message.companyId);
     const contact = contacts.find((item) => item.id === message.contactId);
+    const campaign = campaigns.find((item) => item.id === message.campaignId);
     const sender = senders.find((item) => item.id === message.senderId);
     const envelope = buildOutboundEnvelope({ company, contact, sender });
 
@@ -349,8 +354,8 @@ export function OutboundReview({
           companyLabel={envelope.companyLabel}
           contactRole={contact?.role}
           recipientLabel={envelope.recipientLabel}
+          projectLabel={formatProjectDetail(campaign)}
           senderLabel={envelope.senderLabel}
-          senderOrganization={envelope.senderOrganization}
         />
 
         <p className="mt-4 max-h-36 overflow-auto whitespace-pre-wrap rounded-md border border-border bg-muted/30 p-3 text-sm text-muted-foreground">
@@ -461,6 +466,7 @@ export function OutboundReview({
         {queues.approved.map((message) => {
           const company = companies.find((item) => item.id === message.companyId);
           const contact = contacts.find((item) => item.id === message.contactId);
+          const campaign = campaigns.find((item) => item.id === message.campaignId);
           const sender = senders.find((item) => item.id === message.senderId);
           const envelope = buildOutboundEnvelope({ company, contact, sender });
           const composeHref =
@@ -552,8 +558,8 @@ export function OutboundReview({
                 companyLabel={envelope.companyLabel}
                 contactRole={contact?.role}
                 recipientLabel={envelope.recipientLabel}
+                projectLabel={formatProjectDetail(campaign)}
                 senderLabel={envelope.senderLabel}
-                senderOrganization={envelope.senderOrganization}
               />
               <p className="mt-4 max-h-36 overflow-auto whitespace-pre-wrap rounded-md border border-border bg-muted/30 p-3 text-sm text-muted-foreground">
                 {message.localBody}
@@ -588,16 +594,16 @@ function MailEnvelope({
   accountType,
   companyLabel,
   contactRole,
+  projectLabel,
   recipientLabel,
   senderLabel,
-  senderOrganization,
 }: {
   accountType?: AppSender["accountType"];
   companyLabel: string;
   contactRole?: string;
+  projectLabel: string;
   recipientLabel: string;
   senderLabel: string;
-  senderOrganization: string;
 }) {
   return (
     <div className="mt-4 grid gap-2 rounded-lg border border-border bg-muted/30 p-3 text-sm md:grid-cols-2">
@@ -611,7 +617,7 @@ function MailEnvelope({
         icon={<Mail className="size-4" />}
         label="Desde"
         value={senderLabel}
-        detail={senderOrganization}
+        detail={projectLabel}
         suffix={accountType ? formatSenderProvider(accountType) : undefined}
       />
       <EnvelopeField
@@ -621,6 +627,11 @@ function MailEnvelope({
       />
     </div>
   );
+}
+
+function formatProjectDetail(campaign: AppCampaign | undefined) {
+  if (!campaign) return "Proyecto sin definir";
+  return `${campaign.name} · ${campaign.organization}`;
 }
 
 function EnvelopeField({

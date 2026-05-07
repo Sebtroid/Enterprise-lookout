@@ -564,6 +564,7 @@ export async function OutboundReviewView({ scope }: { scope: string }) {
         key={snapshot.messages
           .map((message) => `${message.id}:${message.status}:${message.body}`)
           .join("|")}
+        campaigns={snapshot.campaigns}
         companies={snapshot.companies}
         contacts={snapshot.contacts}
         messages={snapshot.messages.filter((message) =>
