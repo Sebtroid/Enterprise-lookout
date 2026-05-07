@@ -11,10 +11,11 @@ import {
   createProjectAction,
   type ActionState,
 } from "@/features/prospecting/actions";
+import type { ProjectContext } from "@/lib/prospecting/context";
 
 const initialActionState: ActionState = { ok: false, message: "" };
 
-export function ProjectForm() {
+export function ProjectForm({ contexts = [] }: { contexts?: ProjectContext[] }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [state, formAction, isPending] = useActionState(
@@ -55,10 +56,16 @@ export function ProjectForm() {
               </Field>
               <Field label="Organización/contexto">
                 <Input
+                  list="project-contexts"
                   name="organization"
                   placeholder="CAA U Andes, Trabajo País..."
                   required
                 />
+                <datalist id="project-contexts">
+                  {contexts.map((context) => (
+                    <option key={context.id} value={context.name} />
+                  ))}
+                </datalist>
               </Field>
               <Field label="Fecha estimada">
                 <Input name="startsOn" type="date" />

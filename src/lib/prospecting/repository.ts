@@ -14,6 +14,13 @@ import {
   type AppReply,
   type AppSender,
 } from "@/lib/prospecting/demo-data";
+import {
+  getContextScopeId,
+  getContextSlugFromScope,
+  isContextScope,
+  slugifyContextName,
+  type ProjectContext,
+} from "@/lib/prospecting/context";
 import { getPostgresClient } from "@/lib/supabase/postgres";
 
 export const ALL_CAMPAIGNS_SCOPE = "all";
@@ -28,6 +35,7 @@ export type ProspectingStats = {
 export type ProspectingSnapshot = {
   campaigns: AppCampaign[];
   campaign: AppCampaign | null;
+  context: ProjectContext | null;
   companies: AppCompany[];
   contacts: AppContact[];
   messages: AppMessage[];
@@ -77,14 +85,22 @@ export async function hasCampaignScope(scope: string) {
   }
 
   const campaigns = await getCampaignsData();
+  if (isContextScope(scope)) {
+    return getProjectContextsData(campaigns).some(
+      (context) => context.id === scope,
+    );
+  }
+
   return campaigns.some((campaign) => campaign.id === scope);
 }
 
 export async function getCampaignRouteParamsData() {
   const campaigns = await getCampaignsData();
+  const contexts = getProjectContextsData(campaigns);
 
   return [
     { campaignId: ALL_CAMPAIGNS_SCOPE },
+    ...contexts.map((context) => ({ campaignId: context.id })),
     ...campaigns.map((campaign) => ({ campaignId: campaign.id })),
   ];
 }
@@ -103,10 +119,14 @@ export async function getProspectingSnapshot(
   const campaign = isAllCampaignsScope(scope)
     ? null
     : campaigns.find((item) => item.id === scope) ?? null;
+  const context = isContextScope(scope)
+    ? getProjectContextsData(campaigns).find((item) => item.id === scope) ?? null
+    : null;
 
   return {
     campaigns,
     campaign,
+    context,
     companies,
     contacts,
     messages,
@@ -117,6 +137,28 @@ export async function getProspectingSnapshot(
   };
 }
 
+export function getProjectContextsData(campaigns: AppCampaign[]) {
+  const grouped = new Map<string, ProjectContext>();
+
+  for (const campaign of campaigns) {
+    const slug = slugifyContextName(campaign.organization);
+    if (!slug) continue;
+    const id = getContextScopeId(campaign.organization);
+    const current = grouped.get(slug);
+    if (current) {
+      current.projectCount += 1;
+    } else {
+      grouped.set(slug, {
+        id,
+        name: campaign.organization,
+        projectCount: 1,
+      });
+    }
+  }
+
+  return [...grouped.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
 export async function getCompaniesData(scope: string) {
   const sql = getPostgresClient();
 
@@ -125,9 +167,14 @@ export async function getCompaniesData(scope: string) {
   }
 
   try {
+    const contextOrganizations = await getContextOrganizationsForScope(scope);
     const scopeFilter = isAllCampaignsScope(scope)
       ? sql``
-      : sql`where c.slug = ${scope}`;
+      : isContextScope(scope)
+        ? contextOrganizations.length
+          ? sql`where c.organization = any(${contextOrganizations}::text[])`
+          : sql`where false`
+        : sql`where c.slug = ${scope}`;
 
     const rows = await sql`
       select
@@ -190,6 +237,7 @@ export async function getContactsData(scope: string) {
   }
 
   try {
+    const contextOrganizations = await getContextOrganizationsForScope(scope);
     const rows = isAllCampaignsScope(scope)
       ? await sql`
           select
@@ -210,6 +258,34 @@ export async function getContactsData(scope: string) {
             ct.global_notes
           from contacts ct
           order by ct.created_at desc
+        `
+      : isContextScope(scope)
+        ? await sql`
+          select distinct
+            ct.id::text as id,
+            ct.company_id::text as company_id,
+            ct.full_name,
+            ct.role,
+            ct.email::text as email,
+            ct.phone,
+            ct.category,
+            ct.confidence,
+            ct.verification_status::text as verification_status,
+            ct.verified_at,
+            ct.bounce_count,
+            ct.source,
+            ct.is_decision_maker,
+            ct.do_not_contact,
+            ct.global_notes
+          from contacts ct
+          join campaign_contacts cc on cc.contact_id = ct.id
+          join campaigns c on c.id = cc.campaign_id
+          where ${
+            contextOrganizations.length
+              ? sql`c.organization = any(${contextOrganizations}::text[])`
+              : sql`false`
+          }
+          order by ct.full_name asc
         `
       : await sql`
           select distinct
@@ -250,9 +326,14 @@ export async function getMessagesData(scope: string) {
   }
 
   try {
+    const contextOrganizations = await getContextOrganizationsForScope(scope);
     const scopeFilter = isAllCampaignsScope(scope)
       ? sql``
-      : sql`and c.slug = ${scope}`;
+      : isContextScope(scope)
+        ? contextOrganizations.length
+          ? sql`and c.organization = any(${contextOrganizations}::text[])`
+          : sql`and false`
+        : sql`and c.slug = ${scope}`;
 
     const rows = await sql`
       select
@@ -290,9 +371,14 @@ export async function getRepliesData(scope: string) {
   }
 
   try {
+    const contextOrganizations = await getContextOrganizationsForScope(scope);
     const scopeFilter = isAllCampaignsScope(scope)
       ? sql``
-      : sql`and c.slug = ${scope}`;
+      : isContextScope(scope)
+        ? contextOrganizations.length
+          ? sql`and c.organization = any(${contextOrganizations}::text[])`
+          : sql`and false`
+        : sql`and c.slug = ${scope}`;
 
     const rows = await sql`
       select
@@ -329,9 +415,14 @@ export async function getSendersData(scope: string) {
   }
 
   try {
+    const contextOrganizations = await getContextOrganizationsForScope(scope);
     const scopeFilter = isAllCampaignsScope(scope)
       ? sql``
-      : sql`where c.slug = ${scope}`;
+      : isContextScope(scope)
+        ? contextOrganizations.length
+          ? sql`where c.organization = any(${contextOrganizations}::text[])`
+          : sql`where false`
+        : sql`where c.slug = ${scope}`;
 
     const rows = await sql`
       select
@@ -378,6 +469,7 @@ export async function getImportBatchesData(scope: string) {
   }
 
   try {
+    const contextOrganizations = await getContextOrganizationsForScope(scope);
     const rows = isAllCampaignsScope(scope)
       ? await sql`
           select
@@ -393,6 +485,28 @@ export async function getImportBatchesData(scope: string) {
             ib.created_at
           from import_batches ib
           left join campaigns c on c.id = ib.campaign_id
+          order by ib.created_at desc
+        `
+      : isContextScope(scope)
+        ? await sql`
+          select
+            ib.id::text as id,
+            c.slug as campaign_id,
+            ib.source_name,
+            ib.source_type,
+            ib.status::text as status,
+            ib.row_count,
+            ib.applied_count,
+            ib.duplicate_count,
+            ib.error_count,
+            ib.created_at
+          from import_batches ib
+          join campaigns c on c.id = ib.campaign_id
+          where ${
+            contextOrganizations.length
+              ? sql`c.organization = any(${contextOrganizations}::text[])`
+              : sql`false`
+          }
           order by ib.created_at desc
         `
       : await sql`
@@ -422,6 +536,12 @@ export async function getImportBatchesData(scope: string) {
 
 function filterDemoCompanies(scope: string) {
   if (isAllCampaignsScope(scope)) return demoCompanies;
+  if (isContextScope(scope)) {
+    const campaignIds = getDemoCampaignIdsForContextScope(scope);
+    return demoCompanies.filter((company) =>
+      company.campaignIds.some((id) => campaignIds.has(id)),
+    );
+  }
   return demoCompanies.filter((company) => company.campaignIds.includes(scope));
 }
 
@@ -433,6 +553,10 @@ function filterDemoContacts(scope: string) {
 
 function filterDemoMessages(scope: string) {
   if (isAllCampaignsScope(scope)) return demoMessages;
+  if (isContextScope(scope)) {
+    const campaignIds = getDemoCampaignIdsForContextScope(scope);
+    return demoMessages.filter((message) => campaignIds.has(message.campaignId));
+  }
   return demoMessages.filter((message) => message.campaignId === scope);
 }
 
@@ -444,12 +568,45 @@ function filterDemoReplies(scope: string) {
 
 function filterDemoSenders(scope: string) {
   if (isAllCampaignsScope(scope)) return demoSenders;
+  if (isContextScope(scope)) {
+    const campaignIds = getDemoCampaignIdsForContextScope(scope);
+    return demoSenders.filter((sender) => campaignIds.has(sender.campaignId));
+  }
   return demoSenders.filter((sender) => sender.campaignId === scope);
 }
 
 function filterDemoImportBatches(scope: string) {
   if (isAllCampaignsScope(scope)) return demoImportBatches;
+  if (isContextScope(scope)) {
+    const campaignIds = getDemoCampaignIdsForContextScope(scope);
+    return demoImportBatches.filter((batch) =>
+      batch.campaignId ? campaignIds.has(batch.campaignId) : false,
+    );
+  }
   return demoImportBatches.filter((batch) => batch.campaignId === scope);
+}
+
+async function getContextOrganizationsForScope(scope: string) {
+  if (!isContextScope(scope)) return [];
+
+  const contextSlug = getContextSlugFromScope(scope);
+  const campaigns = await getCampaignsData();
+  return [
+    ...new Set(
+      campaigns
+        .filter((campaign) => slugifyContextName(campaign.organization) === contextSlug)
+        .map((campaign) => campaign.organization),
+    ),
+  ];
+}
+
+function getDemoCampaignIdsForContextScope(scope: string) {
+  const contextSlug = getContextSlugFromScope(scope);
+  return new Set(
+    demoCampaigns
+      .filter((campaign) => slugifyContextName(campaign.organization) === contextSlug)
+      .map((campaign) => campaign.id),
+  );
 }
 
 function getStats(

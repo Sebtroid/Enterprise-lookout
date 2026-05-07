@@ -39,6 +39,12 @@ export function MobileNav() {
             >
               Cambiar proyecto
             </Link>
+            <Link
+              href="/campaigns/all"
+              className="rounded-md px-3 py-2 font-medium hover:bg-muted"
+            >
+              Ver todo
+            </Link>
             {ITEMS.map(([label, path]) => {
               const href = `${baseHref}${path}`;
               return (

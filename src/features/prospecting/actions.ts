@@ -30,6 +30,7 @@ import {
   ensureDomChatThread,
   getDomCampaignContextBySlug,
 } from "@/lib/dom/repository";
+import { getExistingContextName } from "@/lib/prospecting/context";
 import { getPostgresClient } from "@/lib/supabase/postgres";
 
 export type ActionState = {
@@ -978,7 +979,7 @@ export async function createProjectAction(
   if (!sql) return { ok: false, message: initialError };
 
   const name = readFormString(formData, "name");
-  const organization = readFormString(formData, "organization");
+  const rawOrganization = readFormString(formData, "organization");
   const description = readFormString(formData, "description");
   const valueProposition = readFormString(formData, "valueProposition");
   const startsOn = nullIfEmpty(readFormString(formData, "startsOn"));
@@ -989,7 +990,7 @@ export async function createProjectAction(
     readFormString(formData, "status") || "active",
   );
 
-  if (!name || !organization || !description || !valueProposition || !status.success) {
+  if (!name || !rawOrganization || !description || !valueProposition || !status.success) {
     return {
       ok: false,
       message: "Completa nombre, organización/contexto, descripción y necesidad del proyecto.",
@@ -1000,6 +1001,17 @@ export async function createProjectAction(
   if (!baseSlug) {
     return { ok: false, message: "El nombre no permite crear un slug válido." };
   }
+
+  const existingContextRows = await sql`
+    select distinct organization
+    from campaigns
+    where nullif(trim(organization), '') is not null
+    order by organization asc
+  `;
+  const organization = getExistingContextName(
+    rawOrganization,
+    existingContextRows.map((row) => ({ name: String(row.organization) })),
+  );
 
   const result = await sql.begin(async (tx) => {
     const slug = await getUniqueCampaignSlug(tx, baseSlug);

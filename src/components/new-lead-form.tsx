@@ -12,6 +12,7 @@ import {
   type ActionState,
 } from "@/features/prospecting/actions";
 import type { AppCampaign } from "@/lib/prospecting/demo-data";
+import { isContextScope } from "@/lib/prospecting/context";
 
 const initialActionState: ActionState = { ok: false, message: "" };
 
@@ -24,6 +25,7 @@ export function NewLeadForm({
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const needsProjectChoice = scope === "all" || isContextScope(scope);
   const [state, formAction, isPending] = useActionState(
     createLeadAction,
     initialActionState,
@@ -45,7 +47,7 @@ export function NewLeadForm({
       {open ? (
         <div className="absolute right-0 top-10 z-30 w-[min(92vw,34rem)] rounded-lg border border-border bg-popover p-4 text-popover-foreground shadow-lg">
           <form action={formAction} className="space-y-3">
-            <input type="hidden" name="scope" value={scope} />
+            <input type="hidden" name="scope" value={needsProjectChoice ? "all" : scope} />
             <div>
               <h2 className="font-semibold">Nuevo lead</h2>
               <p className="mt-1 text-sm text-muted-foreground">
@@ -53,7 +55,7 @@ export function NewLeadForm({
               </p>
             </div>
 
-            {scope === "all" ? (
+            {needsProjectChoice ? (
               <Field label="Proyecto">
                 <select
                   className="h-8 w-full rounded-lg border border-input bg-background px-2 text-sm"

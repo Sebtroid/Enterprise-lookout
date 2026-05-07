@@ -41,12 +41,14 @@ import { getContactPriority } from "@/lib/prospecting/demo-data";
 import { getPostgresClient } from "@/lib/supabase/postgres";
 import { getDomWorkspaceData } from "@/lib/dom/repository";
 import type { AppMessage, AppReply } from "@/lib/prospecting/demo-data";
+import { isContextScope, slugifyContextName } from "@/lib/prospecting/context";
 import {
   ALL_CAMPAIGNS_SCOPE,
   getCampaignsData,
   getCompaniesData,
   getContactsData,
   getMessagesData,
+  getProjectContextsData,
   getProspectingSnapshot,
   getRepliesData,
   isAllCampaignsScope,
@@ -55,11 +57,12 @@ import {
 
 export async function CampaignsIndexView() {
   const snapshot = await getProspectingSnapshot(ALL_CAMPAIGNS_SCOPE);
+  const contexts = getProjectContextsData(snapshot.campaigns);
 
   return (
     <div className="space-y-6">
       <PageHeader title="Elige proyecto" eyebrow="Workspace">
-        <ProjectForm />
+        <ProjectForm contexts={contexts} />
         <Link
           href={`/campaigns/${ALL_CAMPAIGNS_SCOPE}`}
           className={buttonVariants()}
@@ -67,6 +70,30 @@ export async function CampaignsIndexView() {
           Ver todo
         </Link>
       </PageHeader>
+
+      <section className="space-y-3">
+        <div>
+          <h2 className="text-sm font-medium">Ver por contexto</h2>
+          <p className="text-sm text-muted-foreground">
+            Agrupa varios proyectos bajo una misma organización, como CDI Uandes
+            o Centro de Alumnos.
+          </p>
+        </div>
+        <div className="grid gap-3 md:grid-cols-3">
+          {contexts.map((context) => (
+            <Link
+              key={context.id}
+              href={`/campaigns/${context.id}`}
+              className="rounded-lg border border-border bg-card p-4 shadow-sm transition-colors hover:border-primary/40"
+            >
+              <div className="font-semibold">{context.name}</div>
+              <div className="mt-1 text-sm text-muted-foreground">
+                {context.projectCount} proyecto{context.projectCount === 1 ? "" : "s"}
+              </div>
+            </Link>
+          ))}
+        </div>
+      </section>
 
       <div className="grid gap-4 md:grid-cols-2">
         {snapshot.campaigns.map((campaign) => {
@@ -112,16 +139,25 @@ export async function CampaignsIndexView() {
 
 export async function CampaignOverviewView({ scope }: { scope: string }) {
   const snapshot = await getProspectingSnapshot(scope);
-  const { campaigns, campaign, messages, senders, stats } = snapshot;
+  const { campaigns, campaign, context, messages, senders, stats } = snapshot;
   const title = getScopeLabel(snapshot);
+  const scopedCampaigns = context
+    ? campaigns.filter(
+        (item) =>
+          slugifyContextName(item.organization) === slugifyContextName(context.name),
+      )
+    : campaigns;
 
   return (
     <div className="space-y-6">
       <PageHeader
         title={title}
-        eyebrow={campaign?.organization ?? "Todos los proyectos"}
+        eyebrow={
+          campaign?.organization ??
+          (context ? "Contexto" : "Todos los proyectos")
+        }
       >
-        <NewLeadForm scope={scope} campaigns={campaigns} />
+        <NewLeadForm scope={scope} campaigns={scopedCampaigns} />
       </PageHeader>
 
       {campaign ? (
@@ -165,25 +201,25 @@ export async function CampaignOverviewView({ scope }: { scope: string }) {
         ]}
       />
 
-      {campaign ? (
+      {campaign || context ? (
         <section className="grid gap-3 md:grid-cols-4">
           <QuickAction
-            href={`/campaigns/${campaign.id}/companies`}
+            href={`/campaigns/${scope}/companies`}
             label="Clasificar empresas"
             description="Ver base general, filtrar sin evaluar y marcar Sirve / Investigar / No sirve."
           />
           <QuickAction
-            href={`/campaigns/${campaign.id}/review/outbound`}
+            href={`/campaigns/${scope}/review/outbound`}
             label="Revisar mails"
             description="Editar borradores, aprobarlos y enviarlos con Gmail si el remitente está conectado."
           />
           <QuickAction
-            href={`/campaigns/${campaign.id}/review/replies`}
+            href={`/campaigns/${scope}/review/replies`}
             label="Responder interesados"
             description="Aprobar respuestas; quedan listas para enviarse en el mismo hilo."
           />
           <QuickAction
-            href={`/campaigns/${campaign.id}/tasks`}
+            href={`/campaigns/${scope}/tasks`}
             label="Dom y tareas"
             description="Ver tareas, pedir acciones y hablar con Dom con contexto de este proyecto."
           />
@@ -230,7 +266,7 @@ export async function CampaignOverviewView({ scope }: { scope: string }) {
         </Table>
       </section>
 
-      {isAllCampaignsScope(scope) ? (
+      {isAllCampaignsScope(scope) || isContextScope(scope) ? (
         <section className="rounded-lg border border-border bg-card">
           <Table>
             <TableHeader>
@@ -242,7 +278,7 @@ export async function CampaignOverviewView({ scope }: { scope: string }) {
               </TableRow>
           </TableHeader>
           <TableBody>
-              {campaigns.map((item) => {
+              {scopedCampaigns.map((item) => {
                 const defaultSender = senders.find(
                   (sender) => sender.campaignId === item.id && sender.isDefault,
                 );
@@ -531,7 +567,7 @@ export async function OutboundReviewView({ scope }: { scope: string }) {
         companies={snapshot.companies}
         contacts={snapshot.contacts}
         messages={snapshot.messages.filter((message) =>
-          ["needs_review", "approved"].includes(message.status),
+          ["needs_review", "approved", "rejected"].includes(message.status),
         )}
         scope={scope}
         senders={snapshot.senders}
@@ -654,7 +690,7 @@ function formatDomDate(value: string) {
 }
 
 function getScopeLabel(snapshot: ProspectingSnapshot) {
-  return snapshot.campaign?.name ?? "Todos los proyectos";
+  return snapshot.campaign?.name ?? snapshot.context?.name ?? "Todos los proyectos";
 }
 
 function getStatsForCampaign(snapshot: ProspectingSnapshot, campaignId: string) {

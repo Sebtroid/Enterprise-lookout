@@ -48,12 +48,20 @@ export function AppSidebar() {
           </div>
         </Link>
 
-        <Link
-          href="/campaigns"
-          className="mt-6 block rounded-md border border-sidebar-border bg-background/60 px-3 py-2 text-xs font-medium text-muted-foreground hover:text-foreground"
-        >
-          Cambiar proyecto
-        </Link>
+        <div className="mt-6 grid gap-2">
+          <Link
+            href="/campaigns"
+            className="block rounded-md border border-sidebar-border bg-background/60 px-3 py-2 text-xs font-medium text-muted-foreground hover:text-foreground"
+          >
+            Cambiar proyecto
+          </Link>
+          <Link
+            href="/campaigns/all"
+            className="block rounded-md border border-sidebar-border bg-background/60 px-3 py-2 text-xs font-medium text-muted-foreground hover:text-foreground"
+          >
+            Ver todo
+          </Link>
+        </div>
 
         <nav className="mt-8 space-y-1">
           {NAV_ITEMS.map((item) => {

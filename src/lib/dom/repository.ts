@@ -1,4 +1,12 @@
-import { isAllCampaignsScope } from "@/lib/prospecting/repository";
+import {
+  getCampaignsData,
+  isAllCampaignsScope,
+} from "@/lib/prospecting/repository";
+import {
+  getContextSlugFromScope,
+  isContextScope,
+  slugifyContextName,
+} from "@/lib/prospecting/context";
 import { getPostgresClient } from "@/lib/supabase/postgres";
 
 import type {
@@ -18,7 +26,7 @@ export type DomWorkspaceData = {
 };
 
 export async function getDomWorkspaceData(scope: string): Promise<DomWorkspaceData> {
-  const campaign = isAllCampaignsScope(scope)
+  const campaign = isAllCampaignsScope(scope) || isContextScope(scope)
     ? null
     : await getDomCampaignContextBySlug(scope);
   const tasks = await getDomTasksData(scope);
@@ -29,7 +37,7 @@ export async function getDomWorkspaceData(scope: string): Promise<DomWorkspaceDa
 }
 
 export async function getDomCampaignContextBySlug(scope: string) {
-  if (!scope || isAllCampaignsScope(scope)) return null;
+  if (!scope || isAllCampaignsScope(scope) || isContextScope(scope)) return null;
   const sql = getPostgresClient();
   if (!sql) return null;
 
@@ -107,6 +115,7 @@ export async function getDomTasksData(scope: string) {
   const sql = getPostgresClient();
   if (!sql) return [];
 
+  const contextOrganizations = await getContextOrganizationsForScope(scope);
   const rows = isAllCampaignsScope(scope)
     ? await sql`
         select
@@ -123,6 +132,29 @@ export async function getDomTasksData(scope: string) {
           dt.chat_thread_id::text as chat_thread_id
         from dom_tasks dt
         left join campaigns c on c.id = dt.campaign_id
+        order by dt.updated_at desc, dt.created_at desc
+      `
+    : isContextScope(scope)
+      ? await sql`
+        select
+          dt.id::text as id,
+          c.slug as campaign_id,
+          c.name as campaign_name,
+          dt.description,
+          dt.status::text as status,
+          dt.created_by,
+          dt.created_at,
+          dt.updated_at,
+          dt.context,
+          dt.result,
+          dt.chat_thread_id::text as chat_thread_id
+        from dom_tasks dt
+        join campaigns c on c.id = dt.campaign_id
+        where ${
+          contextOrganizations.length
+            ? sql`c.organization = any(${contextOrganizations}::text[])`
+            : sql`false`
+        }
         order by dt.updated_at desc, dt.created_at desc
       `
     : await sql`
@@ -145,6 +177,20 @@ export async function getDomTasksData(scope: string) {
       `;
 
   return rows.map(mapDomTask);
+}
+
+async function getContextOrganizationsForScope(scope: string) {
+  if (!isContextScope(scope)) return [];
+
+  const contextSlug = getContextSlugFromScope(scope);
+  const campaigns = await getCampaignsData();
+  return [
+    ...new Set(
+      campaigns
+        .filter((campaign) => slugifyContextName(campaign.organization) === contextSlug)
+        .map((campaign) => campaign.organization),
+    ),
+  ];
 }
 
 export async function getActiveDomTasksForCampaign(campaignDbId: string) {
