@@ -8,7 +8,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 describe("AppSidebar", () => {
-  it("uses native navigation for changing projects so it works during route transitions", () => {
+  it("links directly to the project picker", () => {
     render(<AppSidebar />);
 
     const changeProject = screen.getByRole("link", {
@@ -16,6 +16,5 @@ describe("AppSidebar", () => {
     });
 
     expect(changeProject.getAttribute("href")).toBe("/campaigns");
-    expect(changeProject.getAttribute("data-native-navigation")).toBe("true");
   });
 });

@@ -430,13 +430,17 @@ export async function CompaniesView({ scope }: { scope: string }) {
   const campaign = isAllCampaignsScope(scope)
     ? null
     : campaigns.find((item) => item.id === scope) ?? null;
-  const allCompanies = await getCompaniesData(ALL_CAMPAIGNS_SCOPE);
-  const campaignCompanies = isAllCampaignsScope(scope)
-    ? allCompanies
-    : await getCompaniesData(scope);
-  const contacts = await getContactsData(ALL_CAMPAIGNS_SCOPE);
-  const messages = await getMessagesData(ALL_CAMPAIGNS_SCOPE);
-  const replies = await getRepliesData(ALL_CAMPAIGNS_SCOPE);
+  const [allCompanies, contacts, messages] = await Promise.all([
+    getCompaniesData(ALL_CAMPAIGNS_SCOPE),
+    getContactsData(ALL_CAMPAIGNS_SCOPE),
+    getMessagesData(ALL_CAMPAIGNS_SCOPE),
+  ]);
+  const [replies, campaignCompanies] = await Promise.all([
+    getRepliesData(ALL_CAMPAIGNS_SCOPE),
+    isAllCampaignsScope(scope)
+      ? Promise.resolve(allCompanies)
+      : getCompaniesData(scope),
+  ]);
 
   return (
     <div className="space-y-6">

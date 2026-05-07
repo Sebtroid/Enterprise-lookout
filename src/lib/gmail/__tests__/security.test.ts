@@ -8,6 +8,10 @@ import {
 import { buildGmailSendBody, buildMimeMessage, encodeRawMessage } from "../mime";
 import { signOAuthState, verifyOAuthState } from "../oauth-state";
 import { isAllowedEmail } from "../../auth/allowed-emails";
+import {
+  getGmailConnectionDecision,
+  getSafeOAuthRedirectPath,
+} from "../connection-policy";
 
 describe("Gmail security helpers", () => {
   const secret = "test-secret-with-enough-length";
@@ -74,5 +78,36 @@ describe("Gmail security helpers", () => {
       isAllowedEmail("SAWITTING@miuandes.cl", "sawitting@miuandes.cl,otro@test.cl"),
     ).toBe(true);
     expect(isAllowedEmail("externo@test.cl", "sawitting@miuandes.cl")).toBe(false);
+  });
+
+  it("allows Gmail OAuth for sender accounts configured in the database", () => {
+    expect(
+      getGmailConnectionDecision({
+        connectedEmail: "sawitting@miuandes.cl",
+        hasConfiguredSender: true,
+      }),
+    ).toBe("allowed");
+  });
+
+  it("keeps non-sender allowlisted emails from storing Gmail tokens", () => {
+    expect(
+      getGmailConnectionDecision({
+        allowlist: "sawitting@miuandes.cl",
+        connectedEmail: "sawitting@miuandes.cl",
+        hasConfiguredSender: false,
+      }),
+    ).toBe("sender_not_configured");
+  });
+
+  it("keeps OAuth redirects inside app paths", () => {
+    expect(getSafeOAuthRedirectPath("/campaigns/all/settings/gmail")).toBe(
+      "/campaigns/all/settings/gmail",
+    );
+    expect(getSafeOAuthRedirectPath("https://evil.test")).toBe(
+      "/campaigns/all/settings/gmail",
+    );
+    expect(getSafeOAuthRedirectPath("//evil.test")).toBe(
+      "/campaigns/all/settings/gmail",
+    );
   });
 });

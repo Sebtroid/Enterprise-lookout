@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getSafeOAuthRedirectPath } from "@/lib/gmail/connection-policy";
 import { signOAuthState } from "@/lib/gmail/oauth-state";
 
 /**
@@ -34,8 +35,9 @@ export async function GET(req: NextRequest) {
   const action = searchParams.get("action");
 
   if (action === "url") {
+    const redirect = getSafeOAuthRedirectPath(getRefererPath(req));
     const state = signOAuthState({
-      redirect: "/campaigns",
+      redirect,
     });
 
     const scopes = [
@@ -56,6 +58,19 @@ export async function GET(req: NextRequest) {
   }
 
   return NextResponse.json({ error: "Invalid action" }, { status: 400 });
+}
+
+function getRefererPath(req: NextRequest) {
+  const referer = req.headers.get("referer");
+  if (!referer) return null;
+
+  try {
+    const url = new URL(referer);
+    if (url.origin !== new URL(req.url).origin) return null;
+    return `${url.pathname}${url.search}`;
+  } catch {
+    return null;
+  }
 }
 
 export async function POST() {

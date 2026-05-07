@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu } from "lucide-react";
-import type { MouseEvent } from "react";
 
 const ITEMS = [
   ["Resumen", ""],
@@ -34,14 +33,14 @@ export function MobileNav() {
             <span className="sr-only">Abrir navegación</span>
           </summary>
           <nav className="absolute right-0 mt-2 grid w-60 gap-1 rounded-xl border border-border bg-popover p-2 text-sm shadow-xl">
-            <Link
+            {/* Use a plain document navigation here so the project picker remains reachable even during RSC route transitions. */}
+            {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+            <a
               href="/campaigns"
-              data-native-navigation="true"
-              onClick={handleChangeProjectClick}
               className="rounded-lg px-3 py-2 font-medium transition-colors hover:bg-muted"
             >
               Cambiar proyecto
-            </Link>
+            </a>
             <Link
               href="/campaigns/all"
               className="rounded-lg px-3 py-2 font-medium transition-colors hover:bg-muted"
@@ -72,20 +71,4 @@ function getScopeFromPath(pathname: string) {
   const [first, second] = pathname.split("/").filter(Boolean);
   if (first === "campaigns" && second) return second;
   return "all";
-}
-
-function handleChangeProjectClick(event: MouseEvent<HTMLAnchorElement>) {
-  if (
-    event.defaultPrevented ||
-    event.button !== 0 ||
-    event.metaKey ||
-    event.altKey ||
-    event.ctrlKey ||
-    event.shiftKey
-  ) {
-    return;
-  }
-
-  event.preventDefault();
-  window.location.assign("/campaigns");
 }

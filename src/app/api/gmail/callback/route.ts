@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { isAllowedEmail } from "@/lib/auth/allowed-emails";
+import {
+  getGmailConnectionDecision,
+  getSafeOAuthRedirectPath,
+} from "@/lib/gmail/connection-policy";
 import { encryptToken } from "@/lib/gmail/token-crypto";
 import { verifyOAuthState } from "@/lib/gmail/oauth-state";
 import { getPostgresClient } from "@/lib/supabase/postgres";
@@ -7,13 +10,14 @@ import { getPostgresClient } from "@/lib/supabase/postgres";
 const GMAIL_CLIENT_ID = process.env.GMAIL_CLIENT_ID;
 const GMAIL_CLIENT_SECRET = process.env.GMAIL_CLIENT_SECRET;
 const REDIRECT_URI = `${process.env.NEXT_PUBLIC_APP_URL || "https://enterprise-lookout.vercel.app"}/api/gmail/callback`;
+const DEFAULT_REDIRECT = "/campaigns/all/settings/gmail";
 
 export async function GET(req: NextRequest) {
   const sql = getPostgresClient();
   if (!sql) {
-    return NextResponse.redirect(
-      new URL("/campaigns?gmail_error=missing_database_config", req.url),
-    );
+    return redirectWithStatus(req, DEFAULT_REDIRECT, {
+      gmail_error: "missing_database_config",
+    });
   }
 
   const { searchParams } = new URL(req.url);
@@ -22,26 +26,25 @@ export async function GET(req: NextRequest) {
   const state = searchParams.get("state");
 
   if (error) {
-    return NextResponse.redirect(
-      new URL(`/campaigns?gmail_error=${encodeURIComponent(error)}`, req.url),
-    );
+    return redirectWithStatus(req, DEFAULT_REDIRECT, { gmail_error: error });
   }
 
   if (!code) {
-    return NextResponse.redirect(new URL("/campaigns?gmail_error=no_code", req.url));
+    return redirectWithStatus(req, DEFAULT_REDIRECT, { gmail_error: "no_code" });
   }
 
   const verifiedState = state ? verifyOAuthState(state) : null;
   if (!verifiedState) {
-    return NextResponse.redirect(
-      new URL("/campaigns?gmail_error=invalid_state", req.url),
-    );
+    return redirectWithStatus(req, DEFAULT_REDIRECT, {
+      gmail_error: "invalid_state",
+    });
   }
+  const redirectPath = getSafeOAuthRedirectPath(verifiedState.redirect);
 
   if (!GMAIL_CLIENT_ID || !GMAIL_CLIENT_SECRET) {
-    return NextResponse.redirect(
-      new URL("/campaigns?gmail_error=missing_gmail_config", req.url),
-    );
+    return redirectWithStatus(req, redirectPath, {
+      gmail_error: "missing_gmail_config",
+    });
   }
 
   try {
@@ -61,12 +64,9 @@ export async function GET(req: NextRequest) {
     const tokens = await tokenResponse.json();
 
     if (tokens.error) {
-      return NextResponse.redirect(
-        new URL(
-          `/campaigns?gmail_error=${encodeURIComponent(tokens.error)}`,
-          req.url,
-        ),
-      );
+      return redirectWithStatus(req, redirectPath, {
+        gmail_error: String(tokens.error),
+      });
     }
 
     // Get user email from Google
@@ -78,11 +78,6 @@ export async function GET(req: NextRequest) {
     );
     const userInfo = await userInfoResponse.json();
     const connectedEmail = String(userInfo.email ?? "").toLowerCase();
-    if (!isAllowedEmail(connectedEmail)) {
-      return NextResponse.redirect(
-        new URL("/campaigns?gmail_error=email_not_allowed", req.url),
-      );
-    }
 
     const senderRows = await sql`
       select id
@@ -93,10 +88,16 @@ export async function GET(req: NextRequest) {
       limit 1
     `;
 
-    if (!senderRows[0]) {
-      return NextResponse.redirect(
-        new URL("/campaigns?gmail_error=sender_not_configured", req.url),
-      );
+    const connectionDecision = getGmailConnectionDecision({
+      connectedEmail,
+      hasConfiguredSender: Boolean(senderRows[0]),
+    });
+
+    if (connectionDecision !== "allowed") {
+      return redirectWithStatus(req, redirectPath, {
+        gmail_email: connectedEmail,
+        gmail_error: connectionDecision,
+      });
     }
 
     // Store tokens in DB
@@ -125,11 +126,25 @@ export async function GET(req: NextRequest) {
         updated_at = now()
     `;
 
-    return NextResponse.redirect(
-      new URL(`/campaigns?gmail_connected=${encodeURIComponent(connectedEmail)}`, req.url),
-    );
+    return redirectWithStatus(req, redirectPath, {
+      gmail_connected: connectedEmail,
+    });
   } catch (err) {
     console.error("Gmail callback error:", err);
-    return NextResponse.redirect(new URL("/campaigns?gmail_error=server_error", req.url));
+    return redirectWithStatus(req, DEFAULT_REDIRECT, {
+      gmail_error: "server_error",
+    });
   }
+}
+
+function redirectWithStatus(
+  req: NextRequest,
+  redirectPath: string,
+  params: Record<string, string>,
+) {
+  const url = new URL(getSafeOAuthRedirectPath(redirectPath), req.url);
+  for (const [key, value] of Object.entries(params)) {
+    url.searchParams.set(key, value);
+  }
+  return NextResponse.redirect(url);
 }
