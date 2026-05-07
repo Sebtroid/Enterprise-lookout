@@ -47,6 +47,7 @@ Supported response/action shape:
       "type": "create_draft",
       "company_id": "uuid",
       "contact_id": "uuid opcional",
+      "source_message_id": "uuid opcional del mail rechazado",
       "subject": "Asunto",
       "body": "Cuerpo"
     }
@@ -54,4 +55,4 @@ Supported response/action shape:
 }
 ```
 
-`create_draft` leaves the mail as `needs_review`; it never sends automatically.
+`create_draft` leaves the mail as `needs_review`; it never sends automatically. If Dom includes `source_message_id`, the new draft is shown in "Redacciones nuevas" and the rejected original leaves "Redactando nueva versión".

@@ -335,6 +335,7 @@ async function createDraftFromDomAction({
   const companyId = nullableText(action.company_id);
   const subject = nullableText(action.subject);
   const body = nullableText(action.body);
+  const sourceMessageId = nullableText(action.source_message_id);
   if (!companyId || !subject || !body) return;
 
   const contactRows = action.contact_id
@@ -369,7 +370,11 @@ async function createDraftFromDomAction({
   const senderId = senderRows[0]?.sender_account_id ?? null;
   if (!senderId) return;
 
-  await tx`
+  const futureNote = sourceMessageId
+    ? `Nuevo borrador generado desde rechazo del mensaje ${sourceMessageId}. Borrador creado por Dom desde ${source}; chat_thread_id=${threadId}.`
+    : `Borrador creado por Dom desde ${source}; chat_thread_id=${threadId}.`;
+
+  const inserted = await tx`
     insert into messages (
       campaign_id,
       company_id,
@@ -389,9 +394,25 @@ async function createDraftFromDomAction({
       'needs_review',
       ${subject},
       ${body},
-      ${`Borrador creado por Dom desde ${source}; chat_thread_id=${threadId}.`}
+      ${futureNote}
     )
+    returning id
   `;
+
+  if (sourceMessageId && inserted[0]?.id) {
+    await tx`
+      update messages
+      set
+        future_note = concat_ws(
+          ' ',
+          nullif(future_note, ''),
+          ${`Nueva redacción creada por Dom: ${inserted[0].id}.`}
+        ),
+        updated_at = now()
+      where id = ${sourceMessageId}
+        and status = 'rejected'
+    `;
+  }
 }
 
 async function postToDom(url: string, payload: Record<string, unknown>) {

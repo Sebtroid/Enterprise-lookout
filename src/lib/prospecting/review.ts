@@ -19,12 +19,20 @@ export function splitOutboundReviewQueue<
       (message) =>
         getMessageStatus(message) === "needs_review" && !isRedraft(message),
     ),
+    redrafting: messages.filter(
+      (message) =>
+        getMessageStatus(message) === "rejected" && isAwaitingRedraft(message),
+    ),
     redrafts: messages.filter(
       (message) =>
         getMessageStatus(message) === "needs_review" && isRedraft(message),
     ),
     approved: messages.filter(
       (message) => getMessageStatus(message) === "approved",
+    ),
+    rejected: messages.filter(
+      (message) =>
+        getMessageStatus(message) === "rejected" && !isAwaitingRedraft(message),
     ),
   };
 }
@@ -38,6 +46,14 @@ function getMessageStatus(message: {
 
 export function isRedraft(message: { futureNote?: string }) {
   return (message.futureNote ?? "").startsWith("Nuevo borrador generado");
+}
+
+export function isAwaitingRedraft(message: { futureNote?: string }) {
+  const note = message.futureNote ?? "";
+  return (
+    note.includes("Esperando nueva redacción de Dom.") &&
+    !note.includes("Nueva redacción creada por Dom:")
+  );
 }
 
 export function buildRedraftSubject(subject: string) {

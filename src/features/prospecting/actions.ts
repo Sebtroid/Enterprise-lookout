@@ -13,8 +13,6 @@ import {
   type CompanyCampaignDecision,
 } from "@/lib/prospecting/company-intelligence";
 import {
-  buildRedraftSubject,
-  buildRedraftedBody,
   outboundRejectionReasons,
 } from "@/lib/prospecting/review";
 import {
@@ -421,6 +419,9 @@ export async function rejectOutboundMessageAction(
           `Rechazado: ${outboundRejectionReasons[reason.data]}.`,
           comment ? `Feedback: ${comment}` : null,
           rememberForFuture ? "Recordar este feedback para futuras redacciones." : null,
+          reason.data === "bad_copy"
+            ? "Esperando nueva redacción de Dom."
+            : "Cerrado sin nueva redacción.",
         ]
           .filter(Boolean)
           .join(" ")},
@@ -453,47 +454,6 @@ export async function rejectOutboundMessageAction(
       };
     }
 
-    const rememberedRows = await tx`
-      select comment
-      from outbound_feedback
-      where campaign_id = ${message.campaign_id}
-        and remember_for_future = true
-        and reason = 'bad_copy'
-        and nullif(trim(comment), '') is not null
-      order by created_at desc
-      limit 5
-    `;
-    const redraftedBody = buildRedraftedBody({
-      originalBody: String(message.body ?? ""),
-      reason: reason.data,
-      feedback: comment,
-      rememberedFeedback: rememberedRows.map((row) => String(row.comment)),
-    });
-    const newMessage = await tx`
-      insert into messages (
-        campaign_id,
-        company_id,
-        contact_id,
-        sender_account_id,
-        kind,
-        status,
-        subject_draft,
-        body_draft,
-        future_note
-      ) values (
-        ${message.campaign_id},
-        ${message.company_id},
-        ${message.contact_id},
-        ${message.sender_account_id},
-        ${message.kind}::message_kind,
-        'needs_review',
-        ${buildRedraftSubject(String(message.subject))},
-        ${redraftedBody},
-        ${`Nuevo borrador generado desde rechazo del mensaje ${message.id}.`}
-      )
-      returning id
-    `;
-
     await tx`
       update campaign_contacts
       set status = 'draft_ready', updated_at = now()
@@ -503,12 +463,13 @@ export async function rejectOutboundMessageAction(
     `;
 
     return {
-      kind: "redrafted" as const,
+      kind: "redraft_requested" as const,
       campaign_slug: message.campaign_slug,
       campaignId: String(message.campaign_id),
       companyId: String(message.company_id ?? ""),
       contactId: String(message.contact_id ?? ""),
-      messageId: newMessage[0]?.id,
+      subject: String(message.subject ?? ""),
+      originalBody: String(message.body ?? ""),
     };
   });
 
@@ -548,7 +509,7 @@ export async function rejectOutboundMessageAction(
     };
   }
 
-  if (result.kind === "redrafted" && result.campaign_slug) {
+  if (result.kind === "redraft_requested" && result.campaign_slug) {
     await sendAgentEvent({
       event: "mail_rejected",
       campaignId: result.campaignId,
@@ -559,42 +520,46 @@ export async function rejectOutboundMessageAction(
         reason: reason.data,
         comment,
         remember_for_future: rememberForFuture,
-        redraft_message_id: String(result.messageId ?? ""),
+        outcome: "waiting_for_dom_redraft",
+      },
+      priority: "high",
+      source: "outbound_review",
+    });
+    await sendAgentEvent({
+      event: "draft_needed",
+      campaignId: result.campaignId,
+      companyId: result.companyId,
+      contactId: result.contactId,
+      messageId,
+      data: {
+        source_message_id: messageId,
+        source: "outbound_rejection",
+        reason: reason.data,
+        feedback: comment,
+        remember_for_future: rememberForFuture,
+        subject: result.subject,
+        original_body: result.originalBody,
+        redraft_target: "outbound_review_redrafts",
       },
       priority: "high",
       source: "outbound_review",
     });
     await notifyDomEventForCampaignSlug({
-      event: "mail_created",
+      event: "draft_needed",
       scope: String(result.campaign_slug),
       data: {
-        message_id: String(result.messageId ?? ""),
-        source: "outbound_rejection_redraft",
+        source_message_id: messageId,
         reason: reason.data,
         feedback: comment,
         remember_for_future: rememberForFuture,
+        redraft_target: "outbound_review_redrafts",
       },
-    });
-    await sendAgentEvent({
-      event: "mail_created",
-      campaignId: result.campaignId,
-      companyId: result.companyId,
-      contactId: result.contactId,
-      messageId: String(result.messageId ?? ""),
-      data: {
-        source_message_id: messageId,
-        source: "outbound_rejection_redraft",
-        reason: reason.data,
-        feedback: comment,
-      },
-      priority: "normal",
-      source: "outbound_review",
     });
   }
 
   return {
     ok: true,
-    message: "Mail rechazado. Generé un nuevo borrador con el feedback.",
+    message: "Mail rechazado. Quedó en Rechazados mientras Dom redacta la nueva versión.",
   };
 }
 

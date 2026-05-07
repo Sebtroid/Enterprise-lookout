@@ -74,7 +74,6 @@ export function OutboundReview({
   );
   const [manualSentState, manualSentAction, isManualSentPending] =
     useActionState(markMessageSentManuallyAction, initialActionState);
-  const [redraftingId, setRedraftingId] = useState<string | null>(null);
   const [sendingGmailId, setSendingGmailId] = useState<string | null>(null);
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [rejectionReasons, setRejectionReasons] = useState<
@@ -232,17 +231,7 @@ export function OutboundReview({
           </Button>
         </div>
 
-        {redraftingId === message.id ? (
-        <div className="mt-4 rounded-lg border border-cyan-200 bg-cyan-50 p-6 text-sm">
-          <div className="flex items-center gap-3">
-            <Loader2 className="size-5 animate-spin text-cyan-600" />
-            <div>
-              <div className="font-medium text-cyan-900">Redactando nuevo borrador...</div>
-              <div className="text-xs text-cyan-700">Aplicando feedback y generando versión mejorada</div>
-            </div>
-          </div>
-        </div>
-      ) : rejectingId === message.id ? (
+        {rejectingId === message.id ? (
           <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm">
             <div className="grid gap-3 md:grid-cols-[16rem_1fr]">
               <label className="space-y-1">
@@ -301,10 +290,8 @@ export function OutboundReview({
                 type="submit"
                 variant="outline"
                 onClick={() => {
-                  if (rejectionReason === "bad_copy") {
-                    setRedraftingId(message.id);
-                    setRejectingId(null);
-                  }
+                  updateStatus(message.id, "rejected");
+                  setRejectingId(null);
                 }}
               >
                 <X className="size-4" />
@@ -319,16 +306,75 @@ export function OutboundReview({
     );
   }
 
+  function renderRejectedCard(
+    message: ReviewMessage,
+    variant: "redrafting" | "rejected",
+  ) {
+    const company = companies.find((item) => item.id === message.companyId);
+    const contact = contacts.find((item) => item.id === message.contactId);
+    const sender = senders.find((item) => item.id === message.senderId);
+    const envelope = buildOutboundEnvelope({ company, contact, sender });
+
+    return (
+      <article
+        key={message.id}
+        className={
+          variant === "redrafting"
+            ? "rounded-lg border border-amber-200 bg-card p-4 shadow-sm"
+            : "rounded-lg border border-border bg-card p-4 shadow-sm opacity-80"
+        }
+      >
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="font-semibold">{message.subject}</h2>
+              <StatusBadge status={message.localStatus} />
+              {variant === "redrafting" ? (
+                <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700">
+                  <Loader2 className="size-3 animate-spin" />
+                  Redactando nueva versión
+                </span>
+              ) : null}
+            </div>
+            {message.futureNote ? (
+              <p className="mt-2 text-sm text-muted-foreground">
+                {message.futureNote}
+              </p>
+            ) : null}
+          </div>
+        </div>
+
+        <MailEnvelope
+          accountType={sender?.accountType}
+          companyLabel={envelope.companyLabel}
+          contactRole={contact?.role}
+          recipientLabel={envelope.recipientLabel}
+          senderLabel={envelope.senderLabel}
+          senderOrganization={envelope.senderOrganization}
+        />
+
+        <p className="mt-4 max-h-36 overflow-auto whitespace-pre-wrap rounded-md border border-border bg-muted/30 p-3 text-sm text-muted-foreground">
+          {message.localBody}
+        </p>
+      </article>
+    );
+  }
+
   return (
     <div className="space-y-6">
-      <div className="grid gap-3 md:grid-cols-3">
+      <div className="grid gap-3 md:grid-cols-5">
         <QueueSummary
           label="Pendientes"
           value={queues.pending.length}
           description="Editar, aprobar o rechazar con feedback."
         />
         <QueueSummary
-          label="Redactados de nuevo"
+          label="Redactando"
+          value={queues.redrafting.length}
+          description="Rechazados esperando nueva versión de Dom."
+        />
+        <QueueSummary
+          label="Redacciones nuevas"
           value={queues.redrafts.length}
           description="Nuevos borradores hechos desde feedback."
         />
@@ -336,6 +382,11 @@ export function OutboundReview({
           label="Aprobados para enviar"
           value={queues.approved.length}
           description="Abrir compose y marcar enviado."
+        />
+        <QueueSummary
+          label="Rechazados"
+          value={queues.rejected.length}
+          description="Descartados o cerrados sin nueva redacción."
         />
       </div>
 
@@ -358,6 +409,24 @@ export function OutboundReview({
         )}
 
         {queues.pending.map((message) => renderReviewCard(message, "pending"))}
+      </section>
+
+      <section className="space-y-3">
+        <div>
+          <div className="text-sm font-medium">Redactando nueva versión</div>
+          <div className="text-sm text-muted-foreground">
+            Estos mails ya salieron de pendientes. Dom tiene el feedback y está
+            pendiente de crear una nueva redacción.
+          </div>
+        </div>
+
+        {queues.redrafting.length ? null : (
+          <EmptyQueue message="No hay mails esperando nueva redacción de Dom." />
+        )}
+
+        {queues.redrafting.map((message) =>
+          renderRejectedCard(message, "redrafting"),
+        )}
       </section>
 
       <section className="space-y-3">
@@ -492,6 +561,24 @@ export function OutboundReview({
             </form>
           );
         })}
+      </section>
+
+      <section className="space-y-3">
+        <div>
+          <div className="text-sm font-medium">Rechazados</div>
+          <div className="text-sm text-muted-foreground">
+            Mails descartados o cerrados. No vuelven a pendientes salvo que se
+            cree una nueva redacción.
+          </div>
+        </div>
+
+        {queues.rejected.length ? null : (
+          <EmptyQueue message="No hay mails rechazados cerrados." />
+        )}
+
+        {queues.rejected.map((message) =>
+          renderRejectedCard(message, "rejected"),
+        )}
       </section>
     </div>
   );
