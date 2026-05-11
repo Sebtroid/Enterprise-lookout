@@ -4,6 +4,7 @@ import {
   buildGmailReplySearchQuery,
   buildInboundReplyDraft,
   classifyInboundReply,
+  isBounceReply,
   matchInboundReply,
   normalizeEmailSubject,
   prepareInboundReplyRecord,
@@ -34,6 +35,16 @@ const candidate: GmailReplyCandidate = {
   subject: "Re: Trabajo País: posible apoyo de Empresa",
   body: "Hola, gracias por escribir. Mándame la presentación y el monto objetivo.",
   receivedAt: "2026-05-02T15:00:00.000Z",
+};
+
+const bounceCandidate: GmailReplyCandidate = {
+  gmailMessageId: "gmail-bounce-1",
+  gmailThreadId: null,
+  fromEmail: "mailer-daemon@googlemail.com",
+  toEmail: "sawitting@miuandes.cl",
+  subject: "Delivery Status Notification (Failure)",
+  body: "Address not found alianzas@empresa.cl 550 5.1.1",
+  receivedAt: "2026-05-02T15:05:00.000Z",
 };
 
 describe("reply sync", () => {
@@ -77,6 +88,23 @@ describe("reply sync", () => {
   it("classifies replies and builds an approval draft", () => {
     expect(classifyInboundReply(candidate.body)).toBe("needs_info");
     expect(buildInboundReplyDraft(candidate)).toContain("presentación");
+  });
+
+  it("detects bounces and matches them to the bounced recipient", () => {
+    expect(isBounceReply(bounceCandidate)).toBe(true);
+    expect(classifyInboundReply(bounceCandidate.body)).toBe("bounced");
+
+    const match = matchInboundReply(bounceCandidate, [sentMessage]);
+    expect(match).toMatchObject({
+      message: { id: "message-1" },
+      reason: "bounce_recipient",
+      confidence: 0.95,
+    });
+
+    expect(prepareInboundReplyRecord(bounceCandidate, sentMessage)).toMatchObject({
+      classification: "bounced",
+      draftResponse: expect.stringContaining("No responder"),
+    });
   });
 
   it("prepares inbound reply records with explicit sender/campaign/contact ids", () => {

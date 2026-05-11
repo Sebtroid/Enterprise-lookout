@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { createServerClient } from "@supabase/ssr";
+import { isAllowedEmail } from "@/lib/auth/allowed-emails";
 
-export function proxy(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const demoMode = process.env.NEXT_PUBLIC_APP_MODE !== "production";
   const publicSupabaseKey =
@@ -13,19 +15,42 @@ export function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const hasSessionCookie = request.cookies
-    .getAll()
-    .some((cookie) => cookie.name.startsWith("sb-"));
+  const response = NextResponse.next({
+    request,
+  });
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    publicSupabaseKey!,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll();
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, options }) => {
+            response.cookies.set(name, value, options);
+          });
+        },
+      },
+    },
+  );
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  if (!hasSessionCookie) {
+  if (!user?.email || !isAllowedEmail(user.email)) {
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+    }
+
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  return NextResponse.next();
+  return response;
 }
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!api/gmail|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

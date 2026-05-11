@@ -81,6 +81,51 @@ describe("outbound review queue", () => {
     expect(queues.approved.map((message) => message.id)).toEqual(["message-2"]);
   });
 
+  it("moves rejected copy into the waiting-for-Dom redraft queue", () => {
+    const queues = splitOutboundReviewQueue([
+      baseMessage,
+      {
+        ...baseMessage,
+        id: "message-awaiting-dom",
+        status: "rejected",
+        futureNote:
+          "Rechazado: El mail está mal redactado. Feedback: más corto. Esperando nueva redacción de Dom.",
+      },
+      {
+        ...baseMessage,
+        id: "message-closed",
+        status: "rejected",
+        futureNote:
+          "Rechazado: La empresa no parece ser fit. Cerrado sin nueva redacción.",
+      },
+    ]);
+
+    expect(queues.pending.map((message) => message.id)).toEqual(["message-1"]);
+    expect(queues.redrafting.map((message) => message.id)).toEqual([
+      "message-awaiting-dom",
+    ]);
+    expect(queues.rejected.map((message) => message.id)).toEqual([
+      "message-closed",
+    ]);
+  });
+
+  it("removes the original rejection from waiting once Dom creates a redraft", () => {
+    const queues = splitOutboundReviewQueue([
+      {
+        ...baseMessage,
+        id: "message-redrafted-by-dom",
+        status: "rejected",
+        futureNote:
+          "Rechazado: El mail está mal redactado. Esperando nueva redacción de Dom. Nueva redacción creada por Dom: message-new.",
+      },
+    ]);
+
+    expect(queues.redrafting).toEqual([]);
+    expect(queues.rejected.map((message) => message.id)).toEqual([
+      "message-redrafted-by-dom",
+    ]);
+  });
+
   it("separates redrafts from the first-pass pending queue", () => {
     const queues = splitOutboundReviewQueue([
       baseMessage,

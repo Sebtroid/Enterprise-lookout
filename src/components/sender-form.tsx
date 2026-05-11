@@ -49,12 +49,12 @@ export function SenderForm({
             <div>
               <h2 className="font-semibold">Agregar remitente</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                Guarda la cuenta y su relación con la campaña.
+                Guarda la cuenta y su relación con el proyecto.
               </p>
             </div>
 
             {scope === "all" ? (
-              <Field label="Campaña">
+              <Field label="Proyecto">
                 <select
                   className="h-8 w-full rounded-lg border border-input bg-background px-2 text-sm"
                   name="campaignSlug"
@@ -105,7 +105,7 @@ export function SenderForm({
               <Field label="Límite diario cuenta">
                 <Input name="dailyLimit" type="number" min={1} defaultValue={15} />
               </Field>
-              <Field label="Límite diario campaña">
+              <Field label="Límite diario proyecto">
                 <Input
                   name="campaignDailyLimit"
                   type="number"
@@ -121,7 +121,7 @@ export function SenderForm({
 
             <label className="flex items-center gap-2 text-sm">
               <input name="isDefault" type="checkbox" defaultChecked />
-              Dejar como remitente default para esta campaña
+              Dejar como remitente default para este proyecto
             </label>
 
             {state.message ? <ActionMessage state={state} /> : null}

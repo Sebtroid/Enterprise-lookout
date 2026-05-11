@@ -205,11 +205,11 @@ export function getCampaignCompanyDecisionPatch(
 ): CampaignCompanyDecisionPatch {
   if (decision === "fit") {
     return {
-      status: "qualified",
+      status: "ready_to_draft",
       fitScore: 75,
       priorityScore: 70,
       selectedContactReason: "Marcada como fit desde la base general.",
-      campaignNotes: "Sirve para esta campaña.",
+      campaignNotes: "Sirve para este proyecto. Redacción solicitada a Dom.",
     };
   }
 
@@ -227,8 +227,8 @@ export function getCampaignCompanyDecisionPatch(
     status: "closed_negative",
     fitScore: 0,
     priorityScore: 0,
-    selectedContactReason: "Descartada para esta campaña desde la base general.",
-    campaignNotes: "No sirve para esta campaña.",
+    selectedContactReason: "Descartada para este proyecto desde la base general.",
+    campaignNotes: "No sirve para este proyecto.",
   };
 }
 
@@ -289,6 +289,7 @@ function buildSearchText({
       company.website,
       company.industry,
       company.region,
+      company.description,
       company.notes,
       campaignCompany?.campaignNotes,
       campaignCompany?.futureNotes,

@@ -26,6 +26,8 @@ export type SentMessageMatchInput = {
 
 export type ReplyMatchReason =
   | "gmail_thread_id"
+  | "bounce_recipient"
+  | "bounce_subject"
   | "contact_email_subject"
   | "contact_email_recent"
   | "contact_domain_subject";
@@ -73,6 +75,33 @@ export function matchInboundReply(
   const eligible = sentMessages
     .filter((message) => isBeforeOrSame(message.sentAt, candidate.receivedAt))
     .sort((a, b) => newestFirst(a.sentAt, b.sentAt));
+  const subject = normalizeEmailSubject(candidate.subject);
+
+  if (isBounceReply(candidate)) {
+    const bounceRecipientMatch = eligible.find((message) =>
+      normalizeSearch(candidate.body).includes(normalizeSearch(message.contactEmail)),
+    );
+
+    if (bounceRecipientMatch) {
+      return {
+        message: bounceRecipientMatch,
+        reason: "bounce_recipient",
+        confidence: 0.95,
+      };
+    }
+
+    const bounceSubjectMatch = eligible.find((message) =>
+      subjectsMatch(subject, normalizeEmailSubject(message.subject)),
+    );
+
+    if (bounceSubjectMatch) {
+      return {
+        message: bounceSubjectMatch,
+        reason: "bounce_subject",
+        confidence: 0.72,
+      };
+    }
+  }
 
   const threadMatch = eligible.find(
     (message) =>
@@ -85,7 +114,6 @@ export function matchInboundReply(
   }
 
   const fromEmail = normalizeEmail(candidate.fromEmail);
-  const subject = normalizeEmailSubject(candidate.subject);
 
   const emailSubjectMatch = eligible.find(
     (message) =>
@@ -134,6 +162,24 @@ export function matchInboundReply(
 
 export function classifyInboundReply(body: string): AppReply["classification"] {
   const normalized = normalizeSearch(body);
+
+  if (
+    includesAny(normalized, [
+      "address not found",
+      "delivery status notification",
+      "delivery incomplete",
+      "delivery has failed",
+      "message not delivered",
+      "recipient address rejected",
+      "undelivered mail",
+      "550 5.1.1",
+      "5.1.1",
+      "no existe",
+      "usuario desconocido",
+    ])
+  ) {
+    return "bounced";
+  }
 
   if (
     includesAny(normalized, [
@@ -199,7 +245,17 @@ export function classifyInboundReply(body: string): AppReply["classification"] {
 }
 
 export function buildInboundReplyDraft(candidate: GmailReplyCandidate) {
-  const classification = classifyInboundReply(candidate.body);
+  const classification = isBounceReply(candidate)
+    ? "bounced"
+    : classifyInboundReply(candidate.body);
+
+  if (classification === "bounced") {
+    return [
+      "No responder este rebote.",
+      "",
+      "Buscar o probar otro patrón de email en un mail nuevo, sin usar este hilo.",
+    ].join("\n");
+  }
 
   if (classification === "not_now") {
     return [
@@ -239,7 +295,9 @@ export function prepareInboundReplyRecord(
   candidate: GmailReplyCandidate,
   sentMessage: SentMessageMatchInput,
 ): PreparedInboundReply {
-  const classification = classifyInboundReply(candidate.body);
+  const classification = isBounceReply(candidate)
+    ? "bounced"
+    : classifyInboundReply(candidate.body);
 
   return {
     campaignId: sentMessage.campaignId,
@@ -348,4 +406,24 @@ function normalizeEmail(email: string) {
 
 function getEmailDomain(email: string) {
   return normalizeEmail(email).split("@")[1] ?? "";
+}
+
+export function isBounceReply(candidate: GmailReplyCandidate) {
+  const from = normalizeEmail(candidate.fromEmail);
+  const subject = normalizeSearch(candidate.subject);
+  const body = normalizeSearch(candidate.body);
+
+  return (
+    from.includes("mailer-daemon") ||
+    from.includes("postmaster") ||
+    subject.includes("delivery status notification") ||
+    subject.includes("undelivered") ||
+    subject.includes("message not delivered") ||
+    body.includes("address not found") ||
+    body.includes("delivery incomplete") ||
+    body.includes("delivery has failed") ||
+    body.includes("recipient address rejected") ||
+    body.includes("550 5.1.1") ||
+    body.includes("usuario desconocido")
+  );
 }

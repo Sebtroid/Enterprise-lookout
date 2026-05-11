@@ -73,7 +73,17 @@ export function RepliesReview({
 
   return (
     <div className="space-y-4">
+      <div className="rounded-lg border border-border bg-muted/30 p-3 text-sm text-muted-foreground">
+        Al aprobar una respuesta, se crea un mail de vuelta en
+        “Mails → Aprobados para enviar”. Si el reply venía de Gmail, se conserva
+        el thread para responder en el mismo hilo.
+      </div>
       {actionState.message ? <ActionMessage state={actionState} /> : null}
+      {!items.length ? (
+        <div className="rounded-lg border border-dashed border-border bg-background p-4 text-sm text-muted-foreground">
+          No hay respuestas pendientes por aprobar.
+        </div>
+      ) : null}
       {items.map((reply) => {
         const company = companies.find((item) => item.id === reply.companyId);
         const contact = contacts.find((item) => item.id === reply.contactId);

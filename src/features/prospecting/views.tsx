@@ -1,18 +1,30 @@
 import Link from "next/link";
-import { CalendarDays, MailCheck, Mail, Check, AlertTriangle, ExternalLink } from "lucide-react";
+import {
+  AlertTriangle,
+  CalendarDays,
+  Check,
+  ExternalLink,
+  MailCheck,
+  Mail,
+} from "lucide-react";
 
+import { CampaignDomChat } from "@/components/campaign-dom-chat";
 import { CompanyExplorer } from "@/components/company-explorer";
+import { DomTaskForm } from "@/components/dom-task-form";
+import { DomTaskList } from "@/components/dom-task-list";
 import { ImportWorkbench } from "@/components/import-workbench";
 import { MetricStrip } from "@/components/metric-strip";
 import { NewLeadForm } from "@/components/new-lead-form";
 import { OutboundReview } from "@/components/outbound-review";
 import { PageHeader } from "@/components/page-header";
 import { PipelineBoard } from "@/components/pipeline-board";
+import { ProjectEditForm, ProjectForm } from "@/components/project-form";
 import { RepliesReview } from "@/components/replies-review";
+import { ResearchRequestForm } from "@/components/research-request-form";
 import { SenderForm } from "@/components/sender-form";
 import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
-import { buttonVariants, Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -24,15 +36,32 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { GmailConnectButton } from "@/components/gmail-connect-button";
+import { GmailSyncRepliesButton } from "@/components/gmail-sync-replies-button";
 import { getContactPriority } from "@/lib/prospecting/demo-data";
-import { getPostgresClient } from "@/lib/supabase/postgres";
-import type { AppMessage, AppReply } from "@/lib/prospecting/demo-data";
+import {
+  getPostgresClient,
+  withPostgresQueryTimeout,
+} from "@/lib/supabase/postgres";
+import { getDomWorkspaceData } from "@/lib/dom/repository";
+import type {
+  AppCampaign,
+  AppCompany,
+  AppMessage,
+  AppReply,
+} from "@/lib/prospecting/demo-data";
+import {
+  getContextSlugFromScope,
+  isContextScope,
+  slugifyContextName,
+} from "@/lib/prospecting/context";
 import {
   ALL_CAMPAIGNS_SCOPE,
   getCampaignsData,
   getCompaniesData,
   getContactsData,
   getMessagesData,
+  getOutboundReviewSnapshot,
+  getProjectContextsData,
   getProspectingSnapshot,
   getRepliesData,
   isAllCampaignsScope,
@@ -41,10 +70,12 @@ import {
 
 export async function CampaignsIndexView() {
   const snapshot = await getProspectingSnapshot(ALL_CAMPAIGNS_SCOPE);
+  const contexts = getProjectContextsData(snapshot.campaigns);
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Elige campaña" eyebrow="Workspace">
+      <PageHeader title="Elige proyecto" eyebrow="Workspace">
+        <ProjectForm contexts={contexts} />
         <Link
           href={`/campaigns/${ALL_CAMPAIGNS_SCOPE}`}
           className={buttonVariants()}
@@ -52,6 +83,30 @@ export async function CampaignsIndexView() {
           Ver todo
         </Link>
       </PageHeader>
+
+      <section className="space-y-3">
+        <div>
+          <h2 className="text-sm font-medium">Ver por contexto</h2>
+          <p className="text-sm text-muted-foreground">
+            Agrupa varios proyectos bajo una misma organización, como CDI Uandes
+            o Centro de Alumnos.
+          </p>
+        </div>
+        <div className="grid gap-3 md:grid-cols-3">
+          {contexts.map((context) => (
+            <Link
+              key={context.id}
+              href={`/campaigns/${context.id}`}
+              className="rounded-lg border border-border bg-card p-4 shadow-sm transition-colors hover:border-primary/40"
+            >
+              <div className="font-semibold">{context.name}</div>
+              <div className="mt-1 text-sm text-muted-foreground">
+                {context.projectCount} proyecto{context.projectCount === 1 ? "" : "s"}
+              </div>
+            </Link>
+          ))}
+        </div>
+      </section>
 
       <div className="grid gap-4 md:grid-cols-2">
         {snapshot.campaigns.map((campaign) => {
@@ -81,7 +136,7 @@ export async function CampaignsIndexView() {
               <div className="mt-5 grid grid-cols-3 gap-3 text-sm">
                 <Metric label="Empresas" value={stats.activeCompanies} />
                 <Metric label="Mails" value={stats.pendingMessages} />
-                <Metric label="Replies" value={stats.repliesPending} />
+                <Metric label="Respuestas" value={stats.repliesPending} />
               </div>
               <div className="mt-4 flex items-center gap-2 text-sm text-muted-foreground">
                 <MailCheck className="size-4" />
@@ -97,16 +152,29 @@ export async function CampaignsIndexView() {
 
 export async function CampaignOverviewView({ scope }: { scope: string }) {
   const snapshot = await getProspectingSnapshot(scope);
-  const { campaigns, campaign, messages, senders, stats } = snapshot;
+  const { campaigns, campaign, context, messages, senders, stats } = snapshot;
   const title = getScopeLabel(snapshot);
+  const scopedCampaigns = context
+    ? campaigns.filter(
+        (item) =>
+          slugifyContextName(item.organization) === slugifyContextName(context.name),
+      )
+    : campaigns;
+  const projectContexts = getProjectContextsData(campaigns);
 
   return (
     <div className="space-y-6">
       <PageHeader
         title={title}
-        eyebrow={campaign?.organization ?? "Todas las campañas"}
+        eyebrow={
+          campaign?.organization ??
+          (context ? "Contexto" : "Todos los proyectos")
+        }
       >
-        <NewLeadForm scope={scope} campaigns={campaigns} />
+        {campaign ? (
+          <ProjectEditForm campaign={campaign} contexts={projectContexts} />
+        ) : null}
+        <NewLeadForm scope={scope} campaigns={scopedCampaigns} />
       </PageHeader>
 
       {campaign ? (
@@ -114,13 +182,28 @@ export async function CampaignOverviewView({ scope }: { scope: string }) {
           <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div>
               <StatusBadge status={campaign.status} />
-              <p className="mt-3 max-w-3xl text-sm text-muted-foreground">
-                {campaign.valueProposition}
-              </p>
+              <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                <div>
+                  <div className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                    Qué es
+                  </div>
+                  <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
+                    {campaign.description || "Sin descripción del proyecto."}
+                  </p>
+                </div>
+                <div>
+                  <div className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                    Qué se necesita conseguir
+                  </div>
+                  <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
+                    {campaign.valueProposition}
+                  </p>
+                </div>
+              </div>
             </div>
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <CalendarDays className="size-4" />
-              {campaign.startsOn}
+              {formatCampaignWindow(campaign.startsOn, campaign.endsOn)}
             </div>
           </div>
         </section>
@@ -134,6 +217,31 @@ export async function CampaignOverviewView({ scope }: { scope: string }) {
           { label: "Replies por aprobar", value: stats.repliesPending },
         ]}
       />
+
+      {campaign || context ? (
+        <section className="grid gap-3 md:grid-cols-4">
+          <QuickAction
+            href={`/campaigns/${scope}/companies`}
+            label="Clasificar empresas"
+            description="Ver base general, filtrar sin evaluar y marcar Sirve / Investigar / No sirve."
+          />
+          <QuickAction
+            href={`/campaigns/${scope}/review/outbound`}
+            label="Revisar mails"
+            description="Editar borradores, aprobarlos y enviarlos con Gmail si el remitente está conectado."
+          />
+          <QuickAction
+            href={`/campaigns/${scope}/review/replies`}
+            label="Responder interesados"
+            description="Aprobar respuestas; quedan listas para enviarse en el mismo hilo."
+          />
+          <QuickAction
+            href={`/campaigns/${scope}/tasks`}
+            label="Dom y tareas"
+            description="Ver tareas, pedir acciones y hablar con Dom con contexto de este proyecto."
+          />
+        </section>
+      ) : null}
 
       <section className="rounded-lg border border-border bg-card">
         <Table>
@@ -175,19 +283,19 @@ export async function CampaignOverviewView({ scope }: { scope: string }) {
         </Table>
       </section>
 
-      {isAllCampaignsScope(scope) ? (
+      {isAllCampaignsScope(scope) || isContextScope(scope) ? (
         <section className="rounded-lg border border-border bg-card">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Campaña</TableHead>
+                <TableHead>Proyecto</TableHead>
                 <TableHead>Organización</TableHead>
                 <TableHead>Estado</TableHead>
                 <TableHead>Remitente default</TableHead>
               </TableRow>
           </TableHeader>
           <TableBody>
-              {campaigns.map((item) => {
+              {scopedCampaigns.map((item) => {
                 const defaultSender = senders.find(
                   (sender) => sender.campaignId === item.id && sender.isDefault,
                 );
@@ -222,11 +330,53 @@ export async function CampaignOverviewView({ scope }: { scope: string }) {
 
 export async function PipelineView({ scope }: { scope: string }) {
   const snapshot = await getProspectingSnapshot(scope);
+  const scopeLabel = getScopeLabel(snapshot);
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Pipeline" eyebrow={getScopeLabel(snapshot)} />
-      <PipelineBoard companies={snapshot.companies} />
+      <PageHeader title="Pipeline" eyebrow={scopeLabel} />
+      <PipelineBoard
+        campaigns={snapshot.campaigns}
+        companies={snapshot.companies}
+        scopeLabel={scopeLabel}
+      />
+    </div>
+  );
+}
+
+export async function TasksView({ scope }: { scope: string }) {
+  const data = await getDomWorkspaceData(scope);
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="Dom y tareas"
+        eyebrow={data.campaign?.name ?? "Todos los proyectos"}
+      >
+        {data.campaign ? <DomTaskForm scope={scope} /> : null}
+      </PageHeader>
+
+      <div className="grid min-h-0 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(22rem,0.44fr)]">
+        <DomTaskList
+          initialCandidates={data.companyCandidates}
+          initialTasks={data.tasks}
+          scope={scope}
+        />
+
+        {data.campaign ? (
+          <CampaignDomChat
+            campaignName={data.campaign.name}
+            initialMessages={data.messages}
+            initialTasks={data.tasks}
+            scope={scope}
+            threadId={data.thread?.id ?? null}
+          />
+        ) : (
+          <section className="rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground">
+            Entra a un proyecto concreto para abrir el chat de campaña con Dom.
+          </section>
+        )}
+      </div>
     </div>
   );
 }
@@ -236,20 +386,21 @@ export async function CompaniesView({ scope }: { scope: string }) {
   const campaign = isAllCampaignsScope(scope)
     ? null
     : campaigns.find((item) => item.id === scope) ?? null;
-  const allCompanies = await getCompaniesData(ALL_CAMPAIGNS_SCOPE);
-  const campaignCompanies = isAllCampaignsScope(scope)
-    ? allCompanies
-    : await getCompaniesData(scope);
-  const contacts = await getContactsData(ALL_CAMPAIGNS_SCOPE);
-  const messages = await getMessagesData(ALL_CAMPAIGNS_SCOPE);
+  const [allCompanies, contacts, messages] = await Promise.all([
+    getCompaniesData(ALL_CAMPAIGNS_SCOPE),
+    getContactsData(ALL_CAMPAIGNS_SCOPE),
+    getMessagesData(ALL_CAMPAIGNS_SCOPE),
+  ]);
   const replies = await getRepliesData(ALL_CAMPAIGNS_SCOPE);
+  const campaignCompanies = filterCompaniesForScope(allCompanies, campaigns, scope);
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Empresas"
-        eyebrow={campaign?.name ?? "Todas las campañas"}
+        eyebrow={campaign?.name ?? "Todos los proyectos"}
       />
+      <ResearchRequestForm campaign={campaign} scope={scope} />
       <CompanyExplorer
         scope={scope}
         campaigns={campaigns}
@@ -278,6 +429,7 @@ export async function ContactsView({ scope }: { scope: string }) {
               <TableHead>Empresa</TableHead>
               <TableHead>Cargo</TableHead>
               <TableHead>Email</TableHead>
+              <TableHead>Verificación</TableHead>
               <TableHead>Prioridad</TableHead>
               <TableHead>Fuente</TableHead>
             </TableRow>
@@ -293,7 +445,7 @@ export async function ContactsView({ scope }: { scope: string }) {
                   <TableCell>
                     <div className="font-medium">{contact.name}</div>
                     <div className="mt-1 flex gap-2">
-                      {contact.isDecisionMaker ? (
+                      {contact.verificationStatus === "verified" && contact.isDecisionMaker ? (
                         <Badge variant="outline">Decisor</Badge>
                       ) : null}
                       {contact.doNotContact ? (
@@ -304,7 +456,21 @@ export async function ContactsView({ scope }: { scope: string }) {
                   <TableCell>{company?.name}</TableCell>
                   <TableCell>{contact.role}</TableCell>
                   <TableCell>{contact.email}</TableCell>
-                  <TableCell>{getContactPriority(contact)}</TableCell>
+                  <TableCell>
+                    <div className="flex flex-col gap-1">
+                      <StatusBadge status={contact.verificationStatus} />
+                      {contact.bounceCount > 0 ? (
+                        <span className="text-xs text-muted-foreground">
+                          {contact.bounceCount} rebote(s)
+                        </span>
+                      ) : null}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    {contact.verificationStatus === "verified"
+                      ? getContactPriority(contact)
+                      : "Por validar"}
+                  </TableCell>
                   <TableCell>{contact.source}</TableCell>
                 </TableRow>
               );
@@ -364,15 +530,10 @@ export async function ImportsView({ scope }: { scope: string }) {
 }
 
 export async function OutboundReviewView({ scope }: { scope: string }) {
-  const snapshot = await getProspectingSnapshot(scope);
-  
-  // Check which senders have Gmail connected
-  const sql = getPostgresClient();
-  let gmailConnectedEmails: string[] = [];
-  if (sql) {
-    const tokenRows = await sql`select user_email from gmail_tokens`;
-    gmailConnectedEmails = tokenRows.map((r) => r.user_email as string);
-  }
+  const [snapshot, gmailConnectedEmails] = await Promise.all([
+    getOutboundReviewSnapshot(scope),
+    getGmailConnectedEmails(),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -381,11 +542,10 @@ export async function OutboundReviewView({ scope }: { scope: string }) {
         key={snapshot.messages
           .map((message) => `${message.id}:${message.status}:${message.body}`)
           .join("|")}
+        campaigns={snapshot.campaigns}
         companies={snapshot.companies}
         contacts={snapshot.contacts}
-        messages={snapshot.messages.filter((message) =>
-          ["needs_review", "approved"].includes(message.status),
-        )}
+        messages={snapshot.messages}
         scope={scope}
         senders={snapshot.senders}
         gmailConnectedEmails={gmailConnectedEmails}
@@ -394,19 +554,40 @@ export async function OutboundReviewView({ scope }: { scope: string }) {
   );
 }
 
+async function getGmailConnectedEmails() {
+  const sql = getPostgresClient();
+  if (!sql) return [];
+
+  try {
+    const tokenRows = await withPostgresQueryTimeout(sql`
+      select user_email
+      from gmail_tokens
+    `.execute(), "gmail connected emails");
+    return tokenRows.map((r) => r.user_email as string);
+  } catch (error) {
+    console.error("Could not load Gmail connected emails", error);
+    return [];
+  }
+}
+
 export async function RepliesReviewView({ scope }: { scope: string }) {
   const snapshot = await getProspectingSnapshot(scope);
+  const pendingReplies = snapshot.replies.filter(
+    (reply) => reply.approvalStatus === "needs_review",
+  );
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Respuestas por aprobar" eyebrow={getScopeLabel(snapshot)} />
+      <PageHeader title="Respuestas por aprobar" eyebrow={getScopeLabel(snapshot)}>
+        <GmailSyncRepliesButton scope={scope} />
+      </PageHeader>
       <RepliesReview
-        key={snapshot.replies
+        key={pendingReplies
           .map((reply) => `${reply.id}:${reply.approvalStatus}:${reply.draftResponse}`)
           .join("|")}
         companies={snapshot.companies}
         contacts={snapshot.contacts}
-        replies={snapshot.replies}
+        replies={pendingReplies}
         senders={snapshot.senders}
       />
     </div>
@@ -426,7 +607,7 @@ export async function SendersView({ scope }: { scope: string }) {
           <TableHeader>
             <TableRow>
               <TableHead>Correo</TableHead>
-              <TableHead>Campaña</TableHead>
+              <TableHead>Proyecto</TableHead>
               <TableHead>Estado</TableHead>
               <TableHead>Límite diario</TableHead>
               <TableHead>Prioridad</TableHead>
@@ -490,7 +671,56 @@ function formatSenderProvider(provider: string) {
 }
 
 function getScopeLabel(snapshot: ProspectingSnapshot) {
-  return snapshot.campaign?.name ?? "Todas las campañas";
+  return snapshot.campaign?.name ?? snapshot.context?.name ?? "Todos los proyectos";
+}
+
+function formatCampaignWindow(startsOn?: string | null, endsOn?: string | null) {
+  if (startsOn && endsOn) return `${startsOn} a ${endsOn}`;
+  if (startsOn) return startsOn;
+  if (endsOn) return `Hasta ${endsOn}`;
+  return "Sin fecha";
+}
+
+function filterCompaniesForScope(
+  companies: AppCompany[],
+  campaigns: AppCampaign[],
+  scope: string,
+) {
+  if (isAllCampaignsScope(scope)) return companies;
+
+  const campaignIds = isContextScope(scope)
+    ? new Set(
+        campaigns
+          .filter(
+            (campaign) =>
+              slugifyContextName(campaign.organization) ===
+              getContextSlugFromScope(scope),
+          )
+          .map((campaign) => campaign.id),
+      )
+    : new Set([scope]);
+
+  return companies.filter((company) =>
+    company.campaignIds.some((campaignId) => campaignIds.has(campaignId)),
+  );
+}
+
+function formatGmailError(error: string, email?: string) {
+  const connectedEmail = email ? ` (${email})` : "";
+  const labels: Record<string, string> = {
+    access_denied: "Google rechazo la autorizacion.",
+    email_lookup_failed:
+      "No pude leer el email de la cuenta conectada. Intenta conectar Gmail de nuevo.",
+    email_not_allowed: `Esa cuenta Gmail no esta permitida${connectedEmail}. Conecta el remitente configurado para la campaña.`,
+    invalid_state: "La sesion de OAuth expiro. Vuelve a presionar Conectar Gmail.",
+    missing_database_config: "Falta configurar la base de datos.",
+    missing_gmail_config: "Faltan credenciales de Gmail OAuth.",
+    no_code: "Google no devolvio codigo de autorizacion.",
+    sender_not_configured: `La cuenta esta permitida, pero no existe como remitente Gmail activo${connectedEmail}.`,
+    server_error: "Error de servidor conectando Gmail.",
+  };
+
+  return labels[error] ?? `No se pudo conectar Gmail: ${error}${connectedEmail}`;
 }
 
 function getStatsForCampaign(snapshot: ProspectingSnapshot, campaignId: string) {
@@ -531,16 +761,53 @@ function Metric({ label, value }: { label: string; value: number }) {
   );
 }
 
-export async function GmailSettingsView() {
+function QuickAction({
+  description,
+  href,
+  label,
+}: {
+  description: string;
+  href: string;
+  label: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className="rounded-lg border border-border bg-background p-4 text-sm transition-colors hover:border-primary/40 hover:bg-muted/40"
+      prefetch={false}
+    >
+      <div className="font-medium">{label}</div>
+      <p className="mt-1 text-muted-foreground">{description}</p>
+    </Link>
+  );
+}
+
+export async function GmailSettingsView({
+  status,
+}: {
+  status?: {
+    connected?: string;
+    email?: string;
+    error?: string;
+  };
+} = {}) {
   const sql = getPostgresClient();
   let tokens: { user_email: string; updated_at: string }[] = [];
 
   if (sql) {
-    tokens = await sql`
-      select user_email, updated_at::text
-      from gmail_tokens
-      order by updated_at desc
-    `;
+    try {
+      const tokenRows = await withPostgresQueryTimeout(sql`
+        select user_email, updated_at::text
+        from gmail_tokens
+        order by updated_at desc
+      `.execute(), "gmail settings tokens");
+      tokens = tokenRows.map((row) => ({
+        user_email: String(row.user_email ?? ""),
+        updated_at: String(row.updated_at ?? ""),
+      }));
+    } catch (error) {
+      console.error("Could not load Gmail settings tokens", error);
+    }
   }
 
   return (
@@ -548,9 +815,21 @@ export async function GmailSettingsView() {
       <div>
         <h1 className="text-lg font-semibold">Gmail</h1>
         <p className="text-sm text-muted-foreground">
-          Conecta tu cuenta de Gmail para enviar mails directamente desde Dom.
+          Conecta tu cuenta de Gmail para enviar mails directamente desde la app.
         </p>
       </div>
+
+      {status?.error ? (
+        <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+          {formatGmailError(status.error, status.email)}
+        </div>
+      ) : null}
+
+      {status?.connected ? (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          Gmail conectado: {status.connected}
+        </div>
+      ) : null}
 
       <Card>
         <CardHeader>
@@ -577,7 +856,10 @@ export async function GmailSettingsView() {
                     <div>
                       <div className="font-medium">{token.user_email}</div>
                       <div className="text-xs text-muted-foreground">
-                        Conectado el {new Date(token.updated_at).toLocaleDateString("es-CL")}
+                        Conectado el{" "}
+                        {new Date(token.updated_at).toLocaleDateString("es-CL", {
+                          timeZone: "America/Santiago",
+                        })}
                       </div>
                     </div>
                   </div>
@@ -591,7 +873,7 @@ export async function GmailSettingsView() {
               <div className="text-center">
                 <div className="font-medium">No hay cuentas conectadas</div>
                 <div className="text-sm text-muted-foreground">
-                  Conecta Gmail para que Dom pueda enviar mails como tú.
+                  Conecta Gmail para enviar mails aprobados desde la app.
                 </div>
               </div>
               <GmailConnectButton />
@@ -609,11 +891,12 @@ export async function GmailSettingsView() {
             1. Conectas tu Gmail con OAuth (seguro, no guardamos tu contraseña).
           </p>
           <p>
-            2. Cuando apruebes un mail en &quot;Mails&quot;, Dom puede enviarlo directamente
-            en vez de abrir Outlook Web.
+            2. Cuando apruebes un mail en &quot;Mails&quot;, la app puede enviarlo directamente
+            con Gmail.
           </p>
           <p>
-            3. Los replies se monitorean automáticamente y aparecen en &quot;Respuestas&quot;.
+            3. Las respuestas aparecen en &quot;Respuestas&quot;; al aprobarlas se crea
+            un mail de vuelta listo para enviar en el mismo hilo.
           </p>
           <p>
             4. Puedes revocar el acceso en cualquier momento desde{" "}

@@ -1,0 +1,7 @@
+.env*
+.DS_Store
+.next/
+.playwright-cli/
+graphify-out/
+node_modules/
+output/

@@ -1,9 +1,11 @@
 "use client";
 
 import {
+  useCallback,
   useActionState,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -33,6 +35,7 @@ import type {
   AppMessage,
   AppCompany,
   AppContact,
+  AppCampaign,
   AppSender,
 } from "@/lib/prospecting/demo-data";
 import {
@@ -41,6 +44,10 @@ import {
   splitOutboundReviewQueue,
   type OutboundRejectionReason,
 } from "@/lib/prospecting/review";
+import {
+  getConfirmedAutoSendMessageId,
+  shouldAutoSendAfterApproval,
+} from "@/lib/prospecting/sending";
 
 type ReviewMessage = AppMessage & {
   localStatus: AppMessage["status"];
@@ -50,12 +57,14 @@ type ReviewMessage = AppMessage & {
 const initialActionState: ActionState = { ok: false, message: "" };
 
 export function OutboundReview({
+  campaigns,
   companies,
   contacts,
   messages,
   senders,
   gmailConnectedEmails = [],
 }: {
+  campaigns: AppCampaign[];
   companies: AppCompany[];
   contacts: AppContact[];
   messages: AppMessage[];
@@ -74,63 +83,119 @@ export function OutboundReview({
   );
   const [manualSentState, manualSentAction, isManualSentPending] =
     useActionState(markMessageSentManuallyAction, initialActionState);
-  const [redraftingId, setRedraftingId] = useState<string | null>(null);
+  const autoSendInFlightRef = useRef<string | null>(null);
+  const autoSendAfterApproveIdRef = useRef<string | null>(null);
   const [sendingGmailId, setSendingGmailId] = useState<string | null>(null);
+  const [isBulkSendingGmail, setIsBulkSendingGmail] = useState(false);
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [rejectionReasons, setRejectionReasons] = useState<
     Record<string, OutboundRejectionReason>
   >({});
-  const [items, setItems] = useState<ReviewMessage[]>(
-    messages.map((message) => ({
-      ...message,
-      localStatus: message.status,
-      localBody: message.body,
-    })),
+  const [bodyOverrides, setBodyOverrides] = useState<Record<string, string>>({});
+  const items = useMemo(
+    () => mapMessagesToReviewMessages(messages, bodyOverrides),
+    [bodyOverrides, messages],
   );
 
-  useEffect(() => {
-    if (reviewState.message || rejectState.message || manualSentState.message) {
-      router.refresh();
-    }
-  }, [reviewState, rejectState, manualSentState, router]);
-
   const queues = useMemo(() => splitOutboundReviewQueue(items), [items]);
+  const approvedGmailMessageIds = useMemo(
+    () =>
+      queues.approved
+        .filter((message) => {
+          const sender = senders.find((item) => item.id === message.senderId);
+          return shouldAutoSendAfterApproval({
+            connectedGmailEmails: gmailConnectedEmails,
+            senderAccountType: sender?.accountType,
+            senderEmail: sender?.email,
+            senderStatus: sender?.status,
+          });
+        })
+        .map((message) => message.id),
+    [gmailConnectedEmails, queues.approved, senders],
+  );
 
-  async function sendWithGmail(messageId: string, to: string, subject: string, body: string, fromEmail: string) {
+  const sendWithGmail = useCallback(async (messageId: string) => {
     setSendingGmailId(messageId);
     try {
       const res = await fetch("/api/gmail/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ to, subject, body, fromEmail, messageId }),
+        body: JSON.stringify({ messageId }),
       });
       const data = await res.json();
       if (data.ok) {
-        updateStatus(messageId, "sent");
+        router.refresh();
+        return true;
       } else {
+        router.refresh();
         alert(`Error enviando mail: ${data.error}`);
+        return false;
       }
-    } catch (err) {
+    } catch {
       alert("Error de red al enviar mail.");
+      return false;
     } finally {
       setSendingGmailId(null);
     }
-  }
+  }, [router]);
 
-  function updateStatus(id: string, status: AppMessage["status"]) {
-    setItems((current) =>
-      current.map((item) =>
-        item.id === id ? { ...item, localStatus: status } : item,
-      ),
-    );
-  }
+  const sendApprovedWithGmail = useCallback(async () => {
+    if (!approvedGmailMessageIds.length || isBulkSendingGmail) return;
+
+    setIsBulkSendingGmail(true);
+    try {
+      for (const messageId of approvedGmailMessageIds) {
+        await sendWithGmail(messageId);
+      }
+      router.refresh();
+    } finally {
+      setIsBulkSendingGmail(false);
+    }
+  }, [
+    approvedGmailMessageIds,
+    isBulkSendingGmail,
+    router,
+    sendWithGmail,
+  ]);
+
+  useEffect(() => {
+    const messageId = getConfirmedAutoSendMessageId({
+      actionState: reviewState,
+      requestedMessageId: autoSendAfterApproveIdRef.current,
+    });
+
+    if (messageId) {
+      if (autoSendInFlightRef.current === messageId) return;
+
+      autoSendInFlightRef.current = messageId;
+      autoSendAfterApproveIdRef.current = null;
+      void sendWithGmail(messageId).finally(() => {
+        autoSendInFlightRef.current = null;
+        router.refresh();
+      });
+      return;
+    }
+
+    if (reviewState.message && !reviewState.ok) {
+      autoSendAfterApproveIdRef.current = null;
+    }
+
+    if (
+      (reviewState.message || rejectState.message || manualSentState.message) &&
+      !autoSendInFlightRef.current
+    ) {
+      router.refresh();
+    }
+  }, [
+    manualSentState,
+    rejectState,
+    reviewState,
+    router,
+    sendWithGmail,
+  ]);
 
   function updateBody(id: string, body: string) {
-    setItems((current) =>
-      current.map((item) =>
-        item.id === id ? { ...item, localBody: body } : item,
-      ),
-    );
+    setBodyOverrides((current) => ({ ...current, [id]: body }));
   }
 
   function updateRejectionReason(
@@ -143,9 +208,16 @@ export function OutboundReview({
   function renderReviewCard(message: ReviewMessage, variant: "pending" | "redraft") {
     const company = companies.find((item) => item.id === message.companyId);
     const contact = contacts.find((item) => item.id === message.contactId);
+    const campaign = campaigns.find((item) => item.id === message.campaignId);
     const sender = senders.find((item) => item.id === message.senderId);
     const rejectionReason = rejectionReasons[message.id] ?? "bad_copy";
     const envelope = buildOutboundEnvelope({ company, contact, sender });
+    const autoSendsWithGmail = shouldAutoSendAfterApproval({
+      connectedGmailEmails: gmailConnectedEmails,
+      senderAccountType: sender?.accountType,
+      senderEmail: sender?.email,
+      senderStatus: sender?.status,
+    });
 
     return (
       <form
@@ -166,6 +238,11 @@ export function OutboundReview({
               {variant === "redraft" ? (
                 <span className="rounded-md bg-cyan-50 px-2 py-1 text-xs font-medium text-cyan-700">
                   Redactado de nuevo
+                </span>
+              ) : null}
+              {message.kind === "outbound_reply" ? (
+                <span className="rounded-md bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700">
+                  Respuesta en hilo
                 </span>
               ) : null}
             </div>
@@ -190,10 +267,14 @@ export function OutboundReview({
               type="submit"
               value="approved"
               size="sm"
-              onClick={() => updateStatus(message.id, "approved")}
+              onClick={() => {
+                autoSendAfterApproveIdRef.current = autoSendsWithGmail
+                  ? message.id
+                  : null;
+              }}
             >
               <Check className="size-4" />
-              Aprobar
+              {autoSendsWithGmail ? "Aprobar y enviar" : "Aprobar"}
             </Button>
           </div>
         </div>
@@ -203,8 +284,8 @@ export function OutboundReview({
           companyLabel={envelope.companyLabel}
           contactRole={contact?.role}
           recipientLabel={envelope.recipientLabel}
+          projectLabel={formatProjectDetail(campaign)}
           senderLabel={envelope.senderLabel}
-          senderOrganization={envelope.senderOrganization}
         />
 
         <Textarea
@@ -227,17 +308,7 @@ export function OutboundReview({
           </Button>
         </div>
 
-        {redraftingId === message.id ? (
-        <div className="mt-4 rounded-lg border border-cyan-200 bg-cyan-50 p-6 text-sm">
-          <div className="flex items-center gap-3">
-            <Loader2 className="size-5 animate-spin text-cyan-600" />
-            <div>
-              <div className="font-medium text-cyan-900">Redactando nuevo borrador...</div>
-              <div className="text-xs text-cyan-700">Aplicando feedback y generando versión mejorada</div>
-            </div>
-          </div>
-        </div>
-      ) : rejectingId === message.id ? (
+        {rejectingId === message.id ? (
           <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm">
             <div className="grid gap-3 md:grid-cols-[16rem_1fr]">
               <label className="space-y-1">
@@ -295,12 +366,6 @@ export function OutboundReview({
                 size="sm"
                 type="submit"
                 variant="outline"
-                onClick={() => {
-                  if (rejectionReason === "bad_copy") {
-                    setRedraftingId(message.id);
-                    setRejectingId(null);
-                  }
-                }}
               >
                 <X className="size-4" />
                 {rejectionReason === "bad_copy"
@@ -314,23 +379,88 @@ export function OutboundReview({
     );
   }
 
+  function renderRejectedCard(
+    message: ReviewMessage,
+    variant: "redrafting" | "rejected",
+  ) {
+    const company = companies.find((item) => item.id === message.companyId);
+    const contact = contacts.find((item) => item.id === message.contactId);
+    const campaign = campaigns.find((item) => item.id === message.campaignId);
+    const sender = senders.find((item) => item.id === message.senderId);
+    const envelope = buildOutboundEnvelope({ company, contact, sender });
+
+    return (
+      <article
+        key={message.id}
+        className={
+          variant === "redrafting"
+            ? "rounded-lg border border-amber-200 bg-card p-4 shadow-sm"
+            : "rounded-lg border border-border bg-card p-4 shadow-sm opacity-80"
+        }
+      >
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="font-semibold">{message.subject}</h2>
+              <StatusBadge status={message.localStatus} />
+              {variant === "redrafting" ? (
+                <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700">
+                  <Loader2 className="size-3 animate-spin" />
+                  Redactando nueva versión
+                </span>
+              ) : null}
+            </div>
+            {message.futureNote ? (
+              <p className="mt-2 text-sm text-muted-foreground">
+                {message.futureNote}
+              </p>
+            ) : null}
+          </div>
+        </div>
+
+        <MailEnvelope
+          accountType={sender?.accountType}
+          companyLabel={envelope.companyLabel}
+          contactRole={contact?.role}
+          recipientLabel={envelope.recipientLabel}
+          projectLabel={formatProjectDetail(campaign)}
+          senderLabel={envelope.senderLabel}
+        />
+
+        <p className="mt-4 max-h-36 overflow-auto whitespace-pre-wrap rounded-md border border-border bg-muted/30 p-3 text-sm text-muted-foreground">
+          {message.localBody}
+        </p>
+      </article>
+    );
+  }
+
   return (
     <div className="space-y-6">
-      <div className="grid gap-3 md:grid-cols-3">
+      <div className="grid gap-3 md:grid-cols-5">
         <QueueSummary
           label="Pendientes"
           value={queues.pending.length}
           description="Editar, aprobar o rechazar con feedback."
         />
         <QueueSummary
-          label="Redactados de nuevo"
+          label="Redactando"
+          value={queues.redrafting.length}
+          description="Rechazados esperando nueva versión de Dom."
+        />
+        <QueueSummary
+          label="Redacciones nuevas"
           value={queues.redrafts.length}
           description="Nuevos borradores hechos desde feedback."
         />
         <QueueSummary
-          label="Aprobados para enviar"
+          label="Aprobados sin enviar"
           value={queues.approved.length}
-          description="Abrir compose y marcar enviado."
+          description="Fallback si Gmail no está conectado o falló."
+        />
+        <QueueSummary
+          label="Rechazados"
+          value={queues.rejected.length}
+          description="Descartados o cerrados sin nueva redacción."
         />
       </div>
 
@@ -344,7 +474,8 @@ export function OutboundReview({
         <div>
           <div className="text-sm font-medium">Pendientes de revisión</div>
           <div className="text-sm text-muted-foreground">
-            Al aprobar, salen de esta bandeja y pasan a “Aprobados para enviar”.
+            Si el remitente tiene Gmail conectado, aprobar envía al tiro. Si no,
+            queda como aprobado sin enviar.
           </div>
         </div>
 
@@ -353,6 +484,24 @@ export function OutboundReview({
         )}
 
         {queues.pending.map((message) => renderReviewCard(message, "pending"))}
+      </section>
+
+      <section className="space-y-3">
+        <div>
+          <div className="text-sm font-medium">Redactando nueva versión</div>
+          <div className="text-sm text-muted-foreground">
+            Estos mails ya salieron de pendientes. Dom tiene el feedback y está
+            pendiente de crear una nueva redacción.
+          </div>
+        </div>
+
+        {queues.redrafting.length ? null : (
+          <EmptyQueue message="No hay mails esperando nueva redacción de Dom." />
+        )}
+
+        {queues.redrafting.map((message) =>
+          renderRejectedCard(message, "redrafting"),
+        )}
       </section>
 
       <section className="space-y-3">
@@ -373,11 +522,29 @@ export function OutboundReview({
       </section>
 
       <section className="space-y-3">
-        <div>
-          <div className="text-sm font-medium">Aprobados para enviar</div>
-          <div className="text-sm text-muted-foreground">
-            Estos ya no necesitan aprobación; solo abrir compose y marcar enviado.
+        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          <div>
+            <div className="text-sm font-medium">Aprobados sin enviar</div>
+            <div className="text-sm text-muted-foreground">
+              Solo aparecen acá cuando no se enviaron automáticamente: Gmail no
+              está conectado, el remitente no es Gmail o falló el envío.
+            </div>
           </div>
+          {approvedGmailMessageIds.length ? (
+            <Button
+              disabled={isBulkSendingGmail}
+              size="sm"
+              type="button"
+              onClick={() => void sendApprovedWithGmail()}
+            >
+              {isBulkSendingGmail ? (
+                <Loader2 className="mr-2 size-4 animate-spin" />
+              ) : (
+                <Mail className="mr-2 size-4" />
+              )}
+              {isBulkSendingGmail ? "Enviando..." : "Enviar todos con Gmail"}
+            </Button>
+          ) : null}
         </div>
 
         {queues.approved.length ? null : (
@@ -387,6 +554,7 @@ export function OutboundReview({
         {queues.approved.map((message) => {
           const company = companies.find((item) => item.id === message.companyId);
           const contact = contacts.find((item) => item.id === message.contactId);
+          const campaign = campaigns.find((item) => item.id === message.campaignId);
           const sender = senders.find((item) => item.id === message.senderId);
           const envelope = buildOutboundEnvelope({ company, contact, sender });
           const composeHref =
@@ -400,7 +568,12 @@ export function OutboundReview({
                 })
               : null;
 
-          const hasGmail = sender?.email && gmailConnectedEmails.includes(sender.email);
+          const hasGmail = shouldAutoSendAfterApproval({
+            connectedGmailEmails: gmailConnectedEmails,
+            senderAccountType: sender?.accountType,
+            senderEmail: sender?.email,
+            senderStatus: sender?.status,
+          });
 
           return (
             <form
@@ -413,6 +586,11 @@ export function OutboundReview({
                   <div className="flex flex-wrap items-center gap-2">
                     <h2 className="font-semibold">{message.subject}</h2>
                     <StatusBadge status={message.localStatus} />
+                    {message.kind === "outbound_reply" ? (
+                      <span className="rounded-md bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700">
+                        Mismo hilo
+                      </span>
+                    ) : null}
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -421,16 +599,7 @@ export function OutboundReview({
                       disabled={sendingGmailId === message.id}
                       size="sm"
                       type="button"
-                      onClick={() =>
-                        contact?.email && sender?.email &&
-                        sendWithGmail(
-                          message.id,
-                          contact.email,
-                          message.subject,
-                          message.localBody,
-                          sender.email
-                        )
-                      }
+                      onClick={() => void sendWithGmail(message.id)}
                     >
                       {sendingGmailId === message.id ? (
                         <Loader2 className="mr-2 size-4 animate-spin" />
@@ -461,7 +630,6 @@ export function OutboundReview({
                     size="sm"
                     type="submit"
                     variant="outline"
-                    onClick={() => updateStatus(message.id, "sent")}
                   >
                     <Send className="size-4" />
                     Marcar enviado
@@ -473,8 +641,8 @@ export function OutboundReview({
                 companyLabel={envelope.companyLabel}
                 contactRole={contact?.role}
                 recipientLabel={envelope.recipientLabel}
+                projectLabel={formatProjectDetail(campaign)}
                 senderLabel={envelope.senderLabel}
-                senderOrganization={envelope.senderOrganization}
               />
               <p className="mt-4 max-h-36 overflow-auto whitespace-pre-wrap rounded-md border border-border bg-muted/30 p-3 text-sm text-muted-foreground">
                 {message.localBody}
@@ -482,6 +650,24 @@ export function OutboundReview({
             </form>
           );
         })}
+      </section>
+
+      <section className="space-y-3">
+        <div>
+          <div className="text-sm font-medium">Rechazados</div>
+          <div className="text-sm text-muted-foreground">
+            Mails descartados o cerrados. No vuelven a pendientes salvo que se
+            cree una nueva redacción.
+          </div>
+        </div>
+
+        {queues.rejected.length ? null : (
+          <EmptyQueue message="No hay mails rechazados cerrados." />
+        )}
+
+        {queues.rejected.map((message) =>
+          renderRejectedCard(message, "rejected"),
+        )}
       </section>
     </div>
   );
@@ -491,16 +677,16 @@ function MailEnvelope({
   accountType,
   companyLabel,
   contactRole,
+  projectLabel,
   recipientLabel,
   senderLabel,
-  senderOrganization,
 }: {
   accountType?: AppSender["accountType"];
   companyLabel: string;
   contactRole?: string;
+  projectLabel: string;
   recipientLabel: string;
   senderLabel: string;
-  senderOrganization: string;
 }) {
   return (
     <div className="mt-4 grid gap-2 rounded-lg border border-border bg-muted/30 p-3 text-sm md:grid-cols-2">
@@ -514,7 +700,7 @@ function MailEnvelope({
         icon={<Mail className="size-4" />}
         label="Desde"
         value={senderLabel}
-        detail={senderOrganization}
+        detail={projectLabel}
         suffix={accountType ? formatSenderProvider(accountType) : undefined}
       />
       <EnvelopeField
@@ -524,6 +710,11 @@ function MailEnvelope({
       />
     </div>
   );
+}
+
+function formatProjectDetail(campaign: AppCampaign | undefined) {
+  if (!campaign) return "Proyecto sin definir";
+  return `${campaign.name} · ${campaign.organization}`;
 }
 
 function EnvelopeField({
@@ -640,4 +831,15 @@ function ActionMessage({ state }: { state: ActionState }) {
       {state.message}
     </div>
   );
+}
+
+function mapMessagesToReviewMessages(
+  messages: AppMessage[],
+  bodyOverrides: Record<string, string>,
+): ReviewMessage[] {
+  return messages.map((message) => ({
+    ...message,
+    localStatus: message.status,
+    localBody: bodyOverrides[message.id] ?? message.body,
+  }));
 }

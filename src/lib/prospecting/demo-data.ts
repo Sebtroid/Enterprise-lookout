@@ -4,9 +4,11 @@ export type AppCampaign = {
   id: string;
   name: string;
   organization: string;
+  description: string;
   status: "draft" | "active" | "paused" | "archived";
   valueProposition: string;
   startsOn: string;
+  endsOn?: string | null;
 };
 
 export type AppSender = {
@@ -33,6 +35,9 @@ export type AppCompany = {
   website: string | null;
   industry: string;
   region: string;
+  description: string;
+  qualityRating?: number;
+  qualityNotes?: string;
   fitScore: number;
   status:
     | "new"
@@ -64,6 +69,9 @@ export type AppContact = {
   phone: string | null;
   category: string;
   confidence: number;
+  verificationStatus: "unverified" | "verified" | "bounced" | "invalid";
+  verifiedAt: string | null;
+  bounceCount: number;
   source: string;
   isDecisionMaker: boolean;
   doNotContact: boolean;
@@ -91,7 +99,7 @@ export type AppReply = {
   companyId: string;
   contactId: string;
   senderId: string;
-  classification: "interested" | "needs_info" | "referred" | "not_now";
+  classification: "interested" | "needs_info" | "referred" | "not_now" | "bounced";
   receivedAt: string;
   body: string;
   draftResponse: string;
@@ -117,6 +125,8 @@ export const campaigns: AppCampaign[] = [
     id: "pastoral-invierno-2026",
     name: "Pastoral UC Invierno 2026",
     organization: "Pastoral UC / Trabajo País",
+    description:
+      "Proyecto social universitario de invierno con voluntarios, trabajo territorial y apoyo a comunidades.",
     status: "active",
     valueProposition:
       "Apoyar un proyecto social universitario con presencia territorial, voluntariado y conexión comunitaria.",
@@ -126,6 +136,8 @@ export const campaigns: AppCampaign[] = [
     id: "caa-eventos-2026",
     name: "Eventos Centro de Alumnos 2026",
     organization: "Centro de Alumnos",
+    description:
+      "Portafolio de eventos estudiantiles del Centro de Alumnos con activaciones y auspicios universitarios.",
     status: "draft",
     valueProposition:
       "Auspicios para actividades estudiantiles con alta visibilidad y segmentación universitaria.",
@@ -191,6 +203,8 @@ export const companies: AppCompany[] = [
     website: "https://www.bancoestado.cl",
     industry: "Servicios financieros",
     region: "RM",
+    description:
+      "Banco chileno con foco masivo, presencia territorial y programas de inclusión financiera.",
     fitScore: 91,
     status: "draft_ready",
     notes: "Historial de apoyo a iniciativas de inclusión y presencia territorial.",
@@ -205,6 +219,8 @@ export const companies: AppCompany[] = [
     website: "https://www.colun.cl",
     industry: "Alimentos",
     region: "Los Ríos",
+    description:
+      "Cooperativa láctea chilena con presencia en regiones y productos de consumo masivo.",
     fitScore: 87,
     status: "approved_to_send",
     notes: "Buen fit territorial y reputacional para iniciativas sociales.",
@@ -219,6 +235,8 @@ export const companies: AppCompany[] = [
     website: "https://www.cencosud.com",
     industry: "Retail",
     region: "RM",
+    description:
+      "Holding regional de retail, supermercados y centros comerciales con marcas de alta visibilidad.",
     fitScore: 82,
     status: "replied",
     notes: "Interés potencial por voluntariado corporativo y comunidad.",
@@ -233,6 +251,8 @@ export const companies: AppCompany[] = [
     website: "https://www.sodimac.cl",
     industry: "Retail construcción",
     region: "RM",
+    description:
+      "Retail de mejoramiento del hogar y construcción, útil para materiales, herramientas y aportes en especie.",
     fitScore: 79,
     status: "followup_due",
     notes: "Potencial para materiales, herramientas o aportes en especie.",
@@ -247,6 +267,8 @@ export const companies: AppCompany[] = [
     website: "https://www.notco.com",
     industry: "Alimentos / consumo",
     region: "RM",
+    description:
+      "Marca foodtech de consumo masivo con posicionamiento joven e innovación en alimentos.",
     fitScore: 76,
     status: "qualified",
     notes: "Buen fit para eventos universitarios y activaciones de marca.",
@@ -265,10 +287,13 @@ export const contacts: AppContact[] = [
     phone: null,
     category: "Sostenibilidad",
     confidence: 0.82,
+    verificationStatus: "unverified",
+    verifiedAt: null,
+    bounceCount: 0,
     source: "Notion histórico",
-    isDecisionMaker: true,
+    isDecisionMaker: false,
     doNotContact: false,
-    notes: "Decisora marcada en base antigua.",
+    notes: "Posible decisora marcada en base antigua; falta respuesta real.",
   },
   {
     id: "contact-martin",
@@ -279,6 +304,9 @@ export const contacts: AppContact[] = [
     phone: null,
     category: "Comunicaciones",
     confidence: 0.74,
+    verificationStatus: "unverified",
+    verifiedAt: null,
+    bounceCount: 0,
     source: "Google Sheets",
     isDecisionMaker: false,
     doNotContact: false,
@@ -293,6 +321,9 @@ export const contacts: AppContact[] = [
     phone: null,
     category: "Asuntos corporativos",
     confidence: 0.88,
+    verificationStatus: "verified",
+    verifiedAt: "2026-05-03T11:30:00.000Z",
+    bounceCount: 0,
     source: "Excel eventos 2025",
     isDecisionMaker: true,
     doNotContact: false,
@@ -307,6 +338,9 @@ export const contacts: AppContact[] = [
     phone: null,
     category: "Comunidad",
     confidence: 0.68,
+    verificationStatus: "verified",
+    verifiedAt: "2026-05-04T15:30:00.000Z",
+    bounceCount: 0,
     source: "Investigación web",
     isDecisionMaker: false,
     doNotContact: false,
@@ -321,6 +355,9 @@ export const contacts: AppContact[] = [
     phone: null,
     category: "Marketing",
     confidence: 0.71,
+    verificationStatus: "unverified",
+    verifiedAt: null,
+    bounceCount: 0,
     source: "Excel eventos 2025",
     isDecisionMaker: false,
     doNotContact: false,
@@ -429,6 +466,8 @@ export const importBatches: AppImportBatch[] = [
 ];
 
 export function getContactPriority(contact: AppContact) {
+  if (contact.verificationStatus !== "verified") return 0;
+
   return scoreContactPriority({
     role: contact.role,
     isDecisionMaker: contact.isDecisionMaker,

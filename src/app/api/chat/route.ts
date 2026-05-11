@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import postgres from "postgres";
+
+import {
+  getKimiDeepResearchInstructions,
+  kimiDeepResearchJobName,
+} from "@/lib/prospecting/kimi-research";
+import { getPostgresClient } from "@/lib/supabase/postgres";
 
 interface ChatRequest {
   message: string;
@@ -7,16 +12,10 @@ interface ChatRequest {
   history: { role: string; content: string }[];
 }
 
-const sql = postgres(process.env.SUPABASE_DB_URL!, {
-  ssl: "require",
-  prepare: false,
-  max: 1,
-});
-
 export async function POST(req: NextRequest) {
   try {
     const body: ChatRequest = await req.json();
-    const { message, scope, history } = body;
+    const { message, scope } = body;
 
     // Detectar intención del mensaje
     const intent = detectIntent(message);
@@ -33,7 +32,7 @@ export async function POST(req: NextRequest) {
       case "help":
       default:
         return NextResponse.json({
-          content: `Entendido: "${message}"\n\nPuedo ayudarte con:\n• "Busca empresas de [industria] para [campaña]"\n• "Redacta un mail para [empresa]"\n• "Manda los mails aprobados"\n• "Revisa las respuestas pendientes"\n\n¿Qué necesitas?`,
+          content: `Entendido: "${message}"\n\nPuedo ayudarte con:\n• "Busca empresas de [industria] para este proyecto"\n• "Redacta un mail para [empresa]"\n• "Manda los mails aprobados"\n• "Revisa las respuestas pendientes"\n• "Muéstrame empresas sin evaluar aquí"\n\n¿Qué necesitas?`,
           actionType: "help",
         });
     }
@@ -69,25 +68,97 @@ function detectIntent(message: string): { type: string } {
 }
 
 async function handleResearchCompanies(message: string, scope: string) {
-  // Extraer industria/campaña del mensaje
-  const industry = extractIndustry(message);
-  
+  const sql = getPostgresClient();
+  const rubrics = extractIndustry(message) ?? message;
+
+  if (!sql) {
+    return NextResponse.json({
+      content: "Falta SUPABASE_DB_URL para dejar esta investigación en la cola de KimiClaw.",
+      actionType: "error",
+    });
+  }
+
+  if (scope === "all") {
+    return NextResponse.json({
+      content:
+        "Elige un proyecto concreto primero. La investigación depende del contexto: qué es el proyecto, público y qué se necesita conseguir.",
+      actionType: "research_companies",
+      actionPayload: { rubrics, scope },
+    });
+  }
+
+  const campaignRows = await sql`
+    select id, slug, name, organization, description, value_proposition
+    from campaigns
+    where slug = ${scope}
+    limit 1
+  `;
+  const campaign = campaignRows[0];
+
+  if (!campaign) {
+    return NextResponse.json({
+      content: "No encontré ese proyecto. Crea o abre el proyecto antes de pedir investigación.",
+      actionType: "error",
+    });
+  }
+
+  await sql`
+    insert into automation_runs (
+      campaign_id,
+      job_name,
+      status,
+      input_summary,
+      output_summary
+    ) values (
+      ${campaign.id},
+      ${kimiDeepResearchJobName},
+      'running',
+      ${sql.json({
+        requestedBy: "dom-chat",
+        sourceMode: "existing_and_new",
+        rubrics,
+        originalMessage: message,
+        project: {
+          slug: campaign.slug,
+          name: campaign.name,
+          organization: campaign.organization,
+          description: campaign.description,
+          valueProposition: campaign.value_proposition,
+        },
+        instructions: getKimiDeepResearchInstructions(),
+      })},
+      ${sql.json({
+        nextStep:
+          "KimiClaw debe investigar empresas nuevas con evidencia y revisar fit de la base existente.",
+      })}
+    )
+  `;
+
   return NextResponse.json({
-    content: `🔍 **Investigando empresas**${industry ? ` de ${industry}` : ""}${scope !== "all" ? ` para ${scope}` : ""}...\n\nEsta función requiere conexión con el motor de investigación. Por ahora, puedes:\n1. Ir a "Empresas" en tu campaña\n2. Usar "Imports" para subir un CSV\n3. Pedirme que redacte mails para empresas específicas\n\n¿Quieres que busque empresas reales usando búsqueda web? (Necesito activar la integración)`,
+    content: `Listo. Dejé una tarea para KimiClaw: investigar ${rubrics} con investigación profunda para ${campaign.name}.\n\nCriterio guardado: primero empresas nuevas útiles, después revisar la base existente. Los contactos quedan no verificados hasta que respondan.`,
     actionType: "research_companies",
-    actionPayload: { industry, scope },
+    actionPayload: { rubrics, scope, jobName: kimiDeepResearchJobName },
+    actionTaken: true,
   });
 }
 
 async function handleDraftEmail(message: string, scope: string) {
   return NextResponse.json({
-    content: `✍️ **Redactando mail**...\n\nPara generar un mail necesito:\n• Nombre de la empresa o contacto\n• Campaña activa\n• Contexto del evento\n\n¿Para qué empresa quieres el mail? Puedo generarlo al instante una vez me des el nombre.`,
+    content: `Para redactar necesito:\n• Empresa/contacto\n• Proyecto activo\n• Qué quieres conseguir: dinero, producto, comida, copete, premios, activación, etc.\n• Tono: cercano, formal o muy corto\n\nDime la empresa y el objetivo, y lo dejamos como borrador para aprobar.`,
     actionType: "draft_email",
     actionPayload: { scope },
   });
 }
 
 async function handleSendEmail(message: string, scope: string) {
+  const sql = getPostgresClient();
+  if (!sql) {
+    return NextResponse.json({
+      content: "Falta SUPABASE_DB_URL para consultar mails aprobados.",
+      actionType: "error",
+    });
+  }
+
   // Verificar si hay mails aprobados
   try {
     const rows = await sql`
@@ -103,12 +174,12 @@ async function handleSendEmail(message: string, scope: string) {
     
     return NextResponse.json({
       content: count > 0
-        ? `📤 **${count} mails aprobados** listos para enviar.\n\nActualmente el envío es manual (Outlook Web).\nPara automatizar el envío real necesito conectar Gmail OAuth.\n\n¿Quieres que configure la conexión de Gmail ahora?`
+        ? `${count} mails aprobados listos para enviar.\n\nSi el remitente tiene Gmail conectado, se pueden enviar directo desde "Mails". Si es respuesta a un thread, se manda en el mismo hilo Gmail.`
         : `No hay mails aprobados para enviar. Ve a "Mails" y aprueba algunos primero.`,
       actionType: "send_email",
       actionPayload: { approvedCount: count, scope },
     });
-  } catch (error) {
+  } catch {
     return NextResponse.json({
       content: "Error consultando mails aprobados.",
       actionType: "error",
@@ -117,6 +188,14 @@ async function handleSendEmail(message: string, scope: string) {
 }
 
 async function handleListPending(scope: string) {
+  const sql = getPostgresClient();
+  if (!sql) {
+    return NextResponse.json({
+      content: "Falta SUPABASE_DB_URL para consultar el estado.",
+      actionType: "error",
+    });
+  }
+
   try {
     const rows = await sql`
       select 
@@ -131,11 +210,11 @@ async function handleListPending(scope: string) {
     const stats = rows[0];
     
     return NextResponse.json({
-      content: `📊 **Estado actual**${scope !== "all" ? ` (${scope})` : ""}:\n\n• **${stats?.needs_review ?? 0}** mails pendientes de revisión\n• **${stats?.approved ?? 0}** mails aprobados para enviar\n• **${stats?.replies ?? 0}** respuestas entrantes\n\n¿Quieres que revise los pendientes o redacte algo nuevo?`,
+      content: `Estado actual${scope !== "all" ? ` (${scope})` : ""}:\n\n• ${stats?.needs_review ?? 0} mails pendientes de revisión\n• ${stats?.approved ?? 0} mails aprobados para enviar\n• ${stats?.replies ?? 0} respuestas entrantes\n\nSiguiente paso normal: revisar "Empresas" sin evaluar o enviar los aprobados.`,
       actionType: "list_pending",
       actionPayload: stats,
     });
-  } catch (error) {
+  } catch {
     return NextResponse.json({
       content: "Error consultando estado.",
       actionType: "error",

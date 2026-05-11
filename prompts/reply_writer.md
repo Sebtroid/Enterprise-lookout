@@ -17,6 +17,7 @@ Clasificaciones válidas:
 - no_interest
 - do_not_contact
 - out_of_office
+- bounced
 
 Devuelve:
 - classification
@@ -25,3 +26,5 @@ Devuelve:
 - next_action
 
 Si piden no contactar, no redactes insistencia y marca `do_not_contact`.
+Si es rebote, no redactes respuesta. Marca el contacto como `bounced` y crea un nuevo intento con otro patrón de email en un mail nuevo, sin reutilizar el thread del rebote.
+Si es una respuesta humana, marca el contacto como `verified`.
