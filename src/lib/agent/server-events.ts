@@ -12,6 +12,10 @@ import {
   resolveDomWebhookUrl,
   type DomWebhookPostResult,
 } from "@/lib/dom/webhook";
+import {
+  notifyDomViaTelegramForAgentEvent,
+  type DomTelegramNotificationResult,
+} from "@/lib/dom/telegram";
 import { getPostgresClient } from "@/lib/supabase/postgres";
 
 import type { AgentEventInput, AgentEventType } from "./events";
@@ -49,6 +53,7 @@ export type PersistAgentEventResult =
       ok: true;
       inbox_id: string;
       created_at: string;
+      telegram: DomTelegramNotificationResult;
       webhook: DomWebhookPostResult | { ok: false; skipped: true; reason: string };
     }
   | {
@@ -94,20 +99,27 @@ export async function persistAgentEvent(
       returning id::text as id, created_at
     `;
 
-    const webhook = await dispatchDomWebhookForAgentEvent({
-      campaignId,
-      companyId,
-      contactId,
-      input,
-      messageId,
-      payload,
-      row,
-    });
+    const [telegram, webhook] = await Promise.all([
+      notifyDomViaTelegramForAgentEvent({
+        campaignId,
+        eventType: input.event,
+      }),
+      dispatchDomWebhookForAgentEvent({
+        campaignId,
+        companyId,
+        contactId,
+        input,
+        messageId,
+        payload,
+        row,
+      }),
+    ]);
 
     return {
       ok: true,
       inbox_id: row.id,
       created_at: toIsoString(row.created_at),
+      telegram,
       webhook,
     };
   } catch (err) {

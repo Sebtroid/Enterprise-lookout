@@ -1,34 +1,35 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "8719614783:AAGLL20CrOrLY3KPReb0_kd0yaiMBPjzXjQ";
-const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID || "8070013841";
+import { isAuthorizedAgentRequest } from "@/lib/agent/auth";
+import { postDomTelegramNotification } from "@/lib/dom/telegram";
 
 export async function POST(req: NextRequest) {
+  if (!isAuthorizedAgentRequest(req)) {
+    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
-    const eventType = req.headers.get("x-event-type") || String(body.event_type || body.event || "unknown");
-    const campaignId = body.campaign_id || body.campaignId || "";
-    
-    // Notificar por Telegram instantáneamente
-    const message = `🔔 *Dom — Nuevo evento*: \`${eventType}\`\n\nCampaign: \`${campaignId}\`\n\n\`\`\`json\n${JSON.stringify(body, null, 2).slice(0, 3500)}\n\`\`\``;
-    
-    const tgRes = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        chat_id: TELEGRAM_CHAT_ID,
-        text: message,
-        parse_mode: "Markdown",
-      }),
+    const eventType =
+      req.headers.get("x-event-type") || String(body.event_type || body.event || "unknown");
+    const campaignId = stringOrNull(body.campaign_id) ?? stringOrNull(body.campaignId);
+
+    const telegram = await postDomTelegramNotification({
+      campaignId,
+      eventType,
     });
 
-    if (!tgRes.ok) {
-      console.error("Telegram notify failed:", await tgRes.text());
+    if (!telegram.ok && !("skipped" in telegram)) {
+      console.error("Telegram notify failed:", telegram.error);
     }
-    
-    return NextResponse.json({ ok: true, notified: tgRes.ok });
+
+    return NextResponse.json({ ok: true, telegram }, { status: telegram.ok ? 200 : 202 });
   } catch (error) {
     console.error("Webhook error:", error);
     return NextResponse.json({ ok: false, error: String(error) }, { status: 500 });
   }
+}
+
+function stringOrNull(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
