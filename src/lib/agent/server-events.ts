@@ -16,17 +16,28 @@ import { getPostgresClient } from "@/lib/supabase/postgres";
 
 import type { AgentEventInput, AgentEventType } from "./events";
 
-const DOM_WEBHOOK_EVENT_TYPES = new Set<AgentEventType>([
+export const DOM_WEBHOOK_EVENT_TYPES = new Set<AgentEventType>([
   "dom_task_created",
+  "company_classified",
+  "contact_added",
   "mail_rejected",
   "campaign_created",
   "lead_created",
+  "lead_updated",
   "reply_received",
   "user_chat_message",
+  "mail_created",
   "mail_approved",
+  "mail_sent",
+  "campaign_updated",
+  "research_needed",
   "followup_needed",
   "draft_needed",
 ]);
+
+export function shouldDispatchDomWebhook(event: AgentEventType) {
+  return DOM_WEBHOOK_EVENT_TYPES.has(event);
+}
 
 type PersistedAgentEventRow = {
   id: string;
@@ -122,7 +133,7 @@ async function dispatchDomWebhookForAgentEvent({
   payload: Record<string, unknown>;
   row: PersistedAgentEventRow;
 }) {
-  if (!DOM_WEBHOOK_EVENT_TYPES.has(input.event)) {
+  if (!shouldDispatchDomWebhook(input.event)) {
     return { ok: false as const, skipped: true as const, reason: "event_not_webhooked" };
   }
 
