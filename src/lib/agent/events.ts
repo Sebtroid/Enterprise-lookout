@@ -3,23 +3,26 @@
  * Usado desde componentes cliente o servidor cuando pasa algo relevante.
  */
 
-export type AgentEventType =
-  | "lead_created"
-  | "lead_updated"
-  | "company_classified"
-  | "mail_created"
-  | "mail_rejected"
-  | "mail_approved"
-  | "mail_sent"
-  | "reply_received"
-  | "campaign_created"
-  | "campaign_updated"
-  | "contact_added"
-  | "research_needed"
-  | "draft_needed"
-  | "dom_task_created"
-  | "followup_needed"
-  | "user_chat_message";
+export const AGENT_EVENT_TYPES = [
+  "lead_created",
+  "lead_updated",
+  "company_classified",
+  "mail_created",
+  "mail_rejected",
+  "mail_approved",
+  "mail_sent",
+  "reply_received",
+  "campaign_created",
+  "campaign_updated",
+  "contact_added",
+  "research_needed",
+  "draft_needed",
+  "dom_task_created",
+  "followup_needed",
+  "user_chat_message",
+] as const;
+
+export type AgentEventType = (typeof AGENT_EVENT_TYPES)[number];
 
 export interface AgentEventInput {
   event: AgentEventType;
@@ -33,6 +36,11 @@ export interface AgentEventInput {
 }
 
 export async function sendAgentEvent(input: AgentEventInput) {
+  if (typeof window === "undefined") {
+    const { persistAgentEvent } = await import("./server-events");
+    return persistAgentEvent(input);
+  }
+
   try {
     const response = await fetch(getAgentEventsUrl(), {
       method: "POST",

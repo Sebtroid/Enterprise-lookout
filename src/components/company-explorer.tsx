@@ -15,6 +15,8 @@ import {
   HelpCircle,
   Mail,
   Search,
+  Save,
+  Star,
   StickyNote,
   XCircle,
 } from "lucide-react";
@@ -23,8 +25,10 @@ import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
+import { Textarea } from "@/components/ui/textarea";
 import {
   classifyCompanyForCampaignAction,
+  updateCompanyQualityAction,
   type ActionState,
 } from "@/features/prospecting/actions";
 import {
@@ -50,7 +54,7 @@ const statusOptions: Array<{ value: "all" | CompanyExplorerStatus; label: string
     { value: "not_evaluated", label: "Sin evaluar" },
     { value: "needs_research", label: "Investigar" },
     { value: "qualified", label: "Calificado" },
-    { value: "ready_to_draft", label: "Listo para borrador" },
+    { value: "ready_to_draft", label: "Redacción pedida" },
     { value: "draft_ready", label: "Borrador listo" },
     { value: "approved_to_send", label: "Aprobado" },
     { value: "sent", label: "Enviado" },
@@ -90,21 +94,18 @@ export function CompanyExplorer({
   now: string;
 }) {
   const router = useRouter();
-  const [actionState, classifyAction, isClassifying] = useActionState(
-    classifyCompanyForCampaignAction,
-    initialActionState,
-  );
   const [query, setQuery] = useState("");
   const [membership, setMembership] =
     useState<"all" | CompanyExplorerMembership>("all");
+  const [pendingCompanyIds, setPendingCompanyIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [rowStates, setRowStates] = useState<Record<string, ActionState>>({});
   const [status, setStatus] = useState<"all" | CompanyExplorerStatus>("all");
+  const [statusOverrides, setStatusOverrides] = useState<
+    Record<string, CompanyExplorerStatus>
+  >({});
   const canClassify = scope !== allCampaignsScope;
-
-  useEffect(() => {
-    if (actionState.message) {
-      router.refresh();
-    }
-  }, [actionState, router]);
 
   const records = useMemo(
     () =>
@@ -120,20 +121,73 @@ export function CompanyExplorer({
     [allCompanies, campaignCompanies, contacts, messages, now, replies, scope],
   );
 
+  const recordsWithOverrides = useMemo(
+    () =>
+      records.map((record) => {
+        const override = statusOverrides[record.company.id];
+        return override ? { ...record, campaignStatus: override } : record;
+      }),
+    [records, statusOverrides],
+  );
+
   const filteredRecords = useMemo(
     () =>
-      filterCompanyExplorerRecords(records, {
+      filterCompanyExplorerRecords(recordsWithOverrides, {
         query,
         membership,
         status,
       }),
-    [membership, query, records, status],
+    [membership, query, recordsWithOverrides, status],
   );
 
-  const notEvaluatedCount = records.filter(
+  const notEvaluatedCount = recordsWithOverrides.filter(
     (record) => record.membership === "not_evaluated",
   ).length;
-  const inCampaignCount = records.length - notEvaluatedCount;
+  const inCampaignCount = recordsWithOverrides.length - notEvaluatedCount;
+
+  async function handleClassify(
+    companyId: string,
+    decision: "fit" | "maybe" | "not_fit",
+  ) {
+    const optimisticStatus = getOptimisticStatusForDecision(decision);
+    setPendingCompanyIds((current) => new Set(current).add(companyId));
+    setStatusOverrides((current) => ({
+      ...current,
+      [companyId]: optimisticStatus,
+    }));
+    setRowStates((current) => {
+      const next = { ...current };
+      delete next[companyId];
+      return next;
+    });
+
+    const formData = new FormData();
+    formData.set("companyId", companyId);
+    formData.set("scope", scope);
+    formData.set("decision", decision);
+
+    const result = await classifyCompanyForCampaignAction(
+      initialActionState,
+      formData,
+    );
+    setRowStates((current) => ({ ...current, [companyId]: result }));
+
+    if (result.ok) {
+      router.refresh();
+    } else {
+      setStatusOverrides((current) => {
+        const next = { ...current };
+        delete next[companyId];
+        return next;
+      });
+    }
+
+    setPendingCompanyIds((current) => {
+      const next = new Set(current);
+      next.delete(companyId);
+      return next;
+    });
+  }
 
   return (
     <div className="space-y-4">
@@ -210,17 +264,6 @@ export function CompanyExplorer({
           ) : null}
         </div>
 
-        {actionState.message ? (
-          <div
-            className={`mt-3 rounded-lg border px-3 py-2 text-sm ${
-              actionState.ok
-                ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-                : "border-rose-200 bg-rose-50 text-rose-800"
-            }`}
-          >
-            {actionState.message}
-          </div>
-        ) : null}
       </section>
 
       <section className="overflow-hidden rounded-lg border border-border bg-card">
@@ -239,8 +282,9 @@ export function CompanyExplorer({
             campaigns={campaigns}
             scope={scope}
             canClassify={canClassify}
-            isClassifying={isClassifying}
-            classifyAction={classifyAction}
+            onClassify={handleClassify}
+            pending={pendingCompanyIds.has(record.company.id)}
+            rowState={rowStates[record.company.id]}
           />
         ))}
 
@@ -259,15 +303,20 @@ function CompanyRow({
   campaigns,
   scope,
   canClassify,
-  isClassifying,
-  classifyAction,
+  onClassify,
+  pending,
+  rowState,
 }: {
   record: ReturnType<typeof buildCompanyExplorerRecords>[number];
   campaigns: AppCampaign[];
   scope: string;
   canClassify: boolean;
-  isClassifying: boolean;
-  classifyAction: (payload: FormData) => void;
+  onClassify: (
+    companyId: string,
+    decision: "fit" | "maybe" | "not_fit",
+  ) => Promise<void>;
+  pending: boolean;
+  rowState?: ActionState;
 }) {
   const company = record.company;
   const campaignNames = company.campaignIds
@@ -283,6 +332,7 @@ function CompanyRow({
           <div className="flex flex-wrap items-center gap-2">
             <div className="truncate font-medium">{company.name}</div>
             <StatusBadge status={record.campaignStatus} />
+            <QualityStars value={company.qualityRating ?? 3} />
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
             <span>{company.domain ?? "Sin dominio"}</span>
@@ -362,27 +412,24 @@ function CompanyRow({
             <>
               <ClassifyButton
                 companyId={company.id}
-                scope={scope}
                 decision="fit"
-                disabled={isClassifying}
+                disabled={pending}
               >
                 <CheckCircle2 className="size-4" />
-                Sirve
+                {pending ? "Guardando" : "Sirve"}
               </ClassifyButton>
               <ClassifyButton
                 companyId={company.id}
-                scope={scope}
                 decision="maybe"
-                disabled={isClassifying}
+                disabled={pending}
               >
                 <HelpCircle className="size-4" />
                 Investigar
               </ClassifyButton>
               <ClassifyButton
                 companyId={company.id}
-                scope={scope}
                 decision="not_fit"
-                disabled={isClassifying}
+                disabled={pending}
               >
                 <XCircle className="size-4" />
                 No sirve
@@ -393,6 +440,17 @@ function CompanyRow({
               Entra a un proyecto para clasificar.
             </span>
           )}
+          {rowState?.message ? (
+            <div
+              className={
+                rowState.ok
+                  ? "w-full rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs text-emerald-800"
+                  : "w-full rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-xs text-rose-800"
+              }
+            >
+              {rowState.message}
+            </div>
+          ) : null}
         </div>
       </div>
 
@@ -415,6 +473,10 @@ function CompanyRow({
                     ? "Por qué podría calzar: falta razón específica para este proyecto."
                     : "Por qué podría calzar: aún no evaluada en este proyecto.",
                 company.notes ? `Notas globales: ${company.notes}` : null,
+                `Calidad global: ${company.qualityRating ?? 3}/5`,
+                company.qualityNotes
+                  ? `Notas de calidad: ${company.qualityNotes}`
+                  : null,
                 record.campaignCompany?.campaignNotes
                   ? `Notas del proyecto: ${record.campaignCompany.campaignNotes}`
                   : null,
@@ -424,6 +486,8 @@ function CompanyRow({
               ]}
               empty="Sin descripción ni análisis registrado."
             />
+
+            <CompanyQualityForm company={company} scope={scope} />
 
             <InfoBlock
               icon={<Mail className="size-4" />}
@@ -486,34 +550,134 @@ function CompanyRow({
 
   function ClassifyButton({
     companyId,
-    scope,
     decision,
     disabled,
     children,
   }: {
     companyId: string;
-    scope: string;
     decision: "fit" | "maybe" | "not_fit";
     disabled: boolean;
     children: ReactNode;
   }) {
     return (
-      <form action={classifyAction}>
-        <input type="hidden" name="companyId" value={companyId} />
-        <input type="hidden" name="scope" value={scope} />
-        <Button
-          disabled={disabled}
-          name="decision"
-          size="sm"
-          type="submit"
-          value={decision}
-          variant={decision === "fit" ? "default" : "outline"}
-        >
-          {children}
-        </Button>
-      </form>
+      <Button
+        disabled={disabled}
+        size="sm"
+        type="button"
+        onClick={() => void onClassify(companyId, decision)}
+        variant={decision === "fit" ? "default" : "outline"}
+      >
+        {children}
+      </Button>
     );
   }
+}
+
+function CompanyQualityForm({
+  company,
+  scope,
+}: {
+  company: AppCompany;
+  scope: string;
+}) {
+  const router = useRouter();
+  const [state, formAction, isPending] = useActionState(
+    updateCompanyQualityAction,
+    initialActionState,
+  );
+
+  useEffect(() => {
+    if (state.ok) {
+      router.refresh();
+    }
+  }, [state, router]);
+
+  return (
+    <form
+      action={formAction}
+      className="rounded-lg border border-border bg-background p-3"
+    >
+      <input name="companyId" type="hidden" value={company.id} />
+      <input name="scope" type="hidden" value={scope} />
+      <div className="mb-2 flex items-center gap-2 text-sm font-medium">
+        <Star className="size-4" />
+        Calidad global
+      </div>
+      <div className="grid gap-2 sm:grid-cols-[8rem_1fr_auto]">
+        <label className="space-y-1 text-sm">
+          <span className="text-xs font-medium text-muted-foreground">
+            Estrellas
+          </span>
+          <select
+            className="h-9 w-full rounded-lg border border-input bg-background px-2 text-sm"
+            defaultValue={company.qualityRating ?? 3}
+            name="qualityRating"
+          >
+            {[5, 4, 3, 2, 1].map((rating) => (
+              <option key={rating} value={rating}>
+                {rating}/5
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="space-y-1 text-sm">
+          <span className="text-xs font-medium text-muted-foreground">
+            Nota
+          </span>
+          <Textarea
+            className="min-h-9 py-2"
+            defaultValue={company.qualityNotes ?? ""}
+            name="qualityNotes"
+            placeholder="Ej: marca masiva, buen producto, baja prioridad..."
+          />
+        </label>
+        <div className="flex items-end">
+          <Button disabled={isPending} size="sm" type="submit" variant="outline">
+            <Save className="size-4" />
+            Guardar
+          </Button>
+        </div>
+      </div>
+      {state.message ? (
+        <div
+          className={
+            state.ok
+              ? "mt-2 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs text-emerald-800"
+              : "mt-2 rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-xs text-rose-800"
+          }
+        >
+          {state.message}
+        </div>
+      ) : null}
+    </form>
+  );
+}
+
+function QualityStars({ value }: { value: number }) {
+  const safeValue = Math.max(1, Math.min(5, Math.round(value)));
+
+  return (
+    <span
+      aria-label={`Calidad global ${safeValue} de 5`}
+      className="inline-flex items-center gap-0.5 text-amber-500"
+      title={`Calidad global ${safeValue}/5`}
+    >
+      {[1, 2, 3, 4, 5].map((rating) => (
+        <Star
+          key={rating}
+          className={rating <= safeValue ? "size-3 fill-current" : "size-3"}
+        />
+      ))}
+    </span>
+  );
+}
+
+function getOptimisticStatusForDecision(
+  decision: "fit" | "maybe" | "not_fit",
+): CompanyExplorerStatus {
+  if (decision === "fit") return "ready_to_draft";
+  if (decision === "maybe") return "needs_research";
+  return "closed_negative";
 }
 
 function InfoBlock({

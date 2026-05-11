@@ -44,7 +44,10 @@ import {
   splitOutboundReviewQueue,
   type OutboundRejectionReason,
 } from "@/lib/prospecting/review";
-import { shouldAutoSendAfterApproval } from "@/lib/prospecting/sending";
+import {
+  getConfirmedAutoSendMessageId,
+  shouldAutoSendAfterApproval,
+} from "@/lib/prospecting/sending";
 
 type ReviewMessage = AppMessage & {
   localStatus: AppMessage["status"];
@@ -83,19 +86,33 @@ export function OutboundReview({
   const autoSendInFlightRef = useRef<string | null>(null);
   const autoSendAfterApproveIdRef = useRef<string | null>(null);
   const [sendingGmailId, setSendingGmailId] = useState<string | null>(null);
+  const [isBulkSendingGmail, setIsBulkSendingGmail] = useState(false);
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [rejectionReasons, setRejectionReasons] = useState<
     Record<string, OutboundRejectionReason>
   >({});
-  const [items, setItems] = useState<ReviewMessage[]>(
-    messages.map((message) => ({
-      ...message,
-      localStatus: message.status,
-      localBody: message.body,
-    })),
+  const [bodyOverrides, setBodyOverrides] = useState<Record<string, string>>({});
+  const items = useMemo(
+    () => mapMessagesToReviewMessages(messages, bodyOverrides),
+    [bodyOverrides, messages],
   );
 
   const queues = useMemo(() => splitOutboundReviewQueue(items), [items]);
+  const approvedGmailMessageIds = useMemo(
+    () =>
+      queues.approved
+        .filter((message) => {
+          const sender = senders.find((item) => item.id === message.senderId);
+          return shouldAutoSendAfterApproval({
+            connectedGmailEmails: gmailConnectedEmails,
+            senderAccountType: sender?.accountType,
+            senderEmail: sender?.email,
+            senderStatus: sender?.status,
+          });
+        })
+        .map((message) => message.id),
+    [gmailConnectedEmails, queues.approved, senders],
+  );
 
   const sendWithGmail = useCallback(async (messageId: string) => {
     setSendingGmailId(messageId);
@@ -107,13 +124,10 @@ export function OutboundReview({
       });
       const data = await res.json();
       if (data.ok) {
-        setItems((current) =>
-          current.map((item) =>
-            item.id === messageId ? { ...item, localStatus: "sent" } : item,
-          ),
-        );
+        router.refresh();
         return true;
       } else {
+        router.refresh();
         alert(`Error enviando mail: ${data.error}`);
         return false;
       }
@@ -123,13 +137,34 @@ export function OutboundReview({
     } finally {
       setSendingGmailId(null);
     }
-  }, []);
+  }, [router]);
+
+  const sendApprovedWithGmail = useCallback(async () => {
+    if (!approvedGmailMessageIds.length || isBulkSendingGmail) return;
+
+    setIsBulkSendingGmail(true);
+    try {
+      for (const messageId of approvedGmailMessageIds) {
+        await sendWithGmail(messageId);
+      }
+      router.refresh();
+    } finally {
+      setIsBulkSendingGmail(false);
+    }
+  }, [
+    approvedGmailMessageIds,
+    isBulkSendingGmail,
+    router,
+    sendWithGmail,
+  ]);
 
   useEffect(() => {
-    const autoSendAfterApproveId = autoSendAfterApproveIdRef.current;
+    const messageId = getConfirmedAutoSendMessageId({
+      actionState: reviewState,
+      requestedMessageId: autoSendAfterApproveIdRef.current,
+    });
 
-    if (reviewState.ok && autoSendAfterApproveId) {
-      const messageId = autoSendAfterApproveId;
+    if (messageId) {
       if (autoSendInFlightRef.current === messageId) return;
 
       autoSendInFlightRef.current = messageId;
@@ -159,20 +194,8 @@ export function OutboundReview({
     sendWithGmail,
   ]);
 
-  function updateStatus(id: string, status: AppMessage["status"]) {
-    setItems((current) =>
-      current.map((item) =>
-        item.id === id ? { ...item, localStatus: status } : item,
-      ),
-    );
-  }
-
   function updateBody(id: string, body: string) {
-    setItems((current) =>
-      current.map((item) =>
-        item.id === id ? { ...item, localBody: body } : item,
-      ),
-    );
+    setBodyOverrides((current) => ({ ...current, [id]: body }));
   }
 
   function updateRejectionReason(
@@ -245,7 +268,6 @@ export function OutboundReview({
               value="approved"
               size="sm"
               onClick={() => {
-                updateStatus(message.id, "approved");
                 autoSendAfterApproveIdRef.current = autoSendsWithGmail
                   ? message.id
                   : null;
@@ -344,10 +366,6 @@ export function OutboundReview({
                 size="sm"
                 type="submit"
                 variant="outline"
-                onClick={() => {
-                  updateStatus(message.id, "rejected");
-                  setRejectingId(null);
-                }}
               >
                 <X className="size-4" />
                 {rejectionReason === "bad_copy"
@@ -504,12 +522,29 @@ export function OutboundReview({
       </section>
 
       <section className="space-y-3">
-        <div>
-          <div className="text-sm font-medium">Aprobados sin enviar</div>
-          <div className="text-sm text-muted-foreground">
-            Solo aparecen acá cuando no se enviaron automáticamente: Gmail no
-            está conectado, el remitente no es Gmail o falló el envío.
+        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          <div>
+            <div className="text-sm font-medium">Aprobados sin enviar</div>
+            <div className="text-sm text-muted-foreground">
+              Solo aparecen acá cuando no se enviaron automáticamente: Gmail no
+              está conectado, el remitente no es Gmail o falló el envío.
+            </div>
           </div>
+          {approvedGmailMessageIds.length ? (
+            <Button
+              disabled={isBulkSendingGmail}
+              size="sm"
+              type="button"
+              onClick={() => void sendApprovedWithGmail()}
+            >
+              {isBulkSendingGmail ? (
+                <Loader2 className="mr-2 size-4 animate-spin" />
+              ) : (
+                <Mail className="mr-2 size-4" />
+              )}
+              {isBulkSendingGmail ? "Enviando..." : "Enviar todos con Gmail"}
+            </Button>
+          ) : null}
         </div>
 
         {queues.approved.length ? null : (
@@ -595,7 +630,6 @@ export function OutboundReview({
                     size="sm"
                     type="submit"
                     variant="outline"
-                    onClick={() => updateStatus(message.id, "sent")}
                   >
                     <Send className="size-4" />
                     Marcar enviado
@@ -797,4 +831,15 @@ function ActionMessage({ state }: { state: ActionState }) {
       {state.message}
     </div>
   );
+}
+
+function mapMessagesToReviewMessages(
+  messages: AppMessage[],
+  bodyOverrides: Record<string, string>,
+): ReviewMessage[] {
+  return messages.map((message) => ({
+    ...message,
+    localStatus: message.status,
+    localBody: bodyOverrides[message.id] ?? message.body,
+  }));
 }

@@ -205,11 +205,11 @@ export function getCampaignCompanyDecisionPatch(
 ): CampaignCompanyDecisionPatch {
   if (decision === "fit") {
     return {
-      status: "qualified",
+      status: "ready_to_draft",
       fitScore: 75,
       priorityScore: 70,
       selectedContactReason: "Marcada como fit desde la base general.",
-      campaignNotes: "Sirve para este proyecto.",
+      campaignNotes: "Sirve para este proyecto. Redacción solicitada a Dom.",
     };
   }
 

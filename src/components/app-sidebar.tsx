@@ -59,6 +59,7 @@ export function AppSidebar() {
           </a>
           <Link
             href="/campaigns/all"
+            prefetch={false}
             className="block rounded-lg border border-sidebar-border bg-background/70 px-3 py-2 text-xs font-medium text-muted-foreground transition-all duration-200 hover:border-primary/25 hover:bg-background hover:text-foreground active:scale-[0.99]"
           >
             Ver todo
@@ -77,7 +78,7 @@ export function AppSidebar() {
               <Link
                 key={item.path || "summary"}
                 href={href}
-                prefetch
+                prefetch={false}
                 aria-current={active ? "page" : undefined}
                 className={cn(
                   "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-all duration-200 ease-out hover:bg-sidebar-accent hover:text-sidebar-accent-foreground active:scale-[0.99]",

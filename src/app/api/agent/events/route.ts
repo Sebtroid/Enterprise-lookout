@@ -1,28 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import { isAuthorizedAgentRequest } from "@/lib/agent/auth";
+import { AGENT_EVENT_TYPES } from "@/lib/agent/events";
+import { persistAgentEvent } from "@/lib/agent/server-events";
 import { getAllowedUser } from "@/lib/auth/request";
 import { getPostgresClient } from "@/lib/supabase/postgres";
 
-const VALID_EVENT_TYPES = [
-  "lead_created",
-  "lead_updated",
-  "company_classified",
-  "mail_created",
-  "mail_rejected",
-  "mail_approved",
-  "mail_sent",
-  "reply_received",
-  "campaign_created",
-  "campaign_updated",
-  "contact_added",
-  "research_needed",
-  "draft_needed",
-  "dom_task_created",
-  "followup_needed",
-  "user_chat_message",
-] as const;
-
-type AgentEventType = (typeof VALID_EVENT_TYPES)[number];
+type AgentEventType = (typeof AGENT_EVENT_TYPES)[number];
 
 interface AgentEventPayload {
   event: AgentEventType;
@@ -54,60 +38,25 @@ export async function POST(req: NextRequest) {
   const body = (await req.json().catch(() => ({}))) as Partial<AgentEventPayload>;
 
   // Validar mínimo
-  if (!body.event || !VALID_EVENT_TYPES.includes(body.event as AgentEventType)) {
+  if (!body.event || !AGENT_EVENT_TYPES.includes(body.event as AgentEventType)) {
     return NextResponse.json(
-      { ok: false, error: `Invalid or missing event. Valid: ${VALID_EVENT_TYPES.join(", ")}` },
+      { ok: false, error: `Invalid or missing event. Valid: ${AGENT_EVENT_TYPES.join(", ")}` },
       { status: 400 },
     );
   }
 
-  const sql = getPostgresClient();
-  if (!sql) {
-    return NextResponse.json(
-      { ok: false, error: "Database unavailable" },
-      { status: 500 },
-    );
-  }
+  const result = await persistAgentEvent({
+    event: body.event as AgentEventType,
+    campaignId: body.campaign_id,
+    companyId: body.company_id,
+    contactId: body.contact_id,
+    messageId: body.message_id,
+    data: body.data,
+    priority: body.priority,
+    source: body.source,
+  });
 
-  try {
-    const payload = (body.data ?? {}) as Parameters<typeof sql.json>[0];
-    const [row] = await sql`
-      insert into agent_inbox (
-        event_type,
-        campaign_id,
-        company_id,
-        contact_id,
-        message_id,
-        payload,
-        priority,
-        source,
-        status
-      ) values (
-        ${body.event},
-        ${body.campaign_id ?? null},
-        ${body.company_id ?? null},
-        ${body.contact_id ?? null},
-        ${body.message_id ?? null},
-        ${sql.json(payload)},
-        ${body.priority ?? "normal"},
-        ${body.source ?? "app"},
-        'pending'
-      )
-      returning id, created_at
-    `;
-
-    return NextResponse.json({
-      ok: true,
-      inbox_id: row?.id,
-      created_at: row?.created_at,
-    });
-  } catch (err) {
-    console.error("[agent/events] insert failed:", err);
-    return NextResponse.json(
-      { ok: false, error: "Failed to persist event" },
-      { status: 500 },
-    );
-  }
+  return NextResponse.json(result, { status: result.ok ? 200 : 500 });
 }
 
 /**
@@ -214,10 +163,4 @@ export async function PATCH(req: NextRequest) {
       { status: 500 },
     );
   }
-}
-
-function isAuthorizedAgentRequest(req: NextRequest) {
-  const token = process.env.AGENT_API_TOKEN || process.env.DOM_API_TOKEN;
-  const authorization = req.headers.get("authorization");
-  return Boolean(token && authorization === `Bearer ${token}`);
 }

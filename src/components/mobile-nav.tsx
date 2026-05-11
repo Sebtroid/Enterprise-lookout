@@ -43,6 +43,7 @@ export function MobileNav() {
             </a>
             <Link
               href="/campaigns/all"
+              prefetch={false}
               className="rounded-lg px-3 py-2 font-medium transition-colors hover:bg-muted"
             >
               Ver todo
@@ -53,7 +54,7 @@ export function MobileNav() {
                 <Link
                   key={href}
                   href={href}
-                  prefetch
+                  prefetch={false}
                   className="rounded-lg px-3 py-2 font-medium transition-colors hover:bg-muted"
                 >
                   {label}

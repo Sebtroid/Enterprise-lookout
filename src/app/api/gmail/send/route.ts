@@ -71,7 +71,11 @@ export async function POST(req: NextRequest) {
 
     if (message.status !== "approved") {
       return NextResponse.json(
-        { ok: false, error: "Only approved messages can be sent" },
+        {
+          ok: false,
+          error: "Only approved messages can be sent",
+          currentStatus: message.status,
+        },
         { status: 409 },
       );
     }

@@ -66,3 +66,21 @@ export function shouldAutoSendAfterApproval({
     (email) => email.trim().toLowerCase() === normalizedSender,
   );
 }
+
+export function getConfirmedAutoSendMessageId({
+  actionState,
+  requestedMessageId,
+}: {
+  actionState: {
+    ok: boolean;
+    intent?: string;
+    messageId?: string;
+  };
+  requestedMessageId: string | null;
+}) {
+  if (!requestedMessageId) return null;
+  if (!actionState.ok) return null;
+  if (actionState.intent !== "approved") return null;
+  if (actionState.messageId !== requestedMessageId) return null;
+  return requestedMessageId;
+}

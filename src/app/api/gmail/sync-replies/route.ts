@@ -3,7 +3,6 @@ import { z } from "zod";
 
 import { sendAgentEvent } from "@/lib/agent/events";
 import { getAllowedUser } from "@/lib/auth/request";
-import { notifyDomEventForCampaignId } from "@/lib/dom/client";
 import { decryptToken, encryptToken } from "@/lib/gmail/token-crypto";
 import {
   buildGmailReplySearchQuery,
@@ -417,19 +416,6 @@ async function insertInboundReply({
   });
 
   if (result === "inserted") {
-    await notifyDomEventForCampaignId({
-      event: "reply_received",
-      campaignId: record.campaignId,
-      data: {
-        message_id: record.gmailMessageId,
-        original_message_id: record.originalMessageId,
-        company_id: record.companyId,
-        contact_id: record.contactId,
-        classification: record.classification,
-        subject: record.subject,
-        received_at: record.receivedAt,
-      },
-    });
     await sendAgentEvent({
       event: "reply_received",
       campaignId: record.campaignId,

@@ -155,7 +155,7 @@ describe("company intelligence", () => {
 
   it("maps review decisions to per-campaign company states", () => {
     expect(getCampaignCompanyDecisionPatch("fit")).toMatchObject({
-      status: "qualified",
+      status: "ready_to_draft",
       fitScore: 75,
       priorityScore: 70,
     });

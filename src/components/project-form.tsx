@@ -2,16 +2,18 @@
 
 import { useActionState, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { FolderPlus } from "lucide-react";
+import { FolderPlus, Pencil } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
   createProjectAction,
+  updateProjectAction,
   type ActionState,
 } from "@/features/prospecting/actions";
 import type { ProjectContext } from "@/lib/prospecting/context";
+import type { AppCampaign } from "@/lib/prospecting/demo-data";
 
 const initialActionState: ActionState = { ok: false, message: "" };
 
@@ -122,6 +124,134 @@ export function ProjectForm({ contexts = [] }: { contexts?: ProjectContext[] }) 
               </Button>
               <Button disabled={isPending} type="submit">
                 {isPending ? "Creando" : "Crear proyecto"}
+              </Button>
+            </div>
+          </form>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+export function ProjectEditForm({
+  campaign,
+  contexts = [],
+}: {
+  campaign: AppCampaign;
+  contexts?: ProjectContext[];
+}) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [state, formAction, isPending] = useActionState(
+    updateProjectAction,
+    initialActionState,
+  );
+
+  useEffect(() => {
+    if (state.ok) {
+      router.refresh();
+    }
+  }, [state, router]);
+
+  return (
+    <div className="relative">
+      <Button
+        type="button"
+        variant="outline"
+        onClick={() => setOpen((current) => !current)}
+      >
+        <Pencil className="size-4" />
+        Editar proyecto
+      </Button>
+
+      {open ? (
+        <div className="absolute right-0 top-10 z-30 w-[min(92vw,40rem)] rounded-lg border border-border bg-popover p-4 text-popover-foreground shadow-lg">
+          <form action={formAction} className="space-y-3">
+            <input name="slug" type="hidden" value={campaign.id} />
+            <div>
+              <h2 className="font-semibold">Editar proyecto</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Actualiza el contexto que Dom usa para investigar, redactar y priorizar.
+              </p>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Nombre">
+                <Input name="name" defaultValue={campaign.name} required />
+              </Field>
+              <Field label="Organización/contexto">
+                <Input
+                  list="project-contexts-edit"
+                  name="organization"
+                  defaultValue={campaign.organization}
+                  required
+                />
+                <datalist id="project-contexts-edit">
+                  {contexts.map((context) => (
+                    <option key={context.id} value={context.name} />
+                  ))}
+                </datalist>
+              </Field>
+              <Field label="Fecha inicio">
+                <Input
+                  name="startsOn"
+                  type="date"
+                  defaultValue={campaign.startsOn ?? ""}
+                />
+              </Field>
+              <Field label="Fecha fin">
+                <Input
+                  name="endsOn"
+                  type="date"
+                  defaultValue={campaign.endsOn ?? ""}
+                />
+              </Field>
+            </div>
+
+            <Field label="Qué es el proyecto">
+              <Textarea
+                className="min-h-28"
+                name="description"
+                defaultValue={campaign.description}
+                required
+              />
+            </Field>
+
+            <Field label="Qué se necesita conseguir">
+              <Textarea
+                className="min-h-24"
+                name="valueProposition"
+                defaultValue={campaign.valueProposition}
+                required
+              />
+            </Field>
+
+            <label className="space-y-1 text-sm">
+              <span className="font-medium">Estado</span>
+              <select
+                className="h-9 w-full rounded-lg border border-input bg-background px-2 text-sm"
+                name="status"
+                defaultValue={campaign.status}
+              >
+                <option value="active">Activo</option>
+                <option value="draft">Borrador</option>
+                <option value="paused">Pausado</option>
+                <option value="archived">Archivado</option>
+              </select>
+            </label>
+
+            {state.message ? <ActionMessage state={state} /> : null}
+
+            <div className="flex justify-end gap-2 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setOpen(false)}
+              >
+                Cancelar
+              </Button>
+              <Button disabled={isPending} type="submit">
+                {isPending ? "Guardando" : "Guardar cambios"}
               </Button>
             </div>
           </form>

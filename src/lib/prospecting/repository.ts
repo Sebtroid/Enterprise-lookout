@@ -21,7 +21,10 @@ import {
   slugifyContextName,
   type ProjectContext,
 } from "@/lib/prospecting/context";
-import { getPostgresClient } from "@/lib/supabase/postgres";
+import {
+  getPostgresClient,
+  withPostgresQueryTimeout,
+} from "@/lib/supabase/postgres";
 
 export const ALL_CAMPAIGNS_SCOPE = "all";
 
@@ -64,7 +67,7 @@ export async function getCampaignsData() {
   }
 
   try {
-    const rows = await sql`
+    const rows = await withPostgresQueryTimeout(sql`
       select
         slug,
         name,
@@ -72,10 +75,11 @@ export async function getCampaignsData() {
         description,
         status::text as status,
         value_proposition,
-        starts_on
+        starts_on,
+        ends_on
       from campaigns
       order by created_at asc
-    `;
+    `.execute(), "campaigns");
 
     return rows.map(mapCampaign);
   } catch (error) {
@@ -87,6 +91,34 @@ export async function getCampaignsData() {
 export async function hasCampaignScope(scope: string) {
   if (isAllCampaignsScope(scope)) {
     return true;
+  }
+
+  const sql = getPostgresClient();
+  if (sql) {
+    try {
+      if (isContextScope(scope)) {
+        const rows = await withPostgresQueryTimeout(sql`
+          select organization
+          from campaigns
+        `.execute(), "campaign scope context");
+
+        return rows.some(
+          (row) => getContextScopeId(String(row.organization ?? "")) === scope,
+        );
+      }
+
+      const rows = await withPostgresQueryTimeout(sql`
+        select 1
+        from campaigns
+        where slug = ${scope}
+        limit 1
+      `.execute(), "campaign scope");
+
+      return rows.length > 0;
+    } catch (error) {
+      console.error("Could not validate campaign scope", error);
+      return true;
+    }
   }
 
   const campaigns = await getCampaignsData();
@@ -141,6 +173,133 @@ export async function getProspectingSnapshot(
   };
 }
 
+export async function getOutboundReviewSnapshot(
+  scope: string,
+): Promise<ProspectingSnapshot> {
+  const campaigns = await getCampaignsData();
+  const scopeLookup = getScopeLookup(scope, campaigns);
+  const sql = getPostgresClient();
+
+  if (!sql) {
+    const messages = filterDemoReviewMessages(scope);
+    return buildProspectingSnapshot({
+      campaigns,
+      scopeLookup,
+      companies: filterDemoCompaniesForMessages(scope, messages),
+      contacts: filterDemoContactsForMessages(messages),
+      messages,
+      senders: filterDemoSendersForMessages(scope, messages),
+    });
+  }
+
+  try {
+    const scopeFilter = isAllCampaignsScope(scope)
+      ? sql``
+      : isContextScope(scope)
+        ? scopeLookup.contextOrganizations.length
+          ? sql`and c.organization = any(${scopeLookup.contextOrganizations}::text[])`
+          : sql`and false`
+        : sql`and c.slug = ${scope}`;
+
+    const rows = await withPostgresQueryTimeout(sql`
+      select
+        m.id::text as message_id,
+        c.slug as message_campaign_id,
+        m.company_id::text as message_company_id,
+        m.contact_id::text as message_contact_id,
+        m.sender_account_id::text as message_sender_id,
+        m.kind::text as message_kind,
+        m.status::text as message_status,
+        coalesce(m.subject_final, m.subject_draft, '(sin asunto)') as message_subject,
+        coalesce(m.body_final, m.body_draft, '') as message_body,
+        coalesce(m.future_note, '') as message_future_note,
+        m.created_at as message_created_at,
+        m.sent_at as message_sent_at,
+        co.id::text as company_row_id,
+        co.canonical_name as company_name,
+        co.domain as company_domain,
+        co.website as company_website,
+        co.industry as company_industry,
+        co.region as company_region,
+        coalesce(co.description, co.global_notes, '') as company_description,
+        co.global_notes as company_notes,
+        co.quality_rating as company_quality_rating,
+        co.quality_notes as company_quality_notes,
+        co.do_not_contact as company_do_not_contact,
+        coalesce(cc.fit_score, 0)::int as company_fit_score,
+        coalesce(cc.status::text, 'new') as company_status,
+        array[c.slug] as company_campaign_ids,
+        '{}'::text[] as company_evidence_urls,
+        coalesce(cc.selected_contact_reason, '') as company_selected_contact_reason,
+        coalesce(cc.campaign_notes, '') as company_campaign_notes,
+        coalesce(cc.future_notes, '') as company_future_notes,
+        cc.last_contacted_at as company_last_contacted_at,
+        ct.id::text as contact_row_id,
+        ct.company_id::text as contact_company_id,
+        ct.full_name as contact_full_name,
+        ct.role as contact_role,
+        ct.email::text as contact_email,
+        ct.phone as contact_phone,
+        ct.category as contact_category,
+        ct.confidence as contact_confidence,
+        ct.verification_status::text as contact_verification_status,
+        ct.verified_at as contact_verified_at,
+        ct.bounce_count as contact_bounce_count,
+        ct.source as contact_source,
+        ct.is_decision_maker as contact_is_decision_maker,
+        ct.do_not_contact as contact_do_not_contact,
+        ct.global_notes as contact_global_notes,
+        sa.id::text as sender_row_id,
+        sa.email::text as sender_email,
+        sa.display_name as sender_display_name,
+        sa.organization as sender_organization,
+        sa.account_type as sender_account_type,
+        sa.status::text as sender_status,
+        coalesce(csa.is_default, false) as sender_is_default,
+        coalesce(csa.priority, 0) as sender_priority,
+        coalesce(sa.daily_limit, 0) as sender_daily_limit,
+        coalesce(csa.campaign_daily_limit, 0) as sender_campaign_daily_limit,
+        0 as sender_sent_today,
+        coalesce(sa.signature, '') as sender_signature
+      from messages m
+      join campaigns c on c.id = m.campaign_id
+      left join companies co on co.id = m.company_id
+      left join campaign_contacts cc
+        on cc.campaign_id = m.campaign_id
+        and cc.company_id = m.company_id
+      left join contacts ct on ct.id = m.contact_id
+      left join sender_accounts sa on sa.id = m.sender_account_id
+      left join campaign_sender_accounts csa
+        on csa.campaign_id = m.campaign_id
+        and csa.sender_account_id = m.sender_account_id
+      where m.kind in ('outbound_initial', 'outbound_followup', 'outbound_reply')
+        and m.status in ('needs_review', 'approved', 'rejected')
+        ${scopeFilter}
+      order by coalesce(m.sent_at, m.updated_at, m.created_at) desc
+    `.execute(), "outbound review snapshot");
+
+    return buildProspectingSnapshot({
+      campaigns,
+      scopeLookup,
+      companies: uniqueMappedRows(rows, "company_row_id", mapReviewCompany),
+      contacts: uniqueMappedRows(rows, "contact_row_id", mapReviewContact),
+      messages: uniqueMappedRows(rows, "message_id", mapReviewMessage),
+      senders: uniqueMappedRows(rows, "sender_row_id", mapReviewSender),
+    });
+  } catch (error) {
+    console.error("Falling back to demo outbound review snapshot", error);
+    const messages = filterDemoReviewMessages(scope);
+    return buildProspectingSnapshot({
+      campaigns,
+      scopeLookup,
+      companies: filterDemoCompaniesForMessages(scope, messages),
+      contacts: filterDemoContactsForMessages(messages),
+      messages,
+      senders: filterDemoSendersForMessages(scope, messages),
+    });
+  }
+}
+
 export function getProjectContextsData(campaigns: AppCampaign[]) {
   const grouped = new Map<string, ProjectContext>();
 
@@ -184,7 +343,7 @@ export async function getCompaniesData(
           : sql`where false`
         : sql`where c.slug = ${scope}`;
 
-    const rows = await sql`
+    const rows = await withPostgresQueryTimeout(sql`
       select
         co.id::text as id,
         co.canonical_name as name,
@@ -194,6 +353,8 @@ export async function getCompaniesData(
         co.region,
         coalesce(co.description, co.global_notes, '') as description,
         co.global_notes as notes,
+        co.quality_rating,
+        co.quality_notes,
         co.do_not_contact,
         coalesce(max(cc.fit_score), 0)::int as fit_score,
         coalesce(
@@ -228,7 +389,7 @@ export async function getCompaniesData(
       ${scopeFilter}
       group by co.id
       order by max(cc.priority_score) desc nulls last, co.canonical_name asc
-    `;
+    `.execute(), "companies");
 
     return rows.map(mapCompany);
   } catch (error) {
@@ -251,7 +412,7 @@ export async function getContactsData(
     const contextOrganizations =
       contextOrganizationsOverride ?? (await getContextOrganizationsForScope(scope));
     const rows = isAllCampaignsScope(scope)
-      ? await sql`
+      ? await withPostgresQueryTimeout(sql`
           select
             ct.id::text as id,
             ct.company_id::text as company_id,
@@ -270,9 +431,9 @@ export async function getContactsData(
             ct.global_notes
           from contacts ct
           order by ct.created_at desc
-        `
+        `.execute(), "contacts")
       : isContextScope(scope)
-        ? await sql`
+        ? await withPostgresQueryTimeout(sql`
           select distinct
             ct.id::text as id,
             ct.company_id::text as company_id,
@@ -298,8 +459,8 @@ export async function getContactsData(
               : sql`false`
           }
           order by ct.full_name asc
-        `
-      : await sql`
+        `.execute(), "contacts")
+      : await withPostgresQueryTimeout(sql`
           select distinct
             ct.id::text as id,
             ct.company_id::text as company_id,
@@ -321,7 +482,7 @@ export async function getContactsData(
           join campaigns c on c.id = cc.campaign_id
           where c.slug = ${scope}
           order by ct.full_name asc
-        `;
+        `.execute(), "contacts");
 
     return rows.map(mapContact);
   } catch (error) {
@@ -351,7 +512,7 @@ export async function getMessagesData(
           : sql`and false`
         : sql`and c.slug = ${scope}`;
 
-    const rows = await sql`
+    const rows = await withPostgresQueryTimeout(sql`
       select
         m.id::text as id,
         c.slug as campaign_id,
@@ -370,7 +531,7 @@ export async function getMessagesData(
       where m.kind in ('outbound_initial', 'outbound_followup', 'outbound_reply')
       ${scopeFilter}
       order by coalesce(m.sent_at, m.updated_at, m.created_at) desc
-    `;
+    `.execute(), "messages");
 
     return rows.map(mapMessage);
   } catch (error) {
@@ -400,7 +561,7 @@ export async function getRepliesData(
           : sql`and false`
         : sql`and c.slug = ${scope}`;
 
-    const rows = await sql`
+    const rows = await withPostgresQueryTimeout(sql`
       select
         m.id::text as id,
         m.id::text as message_id,
@@ -418,7 +579,7 @@ export async function getRepliesData(
       where m.kind = 'inbound_reply'
       ${scopeFilter}
       order by coalesce(m.received_at, m.created_at) desc
-    `;
+    `.execute(), "replies");
 
     return rows.map(mapReply);
   } catch (error) {
@@ -448,7 +609,7 @@ export async function getSendersData(
           : sql`where false`
         : sql`where c.slug = ${scope}`;
 
-    const rows = await sql`
+    const rows = await withPostgresQueryTimeout(sql`
       select
         sa.id::text as id,
         c.slug as campaign_id,
@@ -476,7 +637,7 @@ export async function getSendersData(
       ) sent_counts on true
       ${scopeFilter}
       order by c.name asc, csa.priority asc, sa.email asc
-    `;
+    `.execute(), "senders");
 
     return rows.map(mapSender);
   } catch (error) {
@@ -499,7 +660,7 @@ export async function getImportBatchesData(
     const contextOrganizations =
       contextOrganizationsOverride ?? (await getContextOrganizationsForScope(scope));
     const rows = isAllCampaignsScope(scope)
-      ? await sql`
+      ? await withPostgresQueryTimeout(sql`
           select
             ib.id::text as id,
             c.slug as campaign_id,
@@ -514,9 +675,9 @@ export async function getImportBatchesData(
           from import_batches ib
           left join campaigns c on c.id = ib.campaign_id
           order by ib.created_at desc
-        `
+        `.execute(), "import batches")
       : isContextScope(scope)
-        ? await sql`
+        ? await withPostgresQueryTimeout(sql`
           select
             ib.id::text as id,
             c.slug as campaign_id,
@@ -536,8 +697,8 @@ export async function getImportBatchesData(
               : sql`false`
           }
           order by ib.created_at desc
-        `
-      : await sql`
+        `.execute(), "import batches")
+      : await withPostgresQueryTimeout(sql`
           select
             ib.id::text as id,
             c.slug as campaign_id,
@@ -553,7 +714,7 @@ export async function getImportBatchesData(
           join campaigns c on c.id = ib.campaign_id
           where c.slug = ${scope}
           order by ib.created_at desc
-        `;
+        `.execute(), "import batches");
 
     return rows.map(mapImportBatch);
   } catch (error) {
@@ -612,6 +773,74 @@ function filterDemoImportBatches(scope: string) {
     );
   }
   return demoImportBatches.filter((batch) => batch.campaignId === scope);
+}
+
+function filterDemoReviewMessages(scope: string) {
+  return filterDemoMessages(scope).filter((message) =>
+    ["needs_review", "approved", "rejected"].includes(message.status),
+  );
+}
+
+function filterDemoCompaniesForMessages(scope: string, messages: AppMessage[]) {
+  const companyIds = new Set(messages.map((message) => message.companyId));
+  return filterDemoCompanies(scope).filter((company) => companyIds.has(company.id));
+}
+
+function filterDemoContactsForMessages(messages: AppMessage[]) {
+  const contactIds = new Set(messages.map((message) => message.contactId));
+  return demoContacts.filter((contact) => contactIds.has(contact.id));
+}
+
+function filterDemoSendersForMessages(scope: string, messages: AppMessage[]) {
+  const senderIds = new Set(messages.map((message) => message.senderId));
+  return filterDemoSenders(scope).filter((sender) => senderIds.has(sender.id));
+}
+
+function buildProspectingSnapshot({
+  campaigns,
+  companies,
+  contacts,
+  messages,
+  scopeLookup,
+  senders,
+}: {
+  campaigns: AppCampaign[];
+  companies: AppCompany[];
+  contacts: AppContact[];
+  messages: AppMessage[];
+  scopeLookup: ScopeLookup;
+  senders: AppSender[];
+}): ProspectingSnapshot {
+  return {
+    campaigns,
+    campaign: scopeLookup.campaign,
+    context: scopeLookup.context,
+    companies,
+    contacts,
+    messages,
+    replies: [],
+    senders,
+    importBatches: [],
+    stats: getStats(companies, messages, []),
+  };
+}
+
+function uniqueMappedRows<T>(
+  rows: DbRow[],
+  idKey: string,
+  mapper: (row: DbRow) => T,
+) {
+  const seen = new Set<string>();
+  const items: T[] = [];
+
+  for (const row of rows) {
+    const id = stringValue(row[idKey]);
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    items.push(mapper(row));
+  }
+
+  return items;
 }
 
 async function getContextOrganizationsForScope(scope: string) {
@@ -692,6 +921,7 @@ function mapCampaign(row: DbRow): AppCampaign {
     status: stringValue(row.status) as AppCampaign["status"],
     valueProposition: stringValue(row.value_proposition),
     startsOn: dateValue(row.starts_on),
+    endsOn: row.ends_on ? dateValue(row.ends_on) : null,
   };
 }
 
@@ -705,6 +935,8 @@ function mapCompany(row: DbRow): AppCompany {
     industry: stringValue(row.industry),
     region: stringValue(row.region),
     description: stringValue(row.description),
+    qualityRating: numberValue(row.quality_rating) || 3,
+    qualityNotes: stringValue(row.quality_notes),
     fitScore: numberValue(row.fit_score),
     status: stringValue(row.status) as AppCompany["status"],
     notes: stringValue(row.notes),
@@ -801,6 +1033,85 @@ function mapImportBatch(row: DbRow): AppImportBatch {
     errorCount: numberValue(row.error_count),
     createdAt: isoValue(row.created_at),
   };
+}
+
+function mapReviewCompany(row: DbRow): AppCompany {
+  return mapCompany({
+    id: row.company_row_id,
+    campaign_ids: row.company_campaign_ids,
+    name: row.company_name,
+    domain: row.company_domain,
+    website: row.company_website,
+    industry: row.company_industry,
+    region: row.company_region,
+    description: row.company_description,
+    quality_rating: row.company_quality_rating,
+    quality_notes: row.company_quality_notes,
+    fit_score: row.company_fit_score,
+    status: row.company_status,
+    notes: row.company_notes,
+    campaign_notes: row.company_campaign_notes,
+    future_notes: row.company_future_notes,
+    selected_contact_reason: row.company_selected_contact_reason,
+    last_contacted_at: row.company_last_contacted_at,
+    do_not_contact: row.company_do_not_contact,
+    evidence_urls: row.company_evidence_urls,
+  });
+}
+
+function mapReviewContact(row: DbRow): AppContact {
+  return mapContact({
+    id: row.contact_row_id,
+    company_id: row.contact_company_id,
+    full_name: row.contact_full_name,
+    role: row.contact_role,
+    email: row.contact_email,
+    phone: row.contact_phone,
+    category: row.contact_category,
+    confidence: row.contact_confidence,
+    verification_status: row.contact_verification_status,
+    verified_at: row.contact_verified_at,
+    bounce_count: row.contact_bounce_count,
+    source: row.contact_source,
+    is_decision_maker: row.contact_is_decision_maker,
+    do_not_contact: row.contact_do_not_contact,
+    global_notes: row.contact_global_notes,
+  });
+}
+
+function mapReviewMessage(row: DbRow): AppMessage {
+  return mapMessage({
+    id: row.message_id,
+    campaign_id: row.message_campaign_id,
+    company_id: row.message_company_id,
+    contact_id: row.message_contact_id,
+    sender_id: row.message_sender_id,
+    kind: row.message_kind,
+    status: row.message_status,
+    subject: row.message_subject,
+    body: row.message_body,
+    future_note: row.message_future_note,
+    created_at: row.message_created_at,
+    sent_at: row.message_sent_at,
+  });
+}
+
+function mapReviewSender(row: DbRow): AppSender {
+  return mapSender({
+    id: row.sender_row_id,
+    campaign_id: row.message_campaign_id,
+    email: row.sender_email,
+    display_name: row.sender_display_name,
+    organization: row.sender_organization,
+    account_type: row.sender_account_type,
+    status: row.sender_status,
+    is_default: row.sender_is_default,
+    priority: row.sender_priority,
+    daily_limit: row.sender_daily_limit,
+    campaign_daily_limit: row.sender_campaign_daily_limit,
+    sent_today: row.sender_sent_today,
+    signature: row.sender_signature,
+  });
 }
 
 function stringValue(value: unknown) {

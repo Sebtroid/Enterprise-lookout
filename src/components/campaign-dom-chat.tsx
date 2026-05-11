@@ -7,6 +7,7 @@ import { Bot, Loader2, Send, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { shouldReplaceDomCollection } from "@/lib/dom/chat-state";
+import { isActiveDomTaskStatus } from "@/lib/dom/status";
 import type { DomChatMessage, DomTask } from "@/lib/dom/types";
 import { cn } from "@/lib/utils";
 
@@ -33,8 +34,10 @@ export function CampaignDomChat({
   const latestMessageId = messages.at(-1)?.id ?? "";
 
   const activityLabel = useMemo(() => {
-    const activeTask = tasks.find((task) => task.status === "in_progress");
-    if (activeTask) return `Dom está trabajando: ${activeTask.description}`;
+    const activeTask = tasks.find((task) => isActiveDomTaskStatus(task.status));
+    if (activeTask) {
+      return `${getStatusLabel(activeTask.status)}: ${activeTask.progressMessage || activeTask.description}`;
+    }
     const latestDomMessage = [...messages]
       .reverse()
       .find((message) => message.role === "dom");
@@ -53,7 +56,6 @@ export function CampaignDomChat({
   }, [latestMessageId, messages.length]);
 
   useEffect(() => {
-    if (!currentThreadId) return;
     const interval = window.setInterval(async () => {
       const response = await fetch(`/api/dom/chat?scope=${encodeURIComponent(scope)}`);
       const data = await response.json().catch(() => null);
@@ -70,10 +72,10 @@ export function CampaignDomChat({
         );
         if (data.thread?.id) setCurrentThreadId(data.thread.id);
       }
-    }, 8000);
+    }, 4000);
 
     return () => window.clearInterval(interval);
-  }, [scope, currentThreadId]);
+  }, [scope]);
 
   async function sendMessage() {
     const message = input.trim();
@@ -109,7 +111,9 @@ export function CampaignDomChat({
       setTasks(data.tasks ?? []);
       if (data.threadId) setCurrentThreadId(data.threadId);
       if (data.agentEvent?.ok === false) {
-        setError("Mensaje guardado, pero no se pudo avisar a Dom. Revisa el inbox de eventos.");
+        setError("Mensaje guardado, pero no se pudo crear el evento para Dom.");
+      } else if (data.agentEvent?.webhook?.ok === false) {
+        setError("Mensaje guardado. El webhook inmediato fallo; queda el inbox como respaldo.");
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error enviando mensaje.");
@@ -251,4 +255,19 @@ function formatRelative(value: string) {
 
   const days = Math.floor(hours / 24);
   return `hace ${days} d`;
+}
+
+function getStatusLabel(status: DomTask["status"]) {
+  const labels: Record<DomTask["status"], string> = {
+    pending: "Pendiente",
+    received: "Recibido",
+    in_progress: "En proceso",
+    researching: "Investigando",
+    drafting: "Redactando",
+    reviewing: "Revisando",
+    completed: "Completado",
+    failed: "Error",
+  };
+
+  return labels[status];
 }

@@ -11,13 +11,16 @@ import type {
   DomApiResponse,
   DomCampaignContext,
   DomChatPayload,
-  DomTaskStatus,
   DomUser,
-  DomWebhookPayload,
 } from "./types";
+import { normalizeDomTaskStatus } from "./status";
+import {
+  buildDomWebhookPayload,
+  getDomWebhookToken,
+  postDomWebhook,
+  resolveDomWebhookUrl,
+} from "./webhook";
 
-const defaultWebhookUrl =
-  "https://dom-assistant.vercel.app/api/webhook/enterprise-lookout";
 const defaultChatUrl =
   "https://dom-assistant.vercel.app/api/chat/enterprise-lookout";
 
@@ -34,13 +37,14 @@ export function getDomUser(): DomUser {
 }
 
 export function hasDomApiToken() {
-  return Boolean(process.env.DOM_API_TOKEN);
+  return Boolean(getDomWebhookToken());
 }
 
 export function isAuthorizedDomRequest(authHeader: string | null) {
-  const token = process.env.DOM_API_TOKEN;
-  if (!token || !authHeader) return false;
-  return authHeader === `Bearer ${token}`;
+  if (!authHeader) return false;
+  return [process.env.AGENT_API_TOKEN, process.env.DOM_API_TOKEN]
+    .filter(Boolean)
+    .some((token) => authHeader === `Bearer ${token}`);
 }
 
 export async function notifyDomEventForCampaignSlug({
@@ -88,18 +92,20 @@ export async function notifyDomEvent({
   data: Record<string, unknown>;
   user?: DomUser;
 }) {
-  const payload: DomWebhookPayload = {
-    event,
-    timestamp: new Date().toISOString(),
+  const payload = buildDomWebhookPayload({
+    eventType: event,
+    eventId: getEventId(data),
     campaign,
-    data,
+    payload: data,
+    priority: "normal",
     user,
-  };
+  });
 
-  const response = await postToDom(
-    process.env.DOM_WEBHOOK_URL || defaultWebhookUrl,
-    payload,
-  );
+  const response = await postDomWebhook({
+    url: resolveDomWebhookUrl(),
+    eventType: event,
+    body: payload,
+  });
 
   if (response.data) {
     await persistDomApiResponse({
@@ -139,10 +145,11 @@ export async function sendChatMessageToDom({
     user,
   };
 
-  const response = await postToDom(
-    process.env.DOM_CHAT_URL || defaultChatUrl,
-    payload,
-  );
+  const response = await postDomWebhook({
+    url: process.env.DOM_CHAT_URL || defaultChatUrl,
+    eventType: "user_chat_message",
+    body: payload,
+  });
 
   if (response.data) {
     await persistDomApiResponse({
@@ -399,6 +406,16 @@ async function createDraftFromDomAction({
     returning id
   `;
 
+  await tx`
+    update campaign_contacts
+    set
+      status = 'draft_ready',
+      contact_id = coalesce(contact_id, ${contactId}),
+      updated_at = now()
+    where campaign_id = ${campaign.dbId}
+      and company_id = ${companyId}
+  `;
+
   if (sourceMessageId && inserted[0]?.id) {
     await tx`
       update messages
@@ -415,58 +432,15 @@ async function createDraftFromDomAction({
   }
 }
 
-async function postToDom(url: string, payload: Record<string, unknown>) {
-  const token = process.env.DOM_API_TOKEN;
-  if (!token) {
-    console.info("DOM_API_TOKEN missing; skipped Dom POST", {
-      event: payload.event,
-    });
-    return { ok: false, skipped: true, reason: "missing_dom_token" };
-  }
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 15_000);
-  try {
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-      signal: controller.signal,
-    });
-    clearTimeout(timeout);
-    const data = (await response.json().catch(() => null)) as DomApiResponse | null;
-    return {
-      ok: response.ok && data?.ok !== false,
-      status: response.status,
-      data,
-    };
-  } catch (error) {
-    clearTimeout(timeout);
-    console.error("Dom POST failed:", error);
-    return {
-      ok: false,
-      error: error instanceof Error ? error.message : "unknown_error",
-    };
-  }
-}
-
-function normalizeDomTaskStatus(value: unknown): DomTaskStatus {
-  if (
-    value === "pending" ||
-    value === "in_progress" ||
-    value === "completed" ||
-    value === "blocked"
-  ) {
-    return value;
-  }
-
-  return "pending";
-}
-
 function nullableText(value: unknown) {
   const text = value == null ? "" : String(value).trim();
   return text || null;
+}
+
+function getEventId(data: Record<string, unknown>) {
+  if (typeof data.event_id === "string" && data.event_id) return data.event_id;
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }

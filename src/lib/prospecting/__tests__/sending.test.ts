@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   canSendMessage,
   chooseSenderForMessage,
+  getConfirmedAutoSendMessageId,
   shouldAutoSendAfterApproval,
 } from "../sending";
 
@@ -121,5 +122,33 @@ describe("prospecting sending rules", () => {
         senderStatus: "active",
       }),
     ).toBe(false);
+  });
+
+  it("does not auto-send from a stale successful approval action", () => {
+    expect(
+      getConfirmedAutoSendMessageId({
+        actionState: {
+          ok: true,
+          message: "Mail aprobado y guardado.",
+          intent: "approved",
+          messageId: "previous-message",
+        },
+        requestedMessageId: "current-message",
+      }),
+    ).toBeNull();
+  });
+
+  it("auto-sends only after the matching approval action completes", () => {
+    expect(
+      getConfirmedAutoSendMessageId({
+        actionState: {
+          ok: true,
+          message: "Mail aprobado y guardado.",
+          intent: "approved",
+          messageId: "current-message",
+        },
+        requestedMessageId: "current-message",
+      }),
+    ).toBe("current-message");
   });
 });

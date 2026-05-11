@@ -8,6 +8,7 @@ export type AppCampaign = {
   status: "draft" | "active" | "paused" | "archived";
   valueProposition: string;
   startsOn: string;
+  endsOn?: string | null;
 };
 
 export type AppSender = {
@@ -35,6 +36,8 @@ export type AppCompany = {
   industry: string;
   region: string;
   description: string;
+  qualityRating?: number;
+  qualityNotes?: string;
   fitScore: number;
   status:
     | "new"

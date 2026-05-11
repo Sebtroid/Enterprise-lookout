@@ -12,6 +12,7 @@ import {
   getGmailConnectionDecision,
   getSafeOAuthRedirectPath,
 } from "../connection-policy";
+import { resolveConnectedGmailEmail } from "../profile";
 
 describe("Gmail security helpers", () => {
   const secret = "test-secret-with-enough-length";
@@ -97,6 +98,24 @@ describe("Gmail security helpers", () => {
         hasConfiguredSender: false,
       }),
     ).toBe("sender_not_configured");
+  });
+
+  it("uses Gmail profile email when OAuth userinfo omits email", () => {
+    expect(
+      resolveConnectedGmailEmail({
+        gmailProfile: { emailAddress: "SAWITTING@miuandes.cl" },
+        userInfo: {},
+      }),
+    ).toBe("sawitting@miuandes.cl");
+  });
+
+  it("falls back to OAuth userinfo email when Gmail profile is unavailable", () => {
+    expect(
+      resolveConnectedGmailEmail({
+        gmailProfile: {},
+        userInfo: { email: "sawitting@miuandes.cl" },
+      }),
+    ).toBe("sawitting@miuandes.cl");
   });
 
   it("keeps OAuth redirects inside app paths", () => {

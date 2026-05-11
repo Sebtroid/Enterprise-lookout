@@ -6,7 +6,16 @@ create extension if not exists "citext";
 
 do $$
 begin
-  create type dom_task_status as enum ('pending', 'in_progress', 'completed', 'blocked');
+  create type dom_task_status as enum (
+    'pending',
+    'received',
+    'in_progress',
+    'researching',
+    'drafting',
+    'reviewing',
+    'completed',
+    'failed'
+  );
 exception when duplicate_object then null;
 end $$;
 
@@ -62,7 +71,15 @@ create table if not exists dom_tasks (
   updated_at timestamptz not null default now(),
   context jsonb,
   result text,
-  chat_thread_id uuid references chat_threads(id) on delete set null
+  chat_thread_id uuid references chat_threads(id) on delete set null,
+  progress_step text,
+  progress_message text,
+  progress_percent integer check (
+    progress_percent is null
+    or (progress_percent >= 0 and progress_percent <= 100)
+  ),
+  result_preview text,
+  last_progress_at timestamptz
 );
 
 create table if not exists gmail_tokens (

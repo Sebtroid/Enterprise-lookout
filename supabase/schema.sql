@@ -22,7 +22,16 @@ create type message_kind as enum ('outbound_initial', 'outbound_followup', 'inbo
 create type import_status as enum ('uploaded', 'parsed', 'needs_review', 'applied', 'failed');
 create type automation_status as enum ('running', 'succeeded', 'failed', 'skipped');
 create type contact_verification_status as enum ('unverified', 'verified', 'bounced', 'invalid');
-create type dom_task_status as enum ('pending', 'in_progress', 'completed', 'blocked');
+create type dom_task_status as enum (
+  'pending',
+  'received',
+  'in_progress',
+  'researching',
+  'drafting',
+  'reviewing',
+  'completed',
+  'failed'
+);
 create type chat_message_role as enum ('user', 'dom', 'system');
 create type agent_event_status as enum ('pending', 'in_progress', 'completed', 'failed');
 create type agent_event_priority as enum ('low', 'normal', 'high', 'urgent');
@@ -80,6 +89,8 @@ create table companies (
   region text,
   description text,
   global_notes text,
+  quality_rating smallint not null default 3 check (quality_rating >= 1 and quality_rating <= 5),
+  quality_notes text,
   do_not_contact boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
@@ -259,7 +270,55 @@ create table dom_tasks (
   updated_at timestamptz not null default now(),
   context jsonb,
   result text,
-  chat_thread_id uuid references chat_threads(id) on delete set null
+  chat_thread_id uuid references chat_threads(id) on delete set null,
+  progress_step text,
+  progress_message text,
+  progress_percent integer check (
+    progress_percent is null
+    or (progress_percent >= 0 and progress_percent <= 100)
+  ),
+  result_preview text,
+  last_progress_at timestamptz
+);
+
+create table dom_task_company_candidates (
+  id uuid primary key default gen_random_uuid(),
+  task_id uuid not null references dom_tasks(id) on delete cascade,
+  campaign_id uuid references campaigns(id) on delete cascade,
+  company_id uuid references companies(id) on delete set null,
+  name text not null,
+  normalized_name text not null,
+  domain text,
+  website text,
+  industry text,
+  region text,
+  description text,
+  evidence_urls text[] not null default '{}',
+  suggested_contacts jsonb not null default '[]',
+  fit_score integer not null default 50 check (fit_score >= 0 and fit_score <= 100),
+  fit_reason text,
+  quality_rating smallint not null default 3 check (quality_rating >= 1 and quality_rating <= 5),
+  quality_reason text,
+  status text not null default 'pending' check (
+    status in ('pending', 'accepted', 'rejected', 'needs_more_research')
+  ),
+  user_feedback text,
+  reviewed_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (task_id, normalized_name)
+);
+
+create table company_research_cache (
+  id uuid primary key default gen_random_uuid(),
+  company_id uuid references companies(id) on delete cascade,
+  research_type text not null,
+  data jsonb not null,
+  source_urls text[],
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  expires_at timestamptz not null default (now() + interval '7 days'),
+  unique (company_id, research_type)
 );
 
 create table gmail_tokens (
@@ -301,6 +360,9 @@ create table automation_runs (
 );
 
 create index campaign_contacts_status_idx on campaign_contacts (campaign_id, status);
+create index campaign_contacts_company_idx on campaign_contacts (company_id, updated_at desc);
+create index campaign_contacts_campaign_company_idx on campaign_contacts (campaign_id, company_id);
+create index campaigns_organization_idx on campaigns (organization);
 create index messages_review_idx on messages (campaign_id, status, kind);
 create index messages_sender_status_idx on messages (sender_account_id, status, sent_at);
 create unique index messages_gmail_message_id_unique
@@ -309,10 +371,14 @@ create unique index messages_gmail_message_id_unique
 create index outbound_feedback_campaign_idx on outbound_feedback (campaign_id, remember_for_future, created_at desc);
 create index threads_gmail_idx on threads (gmail_thread_id);
 create index contacts_company_idx on contacts (company_id);
+create index evidence_links_company_idx on evidence_links (company_id);
 create index suppression_email_idx on suppression_list (email);
 create index suppression_domain_idx on suppression_list (domain);
 create index chat_messages_thread_created_idx on chat_messages (thread_id, created_at);
 create index dom_tasks_campaign_status_idx on dom_tasks (campaign_id, status, updated_at desc);
+create index dom_task_company_candidates_task_idx on dom_task_company_candidates (task_id, status, updated_at desc);
+create index dom_task_company_candidates_campaign_idx on dom_task_company_candidates (campaign_id, status, updated_at desc);
+create index company_research_cache_company_idx on company_research_cache (company_id, research_type, expires_at);
 create index agent_inbox_status_priority_idx on agent_inbox (status, priority, created_at);
 create index agent_inbox_campaign_idx on agent_inbox (campaign_id, status);
 create index agent_inbox_created_idx on agent_inbox (created_at desc);
@@ -333,6 +399,8 @@ alter table suppression_list enable row level security;
 alter table chat_threads enable row level security;
 alter table chat_messages enable row level security;
 alter table dom_tasks enable row level security;
+alter table dom_task_company_candidates enable row level security;
+alter table company_research_cache enable row level security;
 alter table gmail_tokens enable row level security;
 alter table agent_inbox enable row level security;
 alter table automation_runs enable row level security;
@@ -355,6 +423,8 @@ create policy "authenticated workspace access" on suppression_list for all using
 create policy "authenticated workspace access" on chat_threads for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 create policy "authenticated workspace access" on chat_messages for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 create policy "authenticated workspace access" on dom_tasks for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+create policy "authenticated workspace access" on dom_task_company_candidates for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+create policy "authenticated workspace access" on company_research_cache for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 create policy "authenticated workspace access" on gmail_tokens for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 create policy "authenticated workspace access" on agent_inbox for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 create policy "authenticated workspace access" on automation_runs for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
@@ -362,5 +432,7 @@ create policy "authenticated workspace access" on automation_runs for all using 
 grant select, insert, update, delete on chat_threads to authenticated;
 grant select, insert, update, delete on chat_messages to authenticated;
 grant select, insert, update, delete on dom_tasks to authenticated;
+grant select, insert, update, delete on dom_task_company_candidates to authenticated;
+grant select, insert, update, delete on company_research_cache to authenticated;
 grant select, insert, update, delete on gmail_tokens to authenticated;
 grant select, insert, update, delete on agent_inbox to authenticated;

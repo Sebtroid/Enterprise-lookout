@@ -3,6 +3,7 @@ import {
   getGmailConnectionDecision,
   getSafeOAuthRedirectPath,
 } from "@/lib/gmail/connection-policy";
+import { fetchConnectedGmailEmail } from "@/lib/gmail/profile";
 import { encryptToken } from "@/lib/gmail/token-crypto";
 import { verifyOAuthState } from "@/lib/gmail/oauth-state";
 import { getPostgresClient } from "@/lib/supabase/postgres";
@@ -69,15 +70,13 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // Get user email from Google
-    const userInfoResponse = await fetch(
-      "https://www.googleapis.com/oauth2/v2/userinfo",
-      {
-        headers: { Authorization: `Bearer ${tokens.access_token}` },
-      }
-    );
-    const userInfo = await userInfoResponse.json();
-    const connectedEmail = String(userInfo.email ?? "").toLowerCase();
+    const connectedEmail = await fetchConnectedGmailEmail(tokens.access_token);
+
+    if (!connectedEmail) {
+      return redirectWithStatus(req, redirectPath, {
+        gmail_error: "email_lookup_failed",
+      });
+    }
 
     const senderRows = await sql`
       select id
@@ -105,7 +104,7 @@ export async function GET(req: NextRequest) {
     const encryptedAccessToken = encryptToken(tokens.access_token);
     const encryptedRefreshToken = tokens.refresh_token
       ? encryptToken(tokens.refresh_token)
-      : "";
+      : null;
 
     await sql`
       insert into gmail_tokens (
@@ -121,7 +120,7 @@ export async function GET(req: NextRequest) {
       )
       on conflict (user_email) do update set
         access_token = excluded.access_token,
-        refresh_token = coalesce(excluded.refresh_token, gmail_tokens.refresh_token),
+        refresh_token = coalesce(nullif(excluded.refresh_token, ''), gmail_tokens.refresh_token),
         expires_at = excluded.expires_at,
         updated_at = now()
     `;
