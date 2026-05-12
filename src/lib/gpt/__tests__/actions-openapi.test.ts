@@ -10,6 +10,7 @@ describe("GPT Actions OpenAPI schema", () => {
       .map((operation) => operation.operationId);
 
     expect(schema.servers).toEqual([{ url: "https://enterprise-lookout.test" }]);
+    expect(schema.components.schemas).toEqual({});
     expect(operations).toEqual(
       expect.arrayContaining([
         "listCampaigns",

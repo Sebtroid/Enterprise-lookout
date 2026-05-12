@@ -221,6 +221,7 @@ export function buildGptActionsOpenApiSchema(
       },
     },
     components: {
+      schemas: {},
       securitySchemes: {
         bearerAuth: {
           type: "http",
