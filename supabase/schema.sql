@@ -347,6 +347,28 @@ create table agent_inbox (
   processed_at timestamptz
 );
 
+create table ai_memory_rules (
+  id uuid primary key default gen_random_uuid(),
+  scope text not null default 'campaign' check (
+    scope in ('global', 'campaign', 'company', 'contact', 'sender')
+  ),
+  rule_type text not null default 'general',
+  rule_text text not null,
+  campaign_id uuid references campaigns(id) on delete cascade,
+  company_id uuid references companies(id) on delete cascade,
+  contact_id uuid references contacts(id) on delete cascade,
+  sender_account_id uuid references sender_accounts(id) on delete cascade,
+  source text,
+  source_feedback_id uuid references outbound_feedback(id) on delete set null,
+  confidence numeric(4, 3) not null default 0.8 check (
+    confidence >= 0 and confidence <= 1
+  ),
+  active boolean not null default true,
+  created_by text not null default 'custom_gpt',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table automation_runs (
   id uuid primary key default gen_random_uuid(),
   campaign_id uuid references campaigns(id) on delete set null,
@@ -382,6 +404,8 @@ create index company_research_cache_company_idx on company_research_cache (compa
 create index agent_inbox_status_priority_idx on agent_inbox (status, priority, created_at);
 create index agent_inbox_campaign_idx on agent_inbox (campaign_id, status);
 create index agent_inbox_created_idx on agent_inbox (created_at desc);
+create index ai_memory_rules_campaign_idx on ai_memory_rules (campaign_id, active, updated_at desc);
+create index ai_memory_rules_scope_idx on ai_memory_rules (scope, rule_type, active);
 
 alter table campaigns enable row level security;
 alter table sender_accounts enable row level security;
@@ -403,6 +427,7 @@ alter table dom_task_company_candidates enable row level security;
 alter table company_research_cache enable row level security;
 alter table gmail_tokens enable row level security;
 alter table agent_inbox enable row level security;
+alter table ai_memory_rules enable row level security;
 alter table automation_runs enable row level security;
 
 -- V1 policy: authenticated users can operate the private workspace.
@@ -427,6 +452,7 @@ create policy "authenticated workspace access" on dom_task_company_candidates fo
 create policy "authenticated workspace access" on company_research_cache for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 create policy "authenticated workspace access" on gmail_tokens for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 create policy "authenticated workspace access" on agent_inbox for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+create policy "authenticated workspace access" on ai_memory_rules for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 create policy "authenticated workspace access" on automation_runs for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 
 grant select, insert, update, delete on chat_threads to authenticated;
@@ -436,3 +462,4 @@ grant select, insert, update, delete on dom_task_company_candidates to authentic
 grant select, insert, update, delete on company_research_cache to authenticated;
 grant select, insert, update, delete on gmail_tokens to authenticated;
 grant select, insert, update, delete on agent_inbox to authenticated;
+grant select, insert, update, delete on ai_memory_rules to authenticated;
