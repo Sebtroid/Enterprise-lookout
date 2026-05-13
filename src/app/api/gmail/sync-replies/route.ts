@@ -8,6 +8,7 @@ import {
   buildGmailReplySearchQuery,
   matchInboundReply,
   prepareInboundReplyRecord,
+  REPLY_SYNC_OUTBOUND_STATUSES,
   resolveReplySyncScope,
   shouldIngestReply,
   type GmailReplyCandidate,
@@ -212,20 +213,19 @@ async function loadSentMessages({
       m.sender_account_id::text as sender_id,
       sa.email::text as sender_email,
       coalesce(m.subject_final, m.subject_draft, '(sin asunto)') as subject,
-      coalesce(m.sent_at, m.created_at)::text as sent_at,
+      coalesce(m.sent_at, m.approved_at, m.created_at)::text as sent_at,
       m.gmail_thread_id
     from messages m
     join campaigns c on c.id = m.campaign_id
     join sender_accounts sa on sa.id = m.sender_account_id
     left join contacts ct on ct.id = m.contact_id
     where m.kind in ('outbound_initial', 'outbound_followup', 'outbound_reply')
-      and m.status = 'sent'
-      and sa.account_type = 'gmail'
+      and m.status = any(${REPLY_SYNC_OUTBOUND_STATUSES}::message_status[])
       and sa.email = ${senderEmail}
       and ct.email is not null
-      and coalesce(m.sent_at, m.created_at) >= now() - (${days}::int * interval '1 day')
+      and coalesce(m.sent_at, m.approved_at, m.created_at) >= now() - (${days}::int * interval '1 day')
       ${scopeFilter}
-    order by coalesce(m.sent_at, m.created_at) desc
+    order by coalesce(m.sent_at, m.approved_at, m.created_at) desc
     limit ${limit}
   `;
 
@@ -448,6 +448,21 @@ async function insertInboundReply({
     `;
 
     if (!inserted[0]) return "duplicate" as const;
+
+    await tx`
+      update messages
+      set
+        status = 'sent',
+        sent_at = coalesce(sent_at, approved_at, created_at),
+        future_note = concat_ws(
+          ' ',
+          nullif(future_note, ''),
+          'Marcado enviado automaticamente al detectar respuesta en Gmail.'
+        ),
+        updated_at = now()
+      where id = ${match.message.id}
+        and status = 'approved'
+    `;
 
     if (record.classification === "bounced") {
       await handleBouncedContact({ record, sentMessage: match.message, tx });

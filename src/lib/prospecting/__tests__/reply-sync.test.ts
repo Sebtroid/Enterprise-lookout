@@ -9,6 +9,7 @@ import {
   normalizeEmailSubject,
   prepareInboundReplyRecord,
   resolveReplySyncScope,
+  shouldSyncOutboundForReplies,
   shouldIngestReply,
   type GmailReplyCandidate,
   type SentMessageMatchInput,
@@ -168,5 +169,36 @@ describe("reply sync", () => {
       kind: "organizations",
       organizations: ["Pastoral UC"],
     });
+  });
+
+  it("syncs replies for approved/manual compose messages from the connected Gmail account", () => {
+    expect(
+      shouldSyncOutboundForReplies({
+        connectedEmail: "sawitting@miuandes.cl",
+        contactEmail: "alianzas@empresa.cl",
+        senderEmail: "sawitting@miuandes.cl",
+        status: "approved",
+      }),
+    ).toBe(true);
+  });
+
+  it("does not sync drafts or messages from a different sender mailbox", () => {
+    expect(
+      shouldSyncOutboundForReplies({
+        connectedEmail: "sawitting@miuandes.cl",
+        contactEmail: "alianzas@empresa.cl",
+        senderEmail: "otra@miuandes.cl",
+        status: "sent",
+      }),
+    ).toBe(false);
+
+    expect(
+      shouldSyncOutboundForReplies({
+        connectedEmail: "sawitting@miuandes.cl",
+        contactEmail: "alianzas@empresa.cl",
+        senderEmail: "sawitting@miuandes.cl",
+        status: "needs_review",
+      }),
+    ).toBe(false);
   });
 });

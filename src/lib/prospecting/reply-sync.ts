@@ -53,6 +53,8 @@ export type ReplySyncScope =
   | { kind: "campaign"; slug: string }
   | { kind: "organizations"; organizations: string[] };
 
+export const REPLY_SYNC_OUTBOUND_STATUSES = ["sent", "approved"] as const;
+
 export type PreparedInboundReply = {
   campaignId: string;
   companyId: string;
@@ -104,6 +106,26 @@ export function resolveReplySyncScope(
     kind: "organizations",
     organizations: Array.from(new Set(organizations)),
   };
+}
+
+export function shouldSyncOutboundForReplies({
+  connectedEmail,
+  contactEmail,
+  senderEmail,
+  status,
+}: {
+  connectedEmail: string;
+  contactEmail: string | null;
+  senderEmail: string;
+  status: string;
+}) {
+  return (
+    REPLY_SYNC_OUTBOUND_STATUSES.includes(
+      status as (typeof REPLY_SYNC_OUTBOUND_STATUSES)[number],
+    ) &&
+    Boolean(contactEmail) &&
+    normalizeEmail(senderEmail) === normalizeEmail(connectedEmail)
+  );
 }
 
 export function matchInboundReply(
