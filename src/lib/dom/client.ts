@@ -378,7 +378,7 @@ async function createDraftFromDomAction({
                 ),
                 ''
               ),
-              ${`Mail enviado registrado: ${sentMessageId}.`}
+              ${`Mail enviado registrado: ${sentMessageId}.`}::text
             )
           end,
           updated_at = now()
@@ -467,7 +467,7 @@ async function createDraftFromDomAction({
         future_note = concat_ws(
           ' ',
           nullif(future_note, ''),
-          ${`Nueva redacción creada por Dom: ${inserted[0].id}.`}
+          ${`Nueva redacción creada por Dom: ${inserted[0].id}.`}::text
         ),
         updated_at = now()
       where id = ${sourceMessageId}

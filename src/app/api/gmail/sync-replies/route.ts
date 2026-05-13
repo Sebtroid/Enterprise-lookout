@@ -681,7 +681,7 @@ async function markContactVerified({
     update campaign_contacts
     set
       status = 'replied',
-      future_notes = concat_ws(E'\n', nullif(future_notes, ''), ${record.futureNote}),
+      future_notes = concat_ws(E'\n', nullif(future_notes, ''), ${record.futureNote}::text),
       updated_at = now()
     where campaign_id = ${record.campaignId}
       and company_id = ${record.companyId}
