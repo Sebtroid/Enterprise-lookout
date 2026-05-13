@@ -411,13 +411,9 @@ async function fetchReplyCandidatesForSentMessage({
   const ids = Array.isArray(searchResponse.messages)
     ? searchResponse.messages.map((message: { id?: string }) => message.id).filter(Boolean)
     : [];
-  const messages = await Promise.all(
-    ids.map((id: string) =>
-      gmailFetch(
-        accessToken,
-        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=full`,
-      ),
-    ),
+  const messages = await fetchGmailMessagesByIds(
+    accessToken,
+    ids.map((id: string) => String(id)),
   );
 
   return messages.map(normalizeGmailMessage).filter(isReplyCandidate);
@@ -441,16 +437,32 @@ async function fetchRecentInboundReplyCandidates({
   const ids = Array.isArray(searchResponse.messages)
     ? searchResponse.messages.map((message: { id?: string }) => message.id).filter(Boolean)
     : [];
-  const messages = await Promise.all(
-    ids.map((id: string) =>
-      gmailFetch(
-        accessToken,
-        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=full`,
-      ),
-    ),
+  const messages = await fetchGmailMessagesByIds(
+    accessToken,
+    ids.map((id: string) => String(id)),
   );
 
   return messages.map(normalizeGmailMessage).filter(isReplyCandidate);
+}
+
+async function fetchGmailMessagesByIds(accessToken: string, ids: string[]) {
+  const concurrency = 5;
+  const messages: Record<string, unknown>[] = [];
+
+  for (let index = 0; index < ids.length; index += concurrency) {
+    const batch = ids.slice(index, index + concurrency);
+    const batchMessages = await Promise.all(
+      batch.map((id) =>
+        gmailFetch(
+          accessToken,
+          `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=full`,
+        ),
+      ),
+    );
+    messages.push(...batchMessages);
+  }
+
+  return messages;
 }
 
 function buildRecentInboundSearchQuery({
