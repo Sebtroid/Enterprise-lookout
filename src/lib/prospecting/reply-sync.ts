@@ -35,7 +35,8 @@ export type ReplyMatchReason =
   | "bounce_subject"
   | "contact_email_subject"
   | "contact_email_recent"
-  | "contact_domain_subject";
+  | "contact_domain_subject"
+  | "known_contact_email";
 
 export type ReplyMatch = {
   message: SentMessageMatchInput;
@@ -54,6 +55,16 @@ export type ReplySyncScope =
   | { kind: "organizations"; organizations: string[] };
 
 export const REPLY_SYNC_OUTBOUND_STATUSES = ["sent", "approved"] as const;
+
+export type ReplyContactMatchInput = {
+  campaignId: string;
+  companyId: string;
+  contactId: string;
+  contactEmail: string;
+  contactName: string;
+  senderId: string;
+  senderEmail: string;
+};
 
 export type PreparedInboundReply = {
   campaignId: string;
@@ -219,6 +230,32 @@ export function matchInboundReply(
   }
 
   return null;
+}
+
+export function matchInboundReplyToKnownContact(
+  candidate: GmailReplyCandidate,
+  contacts: ReplyContactMatchInput[],
+): ReplyMatch | null {
+  if (isBounceReply(candidate)) return null;
+
+  const fromEmail = normalizeEmail(candidate.fromEmail);
+  const contact = contacts.find(
+    (item) => normalizeEmail(item.contactEmail) === fromEmail,
+  );
+
+  if (!contact) return null;
+
+  return {
+    message: {
+      ...contact,
+      id: `gmail-contact:${candidate.gmailMessageId}`,
+      subject: candidate.subject,
+      sentAt: candidate.receivedAt,
+      gmailThreadId: candidate.gmailThreadId,
+    },
+    reason: "known_contact_email",
+    confidence: 0.82,
+  };
 }
 
 export function classifyInboundReply(body: string): AppReply["classification"] {

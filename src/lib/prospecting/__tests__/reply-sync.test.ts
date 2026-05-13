@@ -6,12 +6,14 @@ import {
   classifyInboundReply,
   isBounceReply,
   matchInboundReply,
+  matchInboundReplyToKnownContact,
   normalizeEmailSubject,
   prepareInboundReplyRecord,
   resolveReplySyncScope,
   shouldSyncOutboundForReplies,
   shouldIngestReply,
   type GmailReplyCandidate,
+  type ReplyContactMatchInput,
   type SentMessageMatchInput,
 } from "../reply-sync";
 
@@ -47,6 +49,16 @@ const bounceCandidate: GmailReplyCandidate = {
   subject: "Delivery Status Notification (Failure)",
   body: "Address not found alianzas@empresa.cl 550 5.1.1",
   receivedAt: "2026-05-02T15:05:00.000Z",
+};
+
+const contactMatch: ReplyContactMatchInput = {
+  campaignId: "pastoral-invierno-2026",
+  companyId: "company-1",
+  contactId: "contact-1",
+  contactEmail: "alianzas@empresa.cl",
+  contactName: "Francisca Morales",
+  senderId: "sender-1",
+  senderEmail: "sawitting@miuandes.cl",
 };
 
 describe("reply sync", () => {
@@ -200,5 +212,23 @@ describe("reply sync", () => {
         status: "needs_review",
       }),
     ).toBe(false);
+  });
+
+  it("matches an inbound Gmail reply directly to a known project contact", () => {
+    const match = matchInboundReplyToKnownContact(candidate, [
+      contactMatch,
+      { ...contactMatch, contactId: "contact-2", contactEmail: "otra@empresa.cl" },
+    ]);
+
+    expect(match).toMatchObject({
+      message: {
+        id: "gmail-contact:gmail-reply-1",
+        campaignId: "pastoral-invierno-2026",
+        companyId: "company-1",
+        contactId: "contact-1",
+      },
+      reason: "known_contact_email",
+      confidence: 0.82,
+    });
   });
 });

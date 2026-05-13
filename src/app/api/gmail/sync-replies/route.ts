@@ -7,11 +7,13 @@ import { decryptToken, encryptToken } from "@/lib/gmail/token-crypto";
 import {
   buildGmailReplySearchQuery,
   matchInboundReply,
+  matchInboundReplyToKnownContact,
   prepareInboundReplyRecord,
   REPLY_SYNC_OUTBOUND_STATUSES,
   resolveReplySyncScope,
   shouldIngestReply,
   type GmailReplyCandidate,
+  type ReplyContactMatchInput,
   type ReplySyncScope,
   type SentMessageMatchInput,
 } from "@/lib/prospecting/reply-sync";
@@ -51,14 +53,16 @@ export async function POST(req: NextRequest) {
     let skipped = 0;
     let scanned = 0;
     let sentMessagesChecked = 0;
+    let contactCandidatesChecked = 0;
 
     for (const token of tokenRows) {
+      const senderEmail = String(token.user_email);
       const accessToken = await getValidAccessToken({
         accessToken: token.access_token,
         expiresAt: token.expires_at,
         refreshToken: token.refresh_token,
         sql,
-        userEmail: String(token.user_email),
+        userEmail: senderEmail,
       });
 
       if (!accessToken) {
@@ -70,10 +74,16 @@ export async function POST(req: NextRequest) {
         days,
         limit,
         scope,
-        senderEmail: String(token.user_email),
+        senderEmail,
         sql,
       });
       sentMessagesChecked += sentMessages.length;
+      const contactCandidates = await loadReplyContactCandidates({
+        scope,
+        senderEmail,
+        sql,
+      });
+      contactCandidatesChecked += contactCandidates.length;
       const existingGmailMessageIds = await loadExistingGmailMessageIds(sql);
 
       for (const sentMessage of sentMessages) {
@@ -110,6 +120,43 @@ export async function POST(req: NextRequest) {
           }
         }
       }
+
+      const recentInboundCandidates = await fetchRecentInboundReplyCandidates({
+        accessToken,
+        days,
+        limit,
+        senderEmail,
+      });
+      scanned += recentInboundCandidates.length;
+
+      for (const candidate of recentInboundCandidates) {
+        if (
+          !shouldIngestReply(candidate, {
+            existingGmailMessageIds,
+            senderEmail,
+          })
+        ) {
+          skipped += 1;
+          continue;
+        }
+
+        const match =
+          matchInboundReply(candidate, sentMessages) ??
+          matchInboundReplyToKnownContact(candidate, contactCandidates);
+        if (!match) {
+          skipped += 1;
+          continue;
+        }
+
+        matched += 1;
+        const result = await insertInboundReply({ candidate, match, sql });
+        if (result === "inserted") {
+          inserted += 1;
+          existingGmailMessageIds.add(candidate.gmailMessageId);
+        } else {
+          skipped += 1;
+        }
+      }
     }
 
     await sql`
@@ -126,6 +173,7 @@ export async function POST(req: NextRequest) {
         ${sql.json({ scope, days, limit })},
         ${sql.json({
           sentMessagesChecked,
+          contactCandidatesChecked,
           gmailMessagesScanned: scanned,
           scanned,
           matched,
@@ -138,6 +186,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       ok: true,
       sentMessagesChecked,
+      contactCandidatesChecked,
       gmailMessagesScanned: scanned,
       scanned,
       matched,
@@ -294,6 +343,49 @@ async function loadExistingGmailMessageIds(
   return new Set(rows.map((row) => String(row.gmail_message_id)));
 }
 
+async function loadReplyContactCandidates({
+  scope,
+  senderEmail,
+  sql,
+}: {
+  scope: string;
+  senderEmail: string;
+  sql: NonNullable<ReturnType<typeof getPostgresClient>>;
+}) {
+  const resolvedScope = await resolveSentMessagesScope({ scope, sql });
+  const scopeFilter = buildSentMessagesScopeFilter({ resolvedScope, sql });
+  const rows = await sql`
+    select distinct
+      c.id::text as campaign_id,
+      cc.company_id::text as company_id,
+      ct.id::text as contact_id,
+      ct.email::text as contact_email,
+      ct.full_name as contact_name,
+      sa.id::text as sender_id,
+      sa.email::text as sender_email
+    from campaigns c
+    join campaign_contacts cc on cc.campaign_id = c.id
+    join contacts ct on ct.id = cc.contact_id
+    join campaign_sender_accounts csa on csa.campaign_id = c.id
+    join sender_accounts sa on sa.id = csa.sender_account_id
+    where sa.email = ${senderEmail}
+      and sa.status = 'active'
+      and ct.email is not null
+      ${scopeFilter}
+    order by ct.email::text asc
+  `;
+
+  return rows.map((row) => ({
+    campaignId: String(row.campaign_id),
+    companyId: String(row.company_id),
+    contactId: String(row.contact_id),
+    contactEmail: String(row.contact_email),
+    contactName: String(row.contact_name ?? ""),
+    senderId: String(row.sender_id),
+    senderEmail: String(row.sender_email),
+  })) satisfies ReplyContactMatchInput[];
+}
+
 async function fetchReplyCandidatesForSentMessage({
   accessToken,
   sentMessage,
@@ -329,6 +421,51 @@ async function fetchReplyCandidatesForSentMessage({
   );
 
   return messages.map(normalizeGmailMessage).filter(isReplyCandidate);
+}
+
+async function fetchRecentInboundReplyCandidates({
+  accessToken,
+  days,
+  limit,
+  senderEmail,
+}: {
+  accessToken: string;
+  days: number;
+  limit: number;
+  senderEmail: string;
+}) {
+  const searchResponse = await gmailFetch(
+    accessToken,
+    `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=${Math.min(limit, 200)}&q=${encodeURIComponent(buildRecentInboundSearchQuery({ days, senderEmail }))}`,
+  );
+  const ids = Array.isArray(searchResponse.messages)
+    ? searchResponse.messages.map((message: { id?: string }) => message.id).filter(Boolean)
+    : [];
+  const messages = await Promise.all(
+    ids.map((id: string) =>
+      gmailFetch(
+        accessToken,
+        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=full`,
+      ),
+    ),
+  );
+
+  return messages.map(normalizeGmailMessage).filter(isReplyCandidate);
+}
+
+function buildRecentInboundSearchQuery({
+  days,
+  senderEmail,
+}: {
+  days: number;
+  senderEmail: string;
+}) {
+  return [
+    "in:anywhere",
+    `to:${senderEmail}`,
+    `-from:${senderEmail}`,
+    `newer_than:${days}d`,
+  ].join(" ");
 }
 
 async function gmailFetch(accessToken: string, url: string) {
@@ -449,20 +586,22 @@ async function insertInboundReply({
 
     if (!inserted[0]) return "duplicate" as const;
 
-    await tx`
-      update messages
-      set
-        status = 'sent',
-        sent_at = coalesce(sent_at, approved_at, created_at),
-        future_note = concat_ws(
-          ' ',
-          nullif(future_note, ''),
-          'Marcado enviado automaticamente al detectar respuesta en Gmail.'
-        ),
-        updated_at = now()
-      where id = ${match.message.id}
-        and status = 'approved'
-    `;
+    if (isUuid(match.message.id)) {
+      await tx`
+        update messages
+        set
+          status = 'sent',
+          sent_at = coalesce(sent_at, approved_at, created_at),
+          future_note = concat_ws(
+            ' ',
+            nullif(future_note, ''),
+            'Marcado enviado automaticamente al detectar respuesta en Gmail.'
+          ),
+          updated_at = now()
+        where id = ${match.message.id}
+          and status = 'approved'
+      `;
+    }
 
     if (record.classification === "bounced") {
       await handleBouncedContact({ record, sentMessage: match.message, tx });
@@ -837,6 +976,12 @@ async function getOrCreateThread({
 function extractEmail(value: string) {
   const match = value.match(/<([^>]+)>/);
   return (match?.[1] ?? value).trim().toLowerCase();
+}
+
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value,
+  );
 }
 
 async function refreshAccessToken(
