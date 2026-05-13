@@ -29,6 +29,7 @@ import {
   ensureDomChatThread,
   getDomCampaignContextBySlug,
 } from "@/lib/dom/repository";
+import { PROJECT_CONTEXT_REFINEMENT_TASK_TYPE } from "@/lib/dom/project-context";
 import { getExistingContextName } from "@/lib/prospecting/context";
 import { getPostgresClient } from "@/lib/supabase/postgres";
 
@@ -407,14 +408,17 @@ export async function rejectOutboundMessageAction(
     `;
 
     if (reason.data === "company_not_fit") {
+      const closedNegativeNote =
+        comment || "Empresa descartada por fit desde revisión de mail.";
+
       await tx`
         update campaign_contacts
         set
-          status = 'closed_negative',
+          status = 'closed_negative'::campaign_contact_status,
           future_notes = concat_ws(
             E'\n',
             future_notes,
-            ${comment || "Empresa descartada por fit desde revisión de mail."}
+            ${closedNegativeNote}::text
           ),
           updated_at = now()
         where campaign_id = ${message.campaign_id}
@@ -447,6 +451,7 @@ export async function rejectOutboundMessageAction(
       contactId: String(message.contact_id ?? ""),
       subject: String(message.subject ?? ""),
       originalBody: String(message.body ?? ""),
+      rememberForFuture,
     };
   });
 
@@ -487,6 +492,34 @@ export async function rejectOutboundMessageAction(
   }
 
   if (result.kind === "redraft_requested" && result.campaign_slug) {
+    const taskDescription = `Redactar nueva versión del mail rechazado para ${result.subject}.`;
+    const taskContext = {
+      source: "outbound_rejection",
+      task_type: "redraft_email",
+      requested_action: "draft_needed",
+      redraft_target: "outbound_review_redrafts",
+      source_message_id: messageId,
+      message_id: messageId,
+      company_id: result.companyId,
+      contact_id: result.contactId,
+      reason: reason.data,
+      feedback: comment,
+      remember_for_future: result.rememberForFuture,
+      subject: result.subject,
+      original_body: result.originalBody,
+      instructions: [
+        "Crear un nuevo borrador en messages con status needs_review.",
+        "No modificar ni enviar el mail rechazado original.",
+        "La action create_draft debe incluir source_message_id para sacar el original de Redactando nueva version.",
+      ],
+    };
+    const taskId = await createVisibleDomTaskForCampaign({
+      campaignId: result.campaignId,
+      campaignSlug: String(result.campaign_slug),
+      description: taskDescription,
+      context: taskContext,
+    });
+
     await sendAgentEvent({
       event: "mail_rejected",
       campaignId: result.campaignId,
@@ -503,20 +536,26 @@ export async function rejectOutboundMessageAction(
       source: "outbound_review",
     });
     await sendAgentEvent({
-      event: "draft_needed",
+      event: "dom_task_created",
       campaignId: result.campaignId,
       companyId: result.companyId,
       contactId: result.contactId,
       messageId,
       data: {
+        task_id: taskId,
+        task_type: "redraft_email",
+        description: taskDescription,
         source_message_id: messageId,
         source: "outbound_rejection",
+        requested_action: "draft_needed",
         reason: reason.data,
         feedback: comment,
-        remember_for_future: rememberForFuture,
+        remember_for_future: result.rememberForFuture,
         subject: result.subject,
         original_body: result.originalBody,
         redraft_target: "outbound_review_redrafts",
+        company_id: result.companyId,
+        contact_id: result.contactId,
       },
       priority: "high",
       source: "outbound_review",
@@ -1421,6 +1460,10 @@ export async function createProjectAction(
   const description = readFormString(formData, "description");
   const valueProposition = readFormString(formData, "valueProposition");
   const startsOn = nullIfEmpty(readFormString(formData, "startsOn"));
+  const requestContextRefinement = readFormBoolean(
+    formData,
+    "requestContextRefinement",
+  );
   const senderEmail = normalizeEmail(
     readFormString(formData, "senderEmail") || "sawitting@miuandes.cl",
   );
@@ -1547,9 +1590,28 @@ export async function createProjectAction(
     priority: "normal",
     source: "project_form",
   });
+
+  if (requestContextRefinement) {
+    await createProjectContextRefinementTask({
+      campaignId: result.id,
+      campaignSlug: result.slug,
+      source: "project_form",
+      project: {
+        name,
+        organization,
+        description,
+        valueProposition,
+        startsOn,
+        endsOn: null,
+      },
+    });
+  }
+
   return {
     ok: true,
-    message: `Proyecto creado. Entra a /campaigns/${result.slug} para cargar empresas.`,
+    message: requestContextRefinement
+      ? `Proyecto creado. También dejé una tarea para que la IA ordene el contexto.`
+      : `Proyecto creado. Entra a /campaigns/${result.slug} para cargar empresas.`,
   };
 }
 
@@ -1567,6 +1629,10 @@ export async function updateProjectAction(
   const valueProposition = readFormString(formData, "valueProposition");
   const startsOn = nullIfEmpty(readFormString(formData, "startsOn"));
   const endsOn = nullIfEmpty(readFormString(formData, "endsOn"));
+  const requestContextRefinement = readFormBoolean(
+    formData,
+    "requestContextRefinement",
+  );
   const status = projectStatusSchema.safeParse(
     readFormString(formData, "status") || "active",
   );
@@ -1625,9 +1691,213 @@ export async function updateProjectAction(
     source: "project_edit_form",
   });
 
+  if (requestContextRefinement) {
+    await createProjectContextRefinementTask({
+      campaignId: String(campaign.id),
+      campaignSlug: String(campaign.slug),
+      source: "project_edit_form",
+      project: {
+        name,
+        organization,
+        description,
+        valueProposition,
+        startsOn,
+        endsOn,
+      },
+    });
+  }
+
   return {
     ok: true,
-    message: "Proyecto actualizado. Dom usará este contexto en próximas tareas.",
+    message: requestContextRefinement
+      ? "Proyecto actualizado. También dejé una tarea para que la IA proponga una versión ordenada."
+      : "Proyecto actualizado. Dom usará este contexto en próximas tareas.",
+  };
+}
+
+export async function applyProjectContextSuggestionAction(
+  _previousState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const sql = getPostgresClient();
+  if (!sql) return { ok: false, message: initialError };
+
+  const taskId = readFormString(formData, "taskId");
+  const campaignSlug = readFormString(formData, "campaignSlug");
+  const name = nullIfEmpty(readFormString(formData, "name"));
+  const rawOrganization = nullIfEmpty(readFormString(formData, "organization"));
+  const description = nullIfEmpty(readFormString(formData, "description"));
+  const valueProposition = nullIfEmpty(readFormString(formData, "valueProposition"));
+
+  if (!taskId || !campaignSlug || (!description && !valueProposition)) {
+    return {
+      ok: false,
+      message: "Falta la propuesta estructurada para aplicar el contexto.",
+    };
+  }
+
+  let organization = rawOrganization;
+  if (rawOrganization) {
+    const existingContextRows = await sql`
+      select distinct organization
+      from campaigns
+      where nullif(trim(organization), '') is not null
+      order by organization asc
+    `;
+    organization = getExistingContextName(
+      rawOrganization,
+      existingContextRows.map((row) => ({ name: String(row.organization) })),
+    );
+  }
+
+  const rows = await sql`
+    update campaigns c
+    set
+      name = coalesce(${name}, c.name),
+      organization = coalesce(${organization}, c.organization),
+      description = coalesce(${description}, c.description),
+      value_proposition = coalesce(${valueProposition}, c.value_proposition),
+      updated_at = now()
+    from dom_tasks dt
+    where c.slug = ${campaignSlug}
+      and dt.id = ${taskId}
+      and dt.campaign_id = c.id
+    returning c.id::text as id, c.slug, c.name, c.organization, c.description, c.value_proposition
+  `;
+
+  const campaign = rows[0];
+  if (!campaign) {
+    return { ok: false, message: "No encontré esa propuesta para este proyecto." };
+  }
+
+  await sql`
+    update dom_tasks
+    set
+      progress_message = 'Propuesta de contexto aplicada al proyecto.',
+      context = coalesce(context, '{}'::jsonb) || ${sql.json({
+        project_context_review: {
+          status: "accepted",
+          applied_at: new Date().toISOString(),
+          applied_fields: {
+            name: Boolean(name),
+            organization: Boolean(organization),
+            description: Boolean(description),
+            value_proposition: Boolean(valueProposition),
+          },
+        },
+      })}::jsonb,
+      updated_at = now()
+    where id = ${taskId}
+  `;
+
+  revalidateProspectingPaths(campaignSlug);
+  await sendAgentEvent({
+    event: "campaign_updated",
+    campaignId: String(campaign.id),
+    data: {
+      slug: campaign.slug,
+      name: campaign.name,
+      organization: campaign.organization,
+      description: campaign.description,
+      value_proposition: campaign.value_proposition,
+      source: "project_context_review",
+      task_id: taskId,
+    },
+    priority: "normal",
+    source: "project_context_review",
+  });
+
+  return {
+    ok: true,
+    message: "Contexto aplicado. Dom/GPT usará esta versión en futuras tareas.",
+  };
+}
+
+export async function requestProjectContextRevisionAction(
+  _previousState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const sql = getPostgresClient();
+  if (!sql) return { ok: false, message: initialError };
+
+  const taskId = readFormString(formData, "taskId");
+  const campaignSlug = readFormString(formData, "campaignSlug");
+  const feedback = readFormString(formData, "feedback");
+
+  if (!taskId || !campaignSlug || feedback.length < 4) {
+    return {
+      ok: false,
+      message: "Escribe feedback concreto para pedir otra versión.",
+    };
+  }
+
+  const rows = await sql`
+    select
+      c.id::text as campaign_id,
+      c.slug,
+      c.name,
+      c.organization,
+      c.description,
+      c.value_proposition,
+      c.starts_on,
+      c.ends_on,
+      dt.result
+    from dom_tasks dt
+    join campaigns c on c.id = dt.campaign_id
+    where dt.id = ${taskId}
+      and c.slug = ${campaignSlug}
+    limit 1
+  `;
+
+  const row = rows[0];
+  if (!row) {
+    return { ok: false, message: "No encontré esa propuesta para este proyecto." };
+  }
+
+  await sql`
+    update dom_tasks
+    set
+      progress_message = 'Se pidió una nueva versión con feedback.',
+      context = coalesce(context, '{}'::jsonb) || ${sql.json({
+        project_context_review: {
+          status: "revision_requested",
+          feedback,
+          requested_at: new Date().toISOString(),
+        },
+      })}::jsonb,
+      updated_at = now()
+    where id = ${taskId}
+  `;
+
+  const revisionTaskId = await createProjectContextRefinementTask({
+    campaignId: String(row.campaign_id),
+    campaignSlug: String(row.slug),
+    source: "project_context_feedback",
+    feedback,
+    previousTaskId: taskId,
+    previousProposal: nullableRowString(row.result),
+    project: {
+      name: String(row.name),
+      organization: String(row.organization),
+      description: nullableRowString(row.description) ?? "",
+      valueProposition: nullableRowString(row.value_proposition) ?? "",
+      startsOn: nullableRowString(row.starts_on),
+      endsOn: nullableRowString(row.ends_on),
+    },
+  });
+
+  if (!revisionTaskId) {
+    return {
+      ok: false,
+      message: "No pude crear la nueva tarea de contexto. Intenta de nuevo.",
+    };
+  }
+
+  revalidateProspectingPaths(campaignSlug);
+
+  return {
+    ok: true,
+    message: "Listo. Se creó una nueva tarea para rehacer la propuesta con tu feedback.",
   };
 }
 
@@ -2428,6 +2698,102 @@ export async function applyImportAction(
 
 function readFormString(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();
+}
+
+function readFormBoolean(formData: FormData, key: string) {
+  const value = formData.get(key);
+  return value === "on" || value === "true" || value === "1";
+}
+
+async function createProjectContextRefinementTask({
+  campaignId,
+  campaignSlug,
+  feedback,
+  previousProposal,
+  previousTaskId,
+  project,
+  source,
+}: {
+  campaignId: string;
+  campaignSlug: string;
+  feedback?: string;
+  previousProposal?: string | null;
+  previousTaskId?: string;
+  project: {
+    name: string;
+    organization: string;
+    description: string;
+    valueProposition: string;
+    startsOn: string | null;
+    endsOn: string | null;
+  };
+  source: string;
+}) {
+  const description = feedback
+    ? `Reordenar contexto del proyecto "${project.name}" con feedback del usuario.`
+    : `Ordenar contexto del proyecto "${project.name}" sin inventar informacion.`;
+  const context = {
+    source,
+    task_type: PROJECT_CONTEXT_REFINEMENT_TASK_TYPE,
+    requested_action: "refine_project_context",
+    feedback: feedback ?? null,
+    previous_task_id: previousTaskId ?? null,
+    previous_proposal: previousProposal ?? null,
+    raw_project: {
+      name: project.name,
+      organization: project.organization,
+      description: project.description,
+      value_proposition: project.valueProposition,
+      starts_on: project.startsOn,
+      ends_on: project.endsOn,
+    },
+    guardrails: [
+      "Ordenar, sintetizar y profesionalizar solo con la informacion entregada.",
+      "No inventar fechas, cifras, beneficios, marcas, compromisos ni necesidades.",
+      "Si falta informacion importante, incluirla en missing_info en vez de inventarla.",
+      "Mantener un tono claro, concreto y usable para investigacion y redaccion de mails.",
+    ],
+    expected_output: {
+      format: "json",
+      fields: {
+        name: "string opcional, solo si mejora claridad sin cambiar el slug",
+        organization: "string opcional",
+        description: "string profesional para Que es el proyecto",
+        value_proposition: "string profesional para Que se necesita conseguir",
+        missing_info: "string[] con dudas o informacion faltante",
+        notes: "string breve explicando cambios de orden/redaccion",
+      },
+    },
+  };
+
+  const taskId = await createVisibleDomTaskForCampaign({
+    campaignId,
+    campaignSlug,
+    description,
+    context,
+  });
+
+  if (!taskId) return "";
+
+  await sendAgentEvent({
+    event: "dom_task_created",
+    campaignId,
+    data: {
+      task_id: taskId,
+      task_type: PROJECT_CONTEXT_REFINEMENT_TASK_TYPE,
+      description,
+      source,
+      project: context.raw_project,
+      feedback: feedback ?? null,
+      previous_task_id: previousTaskId ?? null,
+      expected_output: context.expected_output,
+      guardrails: context.guardrails,
+    },
+    priority: "normal",
+    source,
+  });
+
+  return taskId;
 }
 
 async function createVisibleDomTaskForCampaign({

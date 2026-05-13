@@ -345,6 +345,50 @@ async function createDraftFromDomAction({
   const sourceMessageId = nullableText(action.source_message_id);
   if (!companyId || !subject || !body) return;
 
+  if (sourceMessageId) {
+    const sentRows = await tx`
+      select sent.id::text as sent_message_id
+      from messages source
+      join messages sent on sent.campaign_id = source.campaign_id
+        and sent.company_id is not distinct from source.company_id
+        and sent.contact_id is not distinct from source.contact_id
+        and sent.status = 'sent'
+      where source.id = ${sourceMessageId}
+        and source.campaign_id = ${campaign.dbId}
+        and source.status = 'rejected'
+      order by sent.sent_at desc nulls last, sent.created_at desc
+      limit 1
+    `;
+
+    const sentMessageId = nullableText(sentRows[0]?.sent_message_id);
+    if (sentMessageId) {
+      await tx`
+        update messages
+        set
+          future_note = case
+            when coalesce(future_note, '') like '%Redacción cerrada: ya existe un mail enviado para este contacto.%'
+              then future_note
+            else concat_ws(
+              ' ',
+              nullif(
+                replace(
+                  coalesce(future_note, ''),
+                  'Esperando nueva redacción de Dom.',
+                  'Redacción cerrada: ya existe un mail enviado para este contacto.'
+                ),
+                ''
+              ),
+              ${`Mail enviado registrado: ${sentMessageId}.`}
+            )
+          end,
+          updated_at = now()
+        where id = ${sourceMessageId}
+          and status = 'rejected'
+      `;
+      return;
+    }
+  }
+
   const contactRows = action.contact_id
     ? await tx`
         select id

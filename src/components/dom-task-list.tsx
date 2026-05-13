@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import {
   Bot,
   Check,
+  ClipboardCheck,
+  FileText,
   RotateCcw,
   Search,
   Star,
@@ -18,10 +20,17 @@ import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  applyProjectContextSuggestionAction,
+  requestProjectContextRevisionAction,
   reviewDomCandidateAction,
   type ActionState,
 } from "@/features/prospecting/actions";
 import { shouldReplaceDomCollection } from "@/lib/dom/chat-state";
+import {
+  getProjectContextProposalFromTask,
+  isProjectContextRefinementTask,
+  type DomProjectContextProposal,
+} from "@/lib/dom/project-context";
 import { isActiveDomTaskStatus } from "@/lib/dom/status";
 import type {
   DomCompanyCandidate,
@@ -49,6 +58,7 @@ type DomTaskSectionId =
   | "all"
   | "company_search"
   | "mail"
+  | "project_context"
   | "research"
   | "other";
 
@@ -56,6 +66,7 @@ const TASK_SECTIONS: Array<{ id: DomTaskSectionId; label: string }> = [
   { id: "all", label: "Todas" },
   { id: "company_search", label: "Búsqueda de empresas" },
   { id: "mail", label: "Mails" },
+  { id: "project_context", label: "Contexto" },
   { id: "research", label: "Investigación" },
   { id: "other", label: "Otras" },
 ];
@@ -74,9 +85,14 @@ export function DomTaskList({
   const [candidateMessages, setCandidateMessages] = useState<
     Record<string, ActionState>
   >({});
+  const [projectContextMessages, setProjectContextMessages] = useState<
+    Record<string, ActionState>
+  >({});
   const [pendingCandidateIds, setPendingCandidateIds] = useState<Set<string>>(
     () => new Set(),
   );
+  const [pendingProjectContextTaskIds, setPendingProjectContextTaskIds] =
+    useState<Set<string>>(() => new Set());
   const [selectedSection, setSelectedSection] =
     useState<DomTaskSectionId>("all");
   const [tasks, setTasks] = useState(initialTasks);
@@ -168,6 +184,48 @@ export function DomTaskList({
     });
   }
 
+  async function handleProjectContextApply(taskId: string, formData: FormData) {
+    await runProjectContextAction(
+      taskId,
+      formData,
+      applyProjectContextSuggestionAction,
+    );
+  }
+
+  async function handleProjectContextRevision(taskId: string, formData: FormData) {
+    await runProjectContextAction(
+      taskId,
+      formData,
+      requestProjectContextRevisionAction,
+    );
+  }
+
+  async function runProjectContextAction(
+    taskId: string,
+    formData: FormData,
+    action: (
+      previousState: ActionState,
+      formData: FormData,
+    ) => Promise<ActionState>,
+  ) {
+    setPendingProjectContextTaskIds((current) => new Set(current).add(taskId));
+    setProjectContextMessages((current) => {
+      const next = { ...current };
+      delete next[taskId];
+      return next;
+    });
+
+    const result = await action({ ok: false, message: "" }, formData);
+    setProjectContextMessages((current) => ({ ...current, [taskId]: result }));
+    if (result.ok) router.refresh();
+
+    setPendingProjectContextTaskIds((current) => {
+      const next = new Set(current);
+      next.delete(taskId);
+      return next;
+    });
+  }
+
   return (
     <section className="min-w-0 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
       <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
@@ -224,7 +282,11 @@ export function DomTaskList({
             candidates={candidatesByTask.get(task.id) ?? []}
             index={index}
             onReviewCandidate={handleCandidateReview}
+            onProjectContextApply={handleProjectContextApply}
+            onProjectContextRevision={handleProjectContextRevision}
             pendingCandidateIds={pendingCandidateIds}
+            pendingProjectContextTaskIds={pendingProjectContextTaskIds}
+            projectContextMessage={projectContextMessages[task.id]}
             task={task}
           />
         ))}
@@ -259,7 +321,11 @@ function DomTaskItem({
   candidates,
   index,
   onReviewCandidate,
+  onProjectContextApply,
+  onProjectContextRevision,
   pendingCandidateIds,
+  pendingProjectContextTaskIds,
+  projectContextMessage,
   task,
 }: {
   candidateMessages: Record<string, ActionState>;
@@ -270,10 +336,15 @@ function DomTaskItem({
     intent: CandidateReviewIntent,
     formData: FormData,
   ) => Promise<void>;
+  onProjectContextApply: (taskId: string, formData: FormData) => Promise<void>;
+  onProjectContextRevision: (taskId: string, formData: FormData) => Promise<void>;
   pendingCandidateIds: Set<string>;
+  pendingProjectContextTaskIds: Set<string>;
+  projectContextMessage?: ActionState;
   task: DomTask;
 }) {
   const [reviewOpen, setReviewOpen] = useState(false);
+  const [projectContextReviewOpen, setProjectContextReviewOpen] = useState(false);
   const visual = TASK_STATUS_VISUAL[task.status];
   const percent = getTaskPercent(task);
   const progressText =
@@ -282,6 +353,8 @@ function DomTaskItem({
     (candidate) => candidate.status === "pending",
   );
   const reviewedCandidates = candidates.length - pendingCandidates.length;
+  const projectContextProposal = getProjectContextProposalFromTask(task);
+  const projectContextPending = pendingProjectContextTaskIds.has(task.id);
 
   return (
     <article
@@ -342,6 +415,21 @@ function DomTaskItem({
               ) : null}
             </div>
           ) : null}
+          {projectContextProposal ? (
+            <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-3">
+              <Badge variant="outline">Propuesta de contexto</Badge>
+              <span className="text-xs text-muted-foreground">
+                Revísala antes de cambiar el proyecto.
+              </span>
+              <Button
+                size="sm"
+                type="button"
+                onClick={() => setProjectContextReviewOpen((current) => !current)}
+              >
+                Revisar propuesta
+              </Button>
+            </div>
+          ) : null}
           <div
             className="mt-2 text-xs text-muted-foreground"
             suppressHydrationWarning
@@ -354,6 +442,16 @@ function DomTaskItem({
               candidates={pendingCandidates}
               onReviewCandidate={onReviewCandidate}
               pendingCandidateIds={pendingCandidateIds}
+            />
+          ) : null}
+          {projectContextReviewOpen && projectContextProposal ? (
+            <ProjectContextReviewPanel
+              message={projectContextMessage}
+              onApply={onProjectContextApply}
+              onRequestRevision={onProjectContextRevision}
+              pending={projectContextPending}
+              proposal={projectContextProposal}
+              task={task}
             />
           ) : null}
         </div>
@@ -414,6 +512,150 @@ function CandidateReviewPanel({
           pending={pendingCandidateIds.has(candidate.id)}
         />
       ))}
+    </div>
+  );
+}
+
+function ProjectContextReviewPanel({
+  message,
+  onApply,
+  onRequestRevision,
+  pending,
+  proposal,
+  task,
+}: {
+  message?: ActionState;
+  onApply: (taskId: string, formData: FormData) => Promise<void>;
+  onRequestRevision: (taskId: string, formData: FormData) => Promise<void>;
+  pending: boolean;
+  proposal: DomProjectContextProposal;
+  task: DomTask;
+}) {
+  const campaignSlug = task.campaignId ?? "";
+
+  function handleApplySubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    void onApply(task.id, new FormData(event.currentTarget));
+  }
+
+  function handleRevisionSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    void onRequestRevision(task.id, new FormData(event.currentTarget));
+  }
+
+  return (
+    <div className="mt-4 rounded-lg border border-border bg-background p-4">
+      <div className="flex items-start gap-2">
+        <FileText className="mt-0.5 size-4 text-muted-foreground" />
+        <div>
+          <div className="text-sm font-semibold text-foreground">
+            Propuesta para ordenar el proyecto
+          </div>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Puedes editar antes de aplicar, o pedir otra versión con feedback.
+          </p>
+        </div>
+      </div>
+
+      <form className="mt-4 space-y-3" onSubmit={handleApplySubmit}>
+        <input name="taskId" type="hidden" value={task.id} />
+        <input name="campaignSlug" type="hidden" value={campaignSlug} />
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="space-y-1 text-sm">
+            <span className="font-medium">Nombre</span>
+            <Input name="name" defaultValue={proposal.name ?? ""} />
+          </label>
+          <label className="space-y-1 text-sm">
+            <span className="font-medium">Organización/contexto</span>
+            <Input
+              name="organization"
+              defaultValue={proposal.organization ?? ""}
+            />
+          </label>
+        </div>
+
+        <label className="space-y-1 text-sm">
+          <span className="font-medium">Qué es el proyecto</span>
+          <Textarea
+            className="min-h-28"
+            name="description"
+            defaultValue={proposal.description ?? ""}
+          />
+        </label>
+
+        <label className="space-y-1 text-sm">
+          <span className="font-medium">Qué se necesita conseguir</span>
+          <Textarea
+            className="min-h-24"
+            name="valueProposition"
+            defaultValue={proposal.valueProposition ?? ""}
+          />
+        </label>
+
+        {proposal.notes ? (
+          <div className="rounded-md border border-border bg-muted/25 px-3 py-2 text-sm text-muted-foreground">
+            <span className="font-medium text-foreground">Notas: </span>
+            {proposal.notes}
+          </div>
+        ) : null}
+
+        {proposal.missingInfo.length ? (
+          <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            <div className="font-medium">Información que la IA cree que falta</div>
+            <ul className="mt-1 list-disc space-y-1 pl-4">
+              {proposal.missingInfo.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+
+        <div className="flex justify-end">
+          <Button disabled={pending || !campaignSlug} type="submit">
+            <ClipboardCheck className="size-4" />
+            {pending ? "Aplicando" : "Aplicar al proyecto"}
+          </Button>
+        </div>
+      </form>
+
+      <form
+        className="mt-4 border-t border-border pt-4"
+        onSubmit={handleRevisionSubmit}
+      >
+        <input name="taskId" type="hidden" value={task.id} />
+        <input name="campaignSlug" type="hidden" value={campaignSlug} />
+        <label className="space-y-1 text-sm">
+          <span className="font-medium">Feedback para otra versión</span>
+          <Textarea
+            className="min-h-20"
+            name="feedback"
+            placeholder="Ej: más corto, más enfocado en premios en especie, menos formal..."
+          />
+        </label>
+        <div className="mt-3 flex justify-end">
+          <Button
+            disabled={pending || !campaignSlug}
+            type="submit"
+            variant="outline"
+          >
+            <RotateCcw className="size-4" />
+            {pending ? "Creando tarea" : "Pedir nueva versión"}
+          </Button>
+        </div>
+      </form>
+
+      {message?.message ? (
+        <div
+          className={
+            message.ok
+              ? "mt-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800"
+              : "mt-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800"
+          }
+        >
+          {message.message}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -702,6 +944,8 @@ function getDomTaskSection(task: DomTask): Exclude<DomTaskSectionId, "all"> {
     task.result,
     task.context,
   ]);
+
+  if (isProjectContextRefinementTask(task)) return "project_context";
 
   if (
     description.includes("contacto") ||

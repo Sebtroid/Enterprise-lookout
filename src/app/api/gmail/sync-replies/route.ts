@@ -8,8 +8,10 @@ import {
   buildGmailReplySearchQuery,
   matchInboundReply,
   prepareInboundReplyRecord,
+  resolveReplySyncScope,
   shouldIngestReply,
   type GmailReplyCandidate,
+  type ReplySyncScope,
   type SentMessageMatchInput,
 } from "@/lib/prospecting/reply-sync";
 import { getPostgresClient } from "@/lib/supabase/postgres";
@@ -186,7 +188,8 @@ async function loadSentMessages({
   senderEmail: string;
   sql: NonNullable<ReturnType<typeof getPostgresClient>>;
 }) {
-  const scopeFilter = scope === "all" ? sql`` : sql`and c.slug = ${scope}`;
+  const resolvedScope = await resolveSentMessagesScope({ scope, sql });
+  const scopeFilter = buildSentMessagesScopeFilter({ resolvedScope, sql });
   const rows = await sql`
     select
       m.id::text as id,
@@ -228,6 +231,44 @@ async function loadSentMessages({
     sentAt: String(row.sent_at),
     gmailThreadId: row.gmail_thread_id ? String(row.gmail_thread_id) : null,
   })) satisfies SentMessageMatchInput[];
+}
+
+function buildSentMessagesScopeFilter({
+  resolvedScope,
+  sql,
+}: {
+  resolvedScope: ReplySyncScope;
+  sql: NonNullable<ReturnType<typeof getPostgresClient>>;
+}) {
+  if (resolvedScope.kind === "all") return sql``;
+  if (resolvedScope.kind === "campaign") return sql`and c.slug = ${resolvedScope.slug}`;
+  if (!resolvedScope.organizations.length) return sql`and false`;
+
+  return sql`and c.organization = any(${resolvedScope.organizations}::text[])`;
+}
+
+async function resolveSentMessagesScope({
+  scope,
+  sql,
+}: {
+  scope: string;
+  sql: NonNullable<ReturnType<typeof getPostgresClient>>;
+}): Promise<ReplySyncScope> {
+  const initialScope = resolveReplySyncScope(scope);
+  if (initialScope.kind !== "organizations") return initialScope;
+
+  const campaignRows = await sql`
+    select slug::text as slug, organization::text as organization
+    from campaigns
+  `;
+
+  return resolveReplySyncScope(
+    scope,
+    campaignRows.map((row) => ({
+      organization: String(row.organization ?? ""),
+      slug: String(row.slug ?? ""),
+    })),
+  );
 }
 
 async function loadExistingGmailMessageIds(

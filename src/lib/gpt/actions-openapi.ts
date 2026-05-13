@@ -6,6 +6,7 @@ type OpenApiOperation = {
   requestBody?: Record<string, unknown>;
   responses: Record<string, unknown>;
   security?: Array<Record<string, string[]>>;
+  "x-openai-isConsequential"?: boolean;
 };
 
 export type GptActionsOpenApiSchema = {
@@ -44,6 +45,7 @@ export function buildGptActionsOpenApiSchema(
           summary: "List campaigns available to the GPT.",
           responses: { "200": okResponse },
           security,
+          "x-openai-isConsequential": false,
         },
       },
       "/api/gpt/campaigns/{campaignId}/workspace": {
@@ -55,6 +57,7 @@ export function buildGptActionsOpenApiSchema(
           ],
           responses: { "200": okResponse },
           security,
+          "x-openai-isConsequential": false,
         },
       },
       "/api/gpt/jobs/create": {
@@ -67,7 +70,7 @@ export function buildGptActionsOpenApiSchema(
             properties: {
               campaign_id: stringSchema("Campaign UUID or slug."),
               task_type: stringSchema(
-                "Workflow type, e.g. company_research, first_email, redraft_email, contact_research, reply_triage.",
+                "Workflow type, e.g. company_research, first_email, redraft_email, contact_research, reply_triage, project_context_refinement.",
               ),
               description: stringSchema("Clear user-facing task description."),
               instructions: stringSchema("Additional user instructions or feedback."),
@@ -82,6 +85,7 @@ export function buildGptActionsOpenApiSchema(
           }),
           responses: { "200": okResponse },
           security,
+          "x-openai-isConsequential": false,
         },
       },
       "/api/gpt/jobs/claim": {
@@ -108,6 +112,7 @@ export function buildGptActionsOpenApiSchema(
           }),
           responses: { "200": okResponse },
           security,
+          "x-openai-isConsequential": false,
         },
       },
       "/api/gpt/jobs/{jobId}/context": {
@@ -117,12 +122,16 @@ export function buildGptActionsOpenApiSchema(
           parameters: [pathParam("jobId", "Task UUID.")],
           responses: { "200": okResponse },
           security,
+          "x-openai-isConsequential": false,
         },
       },
       "/api/gpt/jobs/{jobId}/progress": {
         post: {
           operationId: "updateGptJobProgress",
-          summary: "Report progress while the GPT is working.",
+          summary:
+            "Report user-visible progress before, during and after GPT work.",
+          description:
+            "Use this for every claimed job: first acknowledge work, then report research/drafting/review steps with Spanish messages and result previews when available.",
           parameters: [pathParam("jobId", "Task UUID.")],
           requestBody: jsonBody({
             type: "object",
@@ -147,6 +156,7 @@ export function buildGptActionsOpenApiSchema(
           }),
           responses: { "200": okResponse },
           security,
+          "x-openai-isConsequential": false,
         },
       },
       "/api/gpt/jobs/{jobId}/result": {
@@ -163,7 +173,8 @@ export function buildGptActionsOpenApiSchema(
                 default: "completed",
               },
               result: {
-                description: "Human-readable or structured result.",
+                description:
+                  "Human-readable or structured result. Prefer putting actions in the top-level actions field, not inside result.",
               },
               company_candidates: {
                 type: "array",
@@ -173,7 +184,7 @@ export function buildGptActionsOpenApiSchema(
               actions: {
                 type: "array",
                 description:
-                  "Optional Dom-compatible actions, e.g. create_draft or create_task.",
+                  "Top-level Dom-compatible actions, e.g. create_draft or create_task. Do not wrap these inside result.",
                 items: { type: "object" },
               },
               message: stringSchema("Optional chat-style response to store."),
@@ -181,6 +192,7 @@ export function buildGptActionsOpenApiSchema(
           }),
           responses: { "200": okResponse },
           security,
+          "x-openai-isConsequential": false,
         },
       },
       "/api/gpt/memory/rules": {
@@ -193,6 +205,7 @@ export function buildGptActionsOpenApiSchema(
           ],
           responses: { "200": okResponse },
           security,
+          "x-openai-isConsequential": false,
         },
         post: {
           operationId: "createMemoryRule",
@@ -217,6 +230,7 @@ export function buildGptActionsOpenApiSchema(
           }),
           responses: { "200": okResponse },
           security,
+          "x-openai-isConsequential": false,
         },
       },
     },

@@ -6,7 +6,9 @@ import { DomTaskList } from "@/components/dom-task-list";
 import type { DomCompanyCandidate, DomTask } from "@/lib/dom/types";
 
 const mocks = vi.hoisted(() => ({
+  applyProjectContextSuggestionAction: vi.fn(),
   refresh: vi.fn(),
+  requestProjectContextRevisionAction: vi.fn(),
   reviewDomCandidateAction: vi.fn(),
 }));
 
@@ -15,6 +17,8 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("@/features/prospecting/actions", () => ({
+  applyProjectContextSuggestionAction: mocks.applyProjectContextSuggestionAction,
+  requestProjectContextRevisionAction: mocks.requestProjectContextRevisionAction,
   reviewDomCandidateAction: mocks.reviewDomCandidateAction,
 }));
 
@@ -157,5 +161,85 @@ describe("DomTaskList", () => {
 
     expect(screen.getByText("Buscar empresas de hidratación")).toBeInTheDocument();
     expect(screen.queryByText("Redactar mail inicial para ÓBOLO Chocolate.")).not.toBeInTheDocument();
+  });
+
+  it("shows project context proposals and can request a revision", async () => {
+    mocks.requestProjectContextRevisionAction.mockResolvedValue({
+      ok: true,
+      message: "Nueva tarea creada.",
+    });
+
+    render(
+      <DomTaskList
+        initialCandidates={[]}
+        initialTasks={[
+          buildTask({
+            id: "55555555-5555-4555-8555-555555555555",
+            description: "Ordenar contexto del proyecto \"Liga\" sin inventar informacion.",
+            context: {
+              task_type: "project_context_refinement",
+              source: "project_form",
+            },
+            result: JSON.stringify({
+              project_context: {
+                description: "Liga universitaria de ingenieria con equipos y partidos.",
+                value_proposition: "Auspicios en hidratacion, comida y premios.",
+                missing_info: ["Confirmar fecha final"],
+                notes: "Se ordeno el texto por objetivo y necesidad.",
+              },
+            }),
+          }),
+        ]}
+        scope="dia-del-ingeniero"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Revisar propuesta" }));
+
+    expect(screen.getByDisplayValue(/Liga universitaria/i)).toBeInTheDocument();
+    expect(screen.getByText("Confirmar fecha final")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByPlaceholderText(/más corto/i), {
+      target: { value: "Hazlo mas ejecutivo y menos largo." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Pedir nueva versión" }));
+
+    await waitFor(() => {
+      expect(mocks.requestProjectContextRevisionAction).toHaveBeenCalled();
+    });
+    expect(mocks.refresh).toHaveBeenCalled();
+  });
+
+  it("applies a project context proposal", async () => {
+    mocks.applyProjectContextSuggestionAction.mockResolvedValue({
+      ok: true,
+      message: "Contexto aplicado.",
+    });
+
+    render(
+      <DomTaskList
+        initialCandidates={[]}
+        initialTasks={[
+          buildTask({
+            id: "66666666-6666-4666-8666-666666666666",
+            description: "Ordenar contexto del proyecto \"Liga\" sin inventar informacion.",
+            context: { task_type: "project_context_refinement" },
+            result: JSON.stringify({
+              description: "Proyecto ordenado.",
+              value_proposition: "Necesidad ordenada.",
+            }),
+          }),
+        ]}
+        scope="dia-del-ingeniero"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Revisar propuesta" }));
+    fireEvent.click(screen.getByRole("button", { name: "Aplicar al proyecto" }));
+
+    await waitFor(() => {
+      expect(mocks.applyProjectContextSuggestionAction).toHaveBeenCalled();
+    });
+    expect(mocks.refresh).toHaveBeenCalled();
   });
 });

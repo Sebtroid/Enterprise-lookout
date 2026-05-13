@@ -99,6 +99,21 @@ export function ProjectForm({ contexts = [] }: { contexts?: ProjectContext[] }) 
               />
             </Field>
 
+            <label className="flex items-start gap-2 rounded-lg border border-border bg-muted/25 px-3 py-2 text-sm">
+              <input
+                className="mt-1 size-4 accent-primary"
+                defaultChecked
+                name="requestContextRefinement"
+                type="checkbox"
+              />
+              <span>
+                <span className="font-medium">Pedir a la IA que ordene el contexto</span>
+                <span className="block text-muted-foreground">
+                  Crea una tarea revisable para mejorar la redacción sin inventar datos.
+                </span>
+              </span>
+            </label>
+
             <label className="space-y-1 text-sm">
               <span className="font-medium">Estado</span>
               <select
@@ -225,6 +240,20 @@ export function ProjectEditForm({
                 required
               />
             </Field>
+
+            <label className="flex items-start gap-2 rounded-lg border border-border bg-muted/25 px-3 py-2 text-sm">
+              <input
+                className="mt-1 size-4 accent-primary"
+                name="requestContextRefinement"
+                type="checkbox"
+              />
+              <span>
+                <span className="font-medium">Pedir a la IA que ordene este contexto</span>
+                <span className="block text-muted-foreground">
+                  Deja una propuesta revisable antes de cambiar el texto real.
+                </span>
+              </span>
+            </label>
 
             <label className="space-y-1 text-sm">
               <span className="font-medium">Estado</span>

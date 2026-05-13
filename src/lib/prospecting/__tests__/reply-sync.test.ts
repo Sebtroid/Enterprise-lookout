@@ -8,6 +8,7 @@ import {
   matchInboundReply,
   normalizeEmailSubject,
   prepareInboundReplyRecord,
+  resolveReplySyncScope,
   shouldIngestReply,
   type GmailReplyCandidate,
   type SentMessageMatchInput,
@@ -154,5 +155,18 @@ describe("reply sync", () => {
     expect(buildGmailReplySearchQuery(sentMessage)).not.toContain(
       "rfc822msgid:",
     );
+  });
+
+  it("resolves context scopes to the organizations that share that context", () => {
+    expect(
+      resolveReplySyncScope("context--pastoral-uc", [
+        { organization: "Pastoral UC", slug: "pastoral-invierno-2026" },
+        { organization: "Pastoral UC", slug: "pastoral-verano-2026" },
+        { organization: "Techo", slug: "techo-2026" },
+      ]),
+    ).toEqual({
+      kind: "organizations",
+      organizations: ["Pastoral UC"],
+    });
   });
 });

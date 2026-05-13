@@ -1,4 +1,9 @@
 import type { AppReply } from "./demo-data";
+import {
+  getContextSlugFromScope,
+  isContextScope,
+  slugifyContextName,
+} from "./context";
 
 export type GmailReplyCandidate = {
   gmailMessageId: string;
@@ -38,6 +43,16 @@ export type ReplyMatch = {
   confidence: number;
 };
 
+export type ReplySyncCampaignScopeInput = {
+  organization: string;
+  slug: string;
+};
+
+export type ReplySyncScope =
+  | { kind: "all" }
+  | { kind: "campaign"; slug: string }
+  | { kind: "organizations"; organizations: string[] };
+
 export type PreparedInboundReply = {
   campaignId: string;
   companyId: string;
@@ -65,6 +80,30 @@ export function normalizeEmailSubject(subject: string) {
     .replace(/[^\p{L}\p{N}]+/gu, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+export function resolveReplySyncScope(
+  scope: string,
+  campaigns: ReplySyncCampaignScopeInput[] = [],
+): ReplySyncScope {
+  if (scope === "all") return { kind: "all" };
+
+  if (!isContextScope(scope)) {
+    return { kind: "campaign", slug: scope };
+  }
+
+  const contextSlug = getContextSlugFromScope(scope);
+  const organizations = campaigns
+    .filter(
+      (campaign) => slugifyContextName(campaign.organization) === contextSlug,
+    )
+    .map((campaign) => campaign.organization)
+    .filter(Boolean);
+
+  return {
+    kind: "organizations",
+    organizations: Array.from(new Set(organizations)),
+  };
 }
 
 export function matchInboundReply(

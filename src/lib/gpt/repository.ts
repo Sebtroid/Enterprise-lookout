@@ -363,16 +363,18 @@ export async function updateGptJobProgress(jobId: string, input: GptProgressInpu
 
 export async function submitGptJobResult(jobId: string, input: GptResultInput) {
   const sql = requireSql();
-  const status = input.status ?? "completed";
+  const rawActions = extractGptResultActions(input);
+  const message = extractGptResultMessage(input);
+  const status = resolveGptResultStatus(input);
   const resultText = stringifyResult(input.result ?? input.message ?? null);
   const candidates = normalizeDomCompanyCandidates({
-    company_candidates: input.companyCandidates ?? [],
+    company_candidates: extractGptCompanyCandidates(input),
   });
   const completion = {
     source: "custom_gpt",
     result: input.result ?? null,
-    message: input.message ?? null,
-    actions: input.actions ?? [],
+    message,
+    actions: rawActions,
     completed_at: new Date().toISOString(),
   };
 
@@ -392,6 +394,7 @@ export async function submitGptJobResult(jobId: string, input: GptResultInput) {
         id::text as id,
         campaign_id::text as campaign_id,
         status::text as status,
+        context,
         updated_at
     `;
 
@@ -460,12 +463,16 @@ export async function submitGptJobResult(jobId: string, input: GptResultInput) {
 
   if (!result) return null;
 
-  if (result.task.campaign_id && (input.actions?.length || input.message)) {
+  if (result.task.campaign_id && (rawActions.length || message)) {
     const campaign = await getDomCampaignContextById(result.task.campaign_id);
     if (campaign) {
+      const actions = withTaskSourceMessageId(
+        rawActions,
+        asRecord(result.task.context),
+      );
       const response: DomApiResponse = {
-        message: input.message ?? undefined,
-        actions: input.actions ?? [],
+        message: message ?? undefined,
+        actions,
       };
       await persistDomApiResponse({
         campaign,
@@ -819,6 +826,88 @@ function stringifyResult(value: unknown) {
   } catch {
     return String(value);
   }
+}
+
+export function extractGptResultActions(input: GptResultInput) {
+  const directActions = actionListOrEmpty(input.actions);
+  if (directActions.length) return directActions;
+
+  const result = asRecord(input.result);
+  const resultActions = actionListOrEmpty(result.actions);
+  if (resultActions.length) return resultActions;
+
+  return actionListOrEmpty(asRecord(result.result).actions);
+}
+
+export function extractGptCompanyCandidates(input: GptResultInput) {
+  if (input.companyCandidates) return input.companyCandidates;
+
+  const result = asRecord(input.result);
+  return (
+    arrayOrNull(result.company_candidates) ??
+    arrayOrNull(result.companies_added) ??
+    arrayOrNull(asRecord(result.result).company_candidates) ??
+    arrayOrNull(asRecord(result.result).companies_added) ??
+    []
+  );
+}
+
+function extractGptResultMessage(input: GptResultInput) {
+  if (input.message !== undefined) return input.message;
+
+  const result = asRecord(input.result);
+  return stringOrNull(result.message) ?? stringOrNull(asRecord(result.result).message);
+}
+
+export function resolveGptResultStatus(input: GptResultInput) {
+  const result = asRecord(input.result);
+  const nestedStatus = gptResultStatusOrNull(result.status);
+
+  if (input.status === "failed" || nestedStatus === "failed") return "failed";
+  if (nestedStatus === "completed") return "completed";
+  return input.status ?? nestedStatus ?? "completed";
+}
+
+function actionListOrEmpty(value: unknown): Array<Record<string, unknown>> {
+  if (!Array.isArray(value)) return [];
+  return value.filter(
+    (item): item is Record<string, unknown> =>
+      Boolean(item) && typeof item === "object" && !Array.isArray(item),
+  );
+}
+
+function arrayOrNull(value: unknown): unknown[] | null {
+  return Array.isArray(value) ? value : null;
+}
+
+function gptResultStatusOrNull(value: unknown) {
+  return value === "completed" || value === "reviewing" || value === "failed"
+    ? value
+    : null;
+}
+
+function withTaskSourceMessageId(
+  actions: Array<Record<string, unknown>>,
+  taskContext: Record<string, unknown>,
+) {
+  const sourceMessageId = findContextString(taskContext, [
+    "source_message_id",
+    "message_id",
+    "object_id",
+  ]);
+
+  if (!sourceMessageId) return actions;
+
+  return actions.map((action) => {
+    if (String(action.type ?? "") !== "create_draft" || action.source_message_id) {
+      return action;
+    }
+
+    return {
+      ...action,
+      source_message_id: sourceMessageId,
+    };
+  });
 }
 
 function toJson(value: unknown) {
