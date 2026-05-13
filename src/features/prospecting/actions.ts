@@ -44,7 +44,7 @@ const initialError =
   "Falta configurar SUPABASE_DB_URL en el entorno del servidor.";
 
 const messageIntentSchema = z.enum(["save", "approved", "rejected"]);
-const replyIntentSchema = z.enum(["save", "approved", "rejected"]);
+const replyIntentSchema = z.enum(["save", "approved", "rejected", "no_reply"]);
 const outboundRejectionReasonSchema = z.enum([
   "company_not_fit",
   "bad_copy",
@@ -1910,10 +1910,18 @@ export async function updateReplyDraftAction(
 
   const replyId = readFormString(formData, "replyId");
   const draft = readFormString(formData, "draft");
+  const feedback = readFormString(formData, "feedback");
   const intent = replyIntentSchema.safeParse(readFormString(formData, "intent"));
 
   if (!replyId || !intent.success) {
     return { ok: false, message: "Faltan datos para actualizar la respuesta." };
+  }
+
+  if (intent.data === "rejected" && feedback.length < 4) {
+    return {
+      ok: false,
+      message: "Escribe feedback concreto para pedir una nueva respuesta.",
+    };
   }
 
   const result = await sql.begin(async (tx) => {
@@ -1927,10 +1935,17 @@ export async function updateReplyDraftAction(
         m.contact_id::text as contact_id,
         m.sender_account_id,
         coalesce(m.subject_final, m.subject_draft, '(sin asunto)') as subject,
+        coalesce(m.body_draft, '') as reply_body,
+        coalesce(m.body_final, '') as current_draft,
+        co.canonical_name as company_name,
+        ct.full_name as contact_name,
+        ct.email::text as contact_email,
         coalesce(m.gmail_thread_id, t.gmail_thread_id) as gmail_thread_id,
         m.status::text as status
       from messages m
       join campaigns c on c.id = m.campaign_id
+      left join companies co on co.id = m.company_id
+      left join contacts ct on ct.id = m.contact_id
       left join threads t on t.id = m.thread_id
       where m.id = ${replyId}
         and m.kind = 'inbound_reply'
@@ -1941,7 +1956,17 @@ export async function updateReplyDraftAction(
     if (!reply) return { kind: "missing" as const };
     if (reply.status === "sent") return { kind: "sent" as const };
 
-    const nextStatus = intent.data === "save" ? reply.status : intent.data;
+    const nextStatus =
+      intent.data === "save"
+        ? reply.status
+        : intent.data === "no_reply"
+          ? "rejected"
+          : intent.data;
+    const futureNote = intent.data === "no_reply"
+      ? "No responder: marcado manualmente como mensaje automatico o sin accion necesaria."
+      : intent.data === "rejected"
+        ? `Respuesta rechazada para nueva redaccion. Feedback: ${feedback}`
+        : null;
 
     await tx`
       update messages
@@ -1953,6 +1978,10 @@ export async function updateReplyDraftAction(
           when ${nextStatus}::message_status = 'rejected' then null
           else approved_at
         end,
+        future_note = case
+          when ${futureNote}::text is null then future_note
+          else concat_ws(E'\n', nullif(future_note, ''), ${futureNote}::text)
+        end,
         updated_at = now()
       where id = ${replyId}
     `;
@@ -1960,7 +1989,17 @@ export async function updateReplyDraftAction(
     if (intent.data !== "approved") {
       return {
         kind: intent.data,
+        campaignId: String(reply.campaign_id),
+        companyId: String(reply.company_id ?? ""),
+        contactId: String(reply.contact_id ?? ""),
         campaignSlug: String(reply.campaign_slug),
+        companyName: String(reply.company_name ?? ""),
+        contactName: String(reply.contact_name ?? ""),
+        contactEmail: String(reply.contact_email ?? ""),
+        subject: String(reply.subject ?? ""),
+        replyBody: String(reply.reply_body ?? ""),
+        currentDraft: String(reply.current_draft ?? ""),
+        feedback,
       };
     }
 
@@ -2042,6 +2081,76 @@ export async function updateReplyDraftAction(
 
   revalidateProspectingPaths(campaignSlug);
 
+  if (result.kind === "rejected") {
+    const taskDescription = `Redactar nueva respuesta para ${result.companyName || result.subject}.`;
+    const taskContext = {
+      source: "reply_rejection",
+      task_type: "redraft_reply",
+      requested_action: "draft_needed",
+      redraft_target: "reply_review_redrafts",
+      source_message_id: replyId,
+      message_id: replyId,
+      reply_id: replyId,
+      company_id: result.companyId,
+      contact_id: result.contactId,
+      contact_name: result.contactName,
+      contact_email: result.contactEmail,
+      subject: result.subject,
+      inbound_reply_body: result.replyBody,
+      rejected_draft: result.currentDraft,
+      feedback: result.feedback,
+      instructions: [
+        "Redactar una nueva respuesta para este inbound reply usando el feedback del usuario.",
+        "No enviar el mail ni crear un outbound_reply aprobado.",
+        "Responder con una action top-level: { type: 'update_reply_draft', source_message_id, body }.",
+        "La action update_reply_draft debe dejar el inbound_reply en status needs_review con body_final actualizado.",
+      ],
+    };
+    const taskId = await createVisibleDomTaskForCampaign({
+      campaignId: result.campaignId,
+      campaignSlug,
+      description: taskDescription,
+      context: taskContext,
+    });
+
+    await sendAgentEvent({
+      event: "draft_needed",
+      campaignId: result.campaignId,
+      companyId: result.companyId,
+      contactId: result.contactId,
+      messageId: replyId,
+      data: {
+        task_id: taskId,
+        task_type: "redraft_reply",
+        source: "reply_rejection",
+        feedback: result.feedback,
+        subject: result.subject,
+      },
+      priority: "high",
+      source: "reply_review",
+    });
+
+    await sendAgentEvent({
+      event: "dom_task_created",
+      campaignId: result.campaignId,
+      companyId: result.companyId,
+      contactId: result.contactId,
+      messageId: replyId,
+      data: {
+        task_id: taskId,
+        task_type: "redraft_reply",
+        description: taskDescription,
+        source_message_id: replyId,
+        source: "reply_rejection",
+        requested_action: "draft_needed",
+        feedback: result.feedback,
+        redraft_target: "reply_review_redrafts",
+      },
+      priority: "high",
+      source: "reply_review",
+    });
+  }
+
   return {
     ok: true,
     message:
@@ -2049,7 +2158,9 @@ export async function updateReplyDraftAction(
         ? "Draft guardado."
         : intent.data === "approved"
           ? "Respuesta aprobada. La dejé en Mails > Aprobados para enviar y saldrá en el mismo hilo."
-          : "Respuesta rechazada.",
+          : intent.data === "no_reply"
+            ? "Respuesta marcada como no responder."
+            : "Respuesta rechazada. Se pidió una nueva redacción con tu feedback.",
   };
 }
 

@@ -231,4 +231,49 @@ describe("reply sync", () => {
       confidence: 0.82,
     });
   });
+
+  it("matches replies from a different address at the same company domain", () => {
+    const match = matchInboundReply(
+      {
+        ...candidate,
+        gmailThreadId: null,
+        fromEmail: "ventas@empresa.cl",
+        subject: "Propuesta de colaboración para el evento",
+      },
+      [
+        {
+          ...sentMessage,
+          contactEmail: "alianzas@empresa.cl",
+          gmailThreadId: null,
+          subject: "Trabajo Pais: posible apoyo de Empresa",
+          sentAt: "2026-05-01T12:00:00.000Z",
+        },
+      ],
+    );
+
+    expect(match).toMatchObject({
+      message: { id: "message-1" },
+      reason: "contact_domain_recent",
+    });
+  });
+
+  it("matches known campaign contacts by company domain when the responder is new", () => {
+    const match = matchInboundReplyToKnownContact(
+      {
+        ...candidate,
+        fromEmail: "ventas@empresa.cl",
+        subject: "Propuesta de colaboración para el evento",
+      },
+      [contactMatch],
+    );
+
+    expect(match).toMatchObject({
+      message: {
+        id: "gmail-contact:gmail-reply-1",
+        companyId: "company-1",
+        contactEmail: "alianzas@empresa.cl",
+      },
+      reason: "known_contact_domain",
+    });
+  });
 });

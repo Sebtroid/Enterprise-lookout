@@ -257,6 +257,8 @@ async function loadSentMessages({
       m.campaign_id::text as campaign_id,
       m.company_id::text as company_id,
       m.contact_id::text as contact_id,
+      co.canonical_name as company_name,
+      co.domain::text as company_domain,
       ct.email::text as contact_email,
       ct.full_name as contact_name,
       m.sender_account_id::text as sender_id,
@@ -267,6 +269,7 @@ async function loadSentMessages({
     from messages m
     join campaigns c on c.id = m.campaign_id
     join sender_accounts sa on sa.id = m.sender_account_id
+    left join companies co on co.id = m.company_id
     left join contacts ct on ct.id = m.contact_id
     where m.kind in ('outbound_initial', 'outbound_followup', 'outbound_reply')
       and m.status = any(${REPLY_SYNC_OUTBOUND_STATUSES}::message_status[])
@@ -282,6 +285,8 @@ async function loadSentMessages({
     id: String(row.id),
     campaignId: String(row.campaign_id),
     companyId: String(row.company_id),
+    companyName: String(row.company_name ?? ""),
+    companyDomain: String(row.company_domain ?? ""),
     contactId: String(row.contact_id),
     contactEmail: String(row.contact_email),
     contactName: String(row.contact_name ?? ""),
@@ -358,6 +363,8 @@ async function loadReplyContactCandidates({
     select distinct
       c.id::text as campaign_id,
       cc.company_id::text as company_id,
+      co.canonical_name as company_name,
+      co.domain::text as company_domain,
       ct.id::text as contact_id,
       ct.email::text as contact_email,
       ct.full_name as contact_name,
@@ -365,6 +372,7 @@ async function loadReplyContactCandidates({
       sa.email::text as sender_email
     from campaigns c
     join campaign_contacts cc on cc.campaign_id = c.id
+    join companies co on co.id = cc.company_id
     join contacts ct on ct.id = cc.contact_id
     join campaign_sender_accounts csa on csa.campaign_id = c.id
     join sender_accounts sa on sa.id = csa.sender_account_id
@@ -378,6 +386,8 @@ async function loadReplyContactCandidates({
   return rows.map((row) => ({
     campaignId: String(row.campaign_id),
     companyId: String(row.company_id),
+    companyName: String(row.company_name ?? ""),
+    companyDomain: String(row.company_domain ?? ""),
     contactId: String(row.contact_id),
     contactEmail: String(row.contact_email),
     contactName: String(row.contact_name ?? ""),
@@ -498,12 +508,17 @@ function normalizeGmailMessage(message: Record<string, unknown>): GmailReplyCand
   const headers = payload?.headers ?? [];
   const header = (name: string) =>
     headers.find((item) => item.name?.toLowerCase() === name.toLowerCase())?.value ?? "";
+  const from = parseAddressHeader(header("From"));
+  const replyTo = parseAddressHeader(header("Reply-To"));
+  const replySender = replyTo.email ? replyTo : from;
+  const to = parseAddressHeader(header("To"));
 
   return {
     gmailMessageId: String(message.id ?? ""),
     gmailThreadId: message.threadId ? String(message.threadId) : null,
-    fromEmail: extractEmail(header("From")),
-    toEmail: extractEmail(header("To")),
+    fromEmail: replySender.email,
+    fromName: replySender.name || from.name,
+    toEmail: to.email,
     subject: header("Subject"),
     body: extractPlainText(payload) || String(message.snippet ?? ""),
     receivedAt: header("Date")
@@ -554,10 +569,17 @@ async function insertInboundReply({
   match: NonNullable<ReturnType<typeof matchInboundReply>>;
   sql: NonNullable<ReturnType<typeof getPostgresClient>>;
 }) {
-  const record = prepareInboundReplyRecord(candidate, match.message);
+  let record: ReturnType<typeof prepareInboundReplyRecord> | null = null;
+  let resolvedMessage: SentMessageMatchInput = match.message;
 
   const result = await sql.begin(async (tx) => {
-    const thread = await getOrCreateThread({ record, sentMessage: match.message, tx });
+    resolvedMessage = await resolveReplyContactForCandidate({
+      candidate,
+      sentMessage: match.message,
+      tx,
+    });
+    record = prepareInboundReplyRecord(candidate, resolvedMessage);
+    const thread = await getOrCreateThread({ record, sentMessage: resolvedMessage, tx });
     const inserted = await tx`
       insert into messages (
         thread_id,
@@ -598,7 +620,7 @@ async function insertInboundReply({
 
     if (!inserted[0]) return "duplicate" as const;
 
-    if (isUuid(match.message.id)) {
+    if (isUuid(resolvedMessage.id)) {
       await tx`
         update messages
         set
@@ -610,13 +632,13 @@ async function insertInboundReply({
             'Marcado enviado automaticamente al detectar respuesta en Gmail.'
           ),
           updated_at = now()
-        where id = ${match.message.id}
+        where id = ${resolvedMessage.id}
           and status = 'approved'
       `;
     }
 
     if (record.classification === "bounced") {
-      await handleBouncedContact({ record, sentMessage: match.message, tx });
+      await handleBouncedContact({ record, sentMessage: resolvedMessage, tx });
     } else {
       await markContactVerified({ record, tx });
     }
@@ -633,23 +655,24 @@ async function insertInboundReply({
     return "inserted" as const;
   });
 
-  if (result === "inserted") {
+  const eventRecord = record as ReturnType<typeof prepareInboundReplyRecord> | null;
+  if (result === "inserted" && eventRecord) {
     await sendAgentEvent({
       event: "reply_received",
-      campaignId: record.campaignId,
-      companyId: record.companyId,
-      contactId: record.contactId,
+      campaignId: eventRecord.campaignId,
+      companyId: eventRecord.companyId,
+      contactId: eventRecord.contactId,
       data: {
-        gmail_message_id: record.gmailMessageId,
-        original_message_id: record.originalMessageId,
-        gmail_thread_id: record.gmailThreadId,
-        classification: record.classification,
-        subject: record.subject,
-        received_at: record.receivedAt,
+        gmail_message_id: eventRecord.gmailMessageId,
+        original_message_id: eventRecord.originalMessageId,
+        gmail_thread_id: eventRecord.gmailThreadId,
+        classification: eventRecord.classification,
+        subject: eventRecord.subject,
+        received_at: eventRecord.receivedAt,
       },
       priority:
-        record.classification === "interested" ||
-        record.classification === "needs_info"
+        eventRecord.classification === "interested" ||
+        eventRecord.classification === "needs_info"
           ? "high"
           : "normal",
       source: "gmail_sync_replies",
@@ -657,6 +680,133 @@ async function insertInboundReply({
   }
 
   return result;
+}
+
+async function resolveReplyContactForCandidate({
+  candidate,
+  sentMessage,
+  tx,
+}: {
+  candidate: GmailReplyCandidate;
+  sentMessage: SentMessageMatchInput;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  tx: any;
+}) {
+  const replyEmail = normalizeEmailAddress(candidate.fromEmail);
+  if (!replyEmail || replyEmail === normalizeEmailAddress(sentMessage.contactEmail)) {
+    return sentMessage;
+  }
+
+  const fullName = getReplyContactName(candidate, sentMessage);
+  const note = [
+    `Contacto verificado automaticamente por respuesta Gmail el ${candidate.receivedAt}.`,
+    `Email original contactado: ${sentMessage.contactEmail}.`,
+    `Reply Gmail: ${candidate.gmailMessageId}.`,
+    `Subject: ${candidate.subject}.`,
+  ].join(" ");
+
+  const rows = await tx`
+    insert into contacts (
+      company_id,
+      full_name,
+      normalized_name,
+      role,
+      category,
+      email,
+      source,
+      confidence,
+      verification_status,
+      verified_at,
+      is_decision_maker,
+      global_notes
+    ) values (
+      ${sentMessage.companyId},
+      ${fullName},
+      ${normalizeContactName(fullName)},
+      'Contacto verificado por respuesta',
+      'Reply verificado',
+      ${replyEmail},
+      'gmail_reply',
+      0.95,
+      'verified',
+      now(),
+      true,
+      ${note}
+    )
+    on conflict (email) do update
+    set
+      company_id = case
+        when contacts.company_id is null or contacts.company_id = excluded.company_id
+          then excluded.company_id
+        else contacts.company_id
+      end,
+      full_name = case
+        when contacts.full_name = contacts.email::text or contacts.full_name = split_part(contacts.email::text, '@', 1)
+          then excluded.full_name
+        else contacts.full_name
+      end,
+      normalized_name = case
+        when contacts.full_name = contacts.email::text or contacts.full_name = split_part(contacts.email::text, '@', 1)
+          then excluded.normalized_name
+        else contacts.normalized_name
+      end,
+      role = coalesce(contacts.role, excluded.role),
+      category = coalesce(contacts.category, excluded.category),
+      source = case
+        when contacts.source is null or contacts.source = ''
+          then excluded.source
+        when contacts.source like '%gmail_reply%'
+          then contacts.source
+        else concat_ws(', ', contacts.source, excluded.source)
+      end,
+      confidence = greatest(contacts.confidence, excluded.confidence),
+      verification_status = 'verified',
+      verified_at = coalesce(contacts.verified_at, now()),
+      is_decision_maker = true,
+      global_notes = concat_ws(E'\n', nullif(contacts.global_notes, ''), excluded.global_notes),
+      updated_at = now()
+    returning id::text as id, full_name
+  `;
+
+  const contactId = rows[0]?.id ? String(rows[0].id) : sentMessage.contactId;
+  const contactName = rows[0]?.full_name ? String(rows[0].full_name) : fullName;
+
+  await tx`
+    insert into campaign_contacts (
+      campaign_id,
+      company_id,
+      contact_id,
+      fit_score,
+      priority_score,
+      status,
+      selected_contact_reason,
+      campaign_notes,
+      future_notes
+    ) values (
+      ${sentMessage.campaignId},
+      ${sentMessage.companyId},
+      ${contactId},
+      70,
+      80,
+      'replied',
+      'Contacto creado/verificado automaticamente por respuesta desde Gmail.',
+      'Responder a este contacto; fue quien contesto el correo.',
+      ${note}
+    )
+    on conflict (campaign_id, company_id, contact_id) do update
+    set
+      status = 'replied',
+      priority_score = greatest(campaign_contacts.priority_score, excluded.priority_score),
+      future_notes = concat_ws(E'\n', nullif(campaign_contacts.future_notes, ''), excluded.future_notes),
+      updated_at = now()
+  `;
+
+  return {
+    ...sentMessage,
+    contactId,
+    contactEmail: replyEmail,
+    contactName,
+  };
 }
 
 async function markContactVerified({
@@ -985,9 +1135,68 @@ async function getOrCreateThread({
   return inserted[0];
 }
 
-function extractEmail(value: string) {
-  const match = value.match(/<([^>]+)>/);
-  return (match?.[1] ?? value).trim().toLowerCase();
+function parseAddressHeader(value: string) {
+  const text = value.trim();
+  if (!text) return { email: "", name: "" };
+
+  const angleMatch = text.match(/^(.*?)<([^>]+)>/);
+  if (angleMatch?.[2]) {
+    return {
+      email: normalizeEmailAddress(angleMatch[2]),
+      name: cleanAddressName(angleMatch[1] ?? ""),
+    };
+  }
+
+  const emailMatch = text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+  if (!emailMatch) return { email: normalizeEmailAddress(text), name: "" };
+
+  const email = normalizeEmailAddress(emailMatch[0]);
+  const name = cleanAddressName(text.slice(0, emailMatch.index ?? 0));
+  return { email, name };
+}
+
+function normalizeEmailAddress(value: string) {
+  return value.trim().replace(/^mailto:/i, "").toLowerCase();
+}
+
+function cleanAddressName(value: string) {
+  const cleaned = value
+    .replace(/^["']|["']$/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return cleaned.includes("@") ? "" : cleaned;
+}
+
+function getReplyContactName(
+  candidate: GmailReplyCandidate,
+  sentMessage: SentMessageMatchInput,
+) {
+  const displayName = cleanAddressName(candidate.fromName ?? "");
+  if (displayName) return displayName;
+
+  const localPart = normalizeEmailAddress(candidate.fromEmail)
+    .split("@")[0]
+    ?.replace(/[._-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (localPart) return titleCase(localPart);
+
+  return `Contacto ${sentMessage.companyName || sentMessage.companyDomain || "Gmail"}`;
+}
+
+function normalizeContactName(value: string) {
+  return value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function titleCase(value: string) {
+  return value.replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 function isUuid(value: string) {

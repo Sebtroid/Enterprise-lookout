@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Save, X } from "lucide-react";
+import { Ban, Check, RefreshCw, Save, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -48,6 +48,7 @@ export function RepliesReview({
       localDraft: reply.draftResponse,
     })),
   );
+  const [rejectingReplyId, setRejectingReplyId] = useState<string | null>(null);
 
   useEffect(() => {
     if (actionState.message) {
@@ -109,18 +110,28 @@ export function RepliesReview({
                   {contact?.name} · responder desde {sender?.email}
                 </div>
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  disabled={isPending}
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setRejectingReplyId(reply.id)}
+                >
+                  <X className="size-4" />
+                  Rechazar
+                </Button>
                 <Button
                   disabled={isPending}
                   name="intent"
                   type="submit"
-                  variant="outline"
-                  value="rejected"
+                  variant="destructive"
+                  value="no_reply"
                   size="sm"
                   onClick={() => updateStatus(reply.id, "rejected")}
                 >
-                  <X className="size-4" />
-                  Rechazar
+                  <Ban className="size-4" />
+                  No responder
                 </Button>
                 <Button
                   disabled={isPending}
@@ -153,6 +164,45 @@ export function RepliesReview({
                   value={reply.localDraft}
                   onChange={(event) => updateDraft(reply.id, event.target.value)}
                 />
+                {rejectingReplyId === reply.id ? (
+                  <div className="mt-3 rounded-md border border-border bg-muted/30 p-3">
+                    <label
+                      className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground"
+                      htmlFor={`reply-feedback-${reply.id}`}
+                    >
+                      Feedback para nueva respuesta
+                    </label>
+                    <Textarea
+                      className="mt-2 min-h-24 text-sm"
+                      id={`reply-feedback-${reply.id}`}
+                      name="feedback"
+                      placeholder="Ej: más breve, pedir datos logísticos, no mandar presentación todavía..."
+                    />
+                    <div className="mt-3 flex flex-wrap justify-end gap-2">
+                      <Button
+                        disabled={isPending}
+                        size="sm"
+                        type="button"
+                        variant="ghost"
+                        onClick={() => setRejectingReplyId(null)}
+                      >
+                        Cancelar
+                      </Button>
+                      <Button
+                        disabled={isPending}
+                        name="intent"
+                        size="sm"
+                        type="submit"
+                        value="rejected"
+                        variant="destructive"
+                        onClick={() => updateStatus(reply.id, "rejected")}
+                      >
+                        <RefreshCw className="size-4" />
+                        Rechazar y redactar de nuevo
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
                 <div className="mt-3 flex justify-end">
                   <Button
                     disabled={isPending}

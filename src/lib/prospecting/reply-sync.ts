@@ -9,6 +9,7 @@ export type GmailReplyCandidate = {
   gmailMessageId: string;
   gmailThreadId: string | null;
   fromEmail: string;
+  fromName?: string;
   toEmail: string;
   subject: string;
   body: string;
@@ -22,6 +23,8 @@ export type SentMessageMatchInput = {
   contactId: string;
   contactEmail: string;
   contactName: string;
+  companyDomain?: string;
+  companyName?: string;
   senderId: string;
   senderEmail: string;
   subject: string;
@@ -36,7 +39,9 @@ export type ReplyMatchReason =
   | "contact_email_subject"
   | "contact_email_recent"
   | "contact_domain_subject"
-  | "known_contact_email";
+  | "contact_domain_recent"
+  | "known_contact_email"
+  | "known_contact_domain";
 
 export type ReplyMatch = {
   message: SentMessageMatchInput;
@@ -62,9 +67,27 @@ export type ReplyContactMatchInput = {
   contactId: string;
   contactEmail: string;
   contactName: string;
+  companyDomain?: string;
+  companyName?: string;
   senderId: string;
   senderEmail: string;
 };
+
+const GENERIC_EMAIL_DOMAINS = new Set([
+  "gmail.com",
+  "googlemail.com",
+  "hotmail.com",
+  "hotmail.cl",
+  "outlook.com",
+  "outlook.cl",
+  "live.com",
+  "live.cl",
+  "yahoo.com",
+  "yahoo.es",
+  "icloud.com",
+  "me.com",
+  "msn.com",
+]);
 
 export type PreparedInboundReply = {
   campaignId: string;
@@ -216,8 +239,7 @@ export function matchInboundReply(
   const candidateDomain = getEmailDomain(fromEmail);
   const domainSubjectMatch = eligible.find(
     (message) =>
-      candidateDomain &&
-      getEmailDomain(message.contactEmail) === candidateDomain &&
+      domainMatchesCandidate(message, candidateDomain) &&
       subjectsMatch(subject, normalizeEmailSubject(message.subject)),
   );
 
@@ -226,6 +248,22 @@ export function matchInboundReply(
       message: domainSubjectMatch,
       reason: "contact_domain_subject",
       confidence: 0.66,
+    };
+  }
+
+  const domainRecentMatch = pickSingleCompanyDomainMatch(
+    eligible.filter(
+      (message) =>
+        domainMatchesCandidate(message, candidateDomain) &&
+        isRecentEnough(message.sentAt, receivedAt),
+    ),
+  );
+
+  if (domainRecentMatch) {
+    return {
+      message: domainRecentMatch,
+      reason: "contact_domain_recent",
+      confidence: 0.7,
     };
   }
 
@@ -243,18 +281,37 @@ export function matchInboundReplyToKnownContact(
     (item) => normalizeEmail(item.contactEmail) === fromEmail,
   );
 
-  if (!contact) return null;
+  if (contact) {
+    return {
+      message: {
+        ...contact,
+        id: `gmail-contact:${candidate.gmailMessageId}`,
+        subject: candidate.subject,
+        sentAt: candidate.receivedAt,
+        gmailThreadId: candidate.gmailThreadId,
+      },
+      reason: "known_contact_email",
+      confidence: 0.82,
+    };
+  }
+
+  const candidateDomain = getEmailDomain(fromEmail);
+  const domainContact = pickSingleCompanyDomainMatch(
+    contacts.filter((item) => domainMatchesCandidate(item, candidateDomain)),
+  );
+
+  if (!domainContact) return null;
 
   return {
     message: {
-      ...contact,
+      ...domainContact,
       id: `gmail-contact:${candidate.gmailMessageId}`,
       subject: candidate.subject,
       sentAt: candidate.receivedAt,
       gmailThreadId: candidate.gmailThreadId,
     },
-    reason: "known_contact_email",
-    confidence: 0.82,
+    reason: "known_contact_domain",
+    confidence: 0.72,
   };
 }
 
@@ -504,6 +561,39 @@ function normalizeEmail(email: string) {
 
 function getEmailDomain(email: string) {
   return normalizeEmail(email).split("@")[1] ?? "";
+}
+
+function domainMatchesCandidate(
+  item: Pick<ReplyContactMatchInput, "contactEmail" | "companyDomain">,
+  candidateDomain: string,
+) {
+  if (!candidateDomain || GENERIC_EMAIL_DOMAINS.has(candidateDomain)) return false;
+
+  const contactDomain = getEmailDomain(item.contactEmail);
+  const companyDomain = normalizeDomain(item.companyDomain ?? "");
+
+  return candidateDomain === contactDomain || candidateDomain === companyDomain;
+}
+
+function normalizeDomain(domain: string) {
+  return domain
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, "")
+    .replace(/^www\./, "")
+    .split("/")[0]
+    .replace(/^@/, "");
+}
+
+function pickSingleCompanyDomainMatch<
+  T extends { companyId: string; sentAt?: string },
+>(matches: T[]) {
+  if (!matches.length) return null;
+
+  const companyIds = new Set(matches.map((match) => match.companyId));
+  if (companyIds.size > 1) return null;
+
+  return [...matches].sort((a, b) => newestFirst(a.sentAt ?? "", b.sentAt ?? ""))[0] ?? null;
 }
 
 export function isBounceReply(candidate: GmailReplyCandidate) {

@@ -322,6 +322,10 @@ async function applyDomActionsInTransaction({
     if (type === "create_draft") {
       await createDraftFromDomAction({ action, campaign, source, threadId, tx });
     }
+
+    if (type === "update_reply_draft") {
+      await updateReplyDraftFromDomAction({ action, source, threadId, tx });
+    }
   }
 }
 
@@ -474,6 +478,42 @@ async function createDraftFromDomAction({
         and status = 'rejected'
     `;
   }
+}
+
+async function updateReplyDraftFromDomAction({
+  action,
+  source,
+  threadId,
+  tx,
+}: {
+  action: Record<string, unknown>;
+  source: string;
+  threadId: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  tx: any;
+}) {
+  const sourceMessageId =
+    nullableText(action.source_message_id) ??
+    nullableText(action.message_id) ??
+    nullableText(action.reply_id);
+  const body = nullableText(action.body) ?? nullableText(action.draft);
+  if (!sourceMessageId || !body) return;
+
+  await tx`
+    update messages
+    set
+      status = 'needs_review',
+      body_final = ${body},
+      future_note = concat_ws(
+        E'\n',
+        nullif(future_note, ''),
+        ${`Nueva respuesta redactada por Dom desde ${source}; chat_thread_id=${threadId}.`}::text
+      ),
+      updated_at = now()
+    where id = ${sourceMessageId}
+      and kind = 'inbound_reply'
+      and status = 'rejected'
+  `;
 }
 
 function nullableText(value: unknown) {

@@ -899,7 +899,11 @@ function withTaskSourceMessageId(
   if (!sourceMessageId) return actions;
 
   return actions.map((action) => {
-    if (String(action.type ?? "") !== "create_draft" || action.source_message_id) {
+    const type = String(action.type ?? "");
+    if (
+      !["create_draft", "update_reply_draft"].includes(type) ||
+      action.source_message_id
+    ) {
       return action;
     }
 

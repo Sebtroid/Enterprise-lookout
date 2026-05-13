@@ -184,7 +184,7 @@ export function buildGptActionsOpenApiSchema(
               actions: {
                 type: "array",
                 description:
-                  "Top-level Dom-compatible actions, e.g. create_draft or create_task. Do not wrap these inside result.",
+                  "Top-level Dom-compatible actions, e.g. create_draft, update_reply_draft, or create_task. Do not wrap these inside result.",
                 items: { type: "object" },
               },
               message: stringSchema("Optional chat-style response to store."),
