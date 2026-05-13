@@ -49,6 +49,7 @@ export async function POST(req: NextRequest) {
     let matched = 0;
     let skipped = 0;
     let scanned = 0;
+    let sentMessagesChecked = 0;
 
     for (const token of tokenRows) {
       const accessToken = await getValidAccessToken({
@@ -71,6 +72,7 @@ export async function POST(req: NextRequest) {
         senderEmail: String(token.user_email),
         sql,
       });
+      sentMessagesChecked += sentMessages.length;
       const existingGmailMessageIds = await loadExistingGmailMessageIds(sql);
 
       for (const sentMessage of sentMessages) {
@@ -121,12 +123,21 @@ export async function POST(req: NextRequest) {
         'succeeded',
         now(),
         ${sql.json({ scope, days, limit })},
-        ${sql.json({ scanned, matched, inserted, skipped })}
+        ${sql.json({
+          sentMessagesChecked,
+          gmailMessagesScanned: scanned,
+          scanned,
+          matched,
+          inserted,
+          skipped,
+        })}
       )
     `;
 
     return NextResponse.json({
       ok: true,
+      sentMessagesChecked,
+      gmailMessagesScanned: scanned,
       scanned,
       matched,
       inserted,

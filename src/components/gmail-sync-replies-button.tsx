@@ -6,6 +6,25 @@ import { RefreshCw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 
+type GmailSyncSummary = {
+  gmailMessagesScanned?: number;
+  inserted?: number;
+  scanned?: number;
+  sentMessagesChecked?: number;
+};
+
+export function formatGmailSyncSummary(data: GmailSyncSummary) {
+  const sentMessagesChecked = data.sentMessagesChecked ?? 0;
+  const gmailMessagesScanned = data.gmailMessagesScanned ?? data.scanned ?? 0;
+  const inserted = data.inserted ?? 0;
+
+  return [
+    `Mails enviados revisados: ${sentMessagesChecked}.`,
+    `Mensajes candidatos encontrados en Gmail: ${gmailMessagesScanned}.`,
+    `Respuestas nuevas: ${inserted}.`,
+  ].join(" ");
+}
+
 export function GmailSyncRepliesButton({ scope }: { scope: string }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -25,9 +44,7 @@ export function GmailSyncRepliesButton({ scope }: { scope: string }) {
         return;
       }
 
-      alert(
-        `Gmail revisado: ${data.scanned} mensajes escaneados, ${data.inserted} respuestas nuevas.`,
-      );
+      alert(formatGmailSyncSummary(data));
       router.refresh();
     } catch {
       alert("Error de red al sincronizar Gmail.");
