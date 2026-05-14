@@ -6,6 +6,7 @@ import { Menu } from "lucide-react";
 
 const ITEMS = [
   ["Resumen", ""],
+  ["Overview", "/overview"],
   ["Pipeline", "/pipeline"],
   ["Empresas", "/companies"],
   ["Contactos", "/contacts"],

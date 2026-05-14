@@ -69,13 +69,17 @@ const STATUS_CLASSNAMES: Record<string, string> = {
   not_evaluated: "border-slate-200 bg-slate-50 text-slate-700",
 };
 
+export function getStatusLabel(status: string) {
+  return STATUS_LABELS[status] ?? status;
+}
+
 export function StatusBadge({ status }: { status: string }) {
   return (
     <Badge
       variant="outline"
       className={STATUS_CLASSNAMES[status] ?? "border-border bg-muted"}
     >
-      {STATUS_LABELS[status] ?? status}
+      {getStatusLabel(status)}
     </Badge>
   );
 }

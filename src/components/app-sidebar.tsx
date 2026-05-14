@@ -11,6 +11,7 @@ import {
   LayoutDashboard,
   Mail,
   MailCheck,
+  NotebookTabs,
   Send,
   Settings,
 } from "lucide-react";
@@ -19,6 +20,7 @@ import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
   { path: "", label: "Resumen", icon: LayoutDashboard },
+  { path: "/overview", label: "Overview", icon: NotebookTabs },
   { path: "/pipeline", label: "Pipeline", icon: LayoutDashboard },
   { path: "/companies", label: "Empresas", icon: Building2 },
   { path: "/contacts", label: "Contactos", icon: ContactRound },

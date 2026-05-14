@@ -57,6 +57,14 @@ describe("AppSidebar", () => {
       expect(link.getAttribute("data-next-prefetch")).toBe("false");
     }
   });
+
+  it("includes the company overview route for the active project scope", () => {
+    render(<AppSidebar />);
+
+    expect(
+      screen.getByRole("link", { name: "Overview" }).getAttribute("href"),
+    ).toBe("/campaigns/all/overview");
+  });
 });
 
 describe("MobileNav", () => {

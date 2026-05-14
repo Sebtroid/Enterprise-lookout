@@ -1055,6 +1055,233 @@ export async function createDomTaskAction(
   return { ok: true, message: "Tarea creada y enviada a Dom." };
 }
 
+export async function createCompanyOverviewDomTaskAction(
+  _previousState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const sql = getPostgresClient();
+  if (!sql) return { ok: false, message: initialError };
+
+  const scope = readFormString(formData, "scope");
+  const companyId = readFormString(formData, "companyId");
+  const instruction = readFormString(formData, "instruction");
+
+  if (!scope || isAllCampaignsScope(scope) || scope.startsWith("context--")) {
+    return {
+      ok: false,
+      message: "Entra a un proyecto concreto para crear una tarea sobre empresa.",
+    };
+  }
+
+  if (!companyId) {
+    return { ok: false, message: "Falta la empresa para crear la tarea." };
+  }
+
+  if (instruction.length < 4) {
+    return { ok: false, message: "Escribe una instrucción clara para Dom." };
+  }
+
+  const campaignContext = await getDomCampaignContextBySlug(scope);
+  if (!campaignContext) {
+    return { ok: false, message: "No encontré ese proyecto." };
+  }
+
+  const companyRows = await sql`
+    select
+      co.id::text as id,
+      co.canonical_name as name,
+      co.domain,
+      co.website,
+      co.industry,
+      co.region,
+      coalesce(co.description, co.global_notes, '') as description,
+      co.global_notes,
+      cc.status::text as campaign_status,
+      cc.fit_score,
+      cc.selected_contact_reason,
+      cc.campaign_notes,
+      cc.future_notes
+    from companies co
+    left join campaign_contacts cc
+      on cc.company_id = co.id
+      and cc.campaign_id = ${campaignContext.dbId}
+    where co.id = ${companyId}
+    limit 1
+  `;
+  const company = companyRows[0];
+  if (!company) {
+    return { ok: false, message: "No encontré esa empresa." };
+  }
+
+  const [contactRows, messageRows, replyRows] = await Promise.all([
+    sql`
+      select
+        id::text as id,
+        full_name,
+        role,
+        email::text as email,
+        category,
+        verification_status::text as verification_status,
+        is_decision_maker,
+        source,
+        global_notes
+      from contacts
+      where company_id = ${companyId}
+      order by verified_at desc nulls last, created_at desc
+      limit 12
+    `,
+    sql`
+      select
+        id::text as id,
+        kind::text as kind,
+        status::text as status,
+        coalesce(subject_final, subject_draft, '(sin asunto)') as subject,
+        coalesce(body_final, body_draft, '') as body,
+        coalesce(sent_at, approved_at, created_at)::text as occurred_at
+      from messages
+      where company_id = ${companyId}
+        and campaign_id = ${campaignContext.dbId}
+        and kind in ('outbound_initial', 'outbound_followup', 'outbound_reply')
+      order by coalesce(sent_at, approved_at, created_at) desc
+      limit 12
+    `,
+    sql`
+      select
+        id::text as id,
+        status::text as status,
+        coalesce(reply_classification, 'needs_info')::text as classification,
+        coalesce(body_draft, '') as body,
+        coalesce(received_at, created_at)::text as occurred_at
+      from messages
+      where company_id = ${companyId}
+        and campaign_id = ${campaignContext.dbId}
+        and kind = 'inbound_reply'
+      order by coalesce(received_at, created_at) desc
+      limit 12
+    `,
+  ]);
+
+  const companyName = nullableRowString(company.name) ?? "Empresa";
+  const description = `Revisar ${companyName}: ${clipText(instruction, 120)}`;
+  const thread = await ensureDomChatThread(
+    campaignContext.dbId,
+    campaignContext.name,
+  );
+  const context = {
+    source: "company_overview",
+    task_type: "company_followup_instruction",
+    requested_action: "review_company_context",
+    instruction,
+    project: campaignContext,
+    company: {
+      id: company.id,
+      name: companyName,
+      domain: nullableRowString(company.domain),
+      website: nullableRowString(company.website),
+      industry: nullableRowString(company.industry),
+      region: nullableRowString(company.region),
+      description: clipText(nullableRowString(company.description) ?? "", 900),
+      global_notes: clipText(nullableRowString(company.global_notes) ?? "", 900),
+      campaign_status: nullableRowString(company.campaign_status),
+      fit_score: numberFromRow(company.fit_score, 0),
+      selected_contact_reason: nullableRowString(company.selected_contact_reason),
+      campaign_notes: nullableRowString(company.campaign_notes),
+      future_notes: nullableRowString(company.future_notes),
+    },
+    contacts: contactRows.map((contact) => ({
+      id: nullableRowString(contact.id),
+      name: nullableRowString(contact.full_name),
+      role: nullableRowString(contact.role),
+      email: nullableRowString(contact.email),
+      category: nullableRowString(contact.category),
+      verification_status: nullableRowString(contact.verification_status),
+      is_decision_maker: Boolean(contact.is_decision_maker),
+      source: nullableRowString(contact.source),
+      notes: clipText(nullableRowString(contact.global_notes) ?? "", 600),
+    })),
+    communication: {
+      outbound_messages: messageRows.map((message) => ({
+        id: nullableRowString(message.id),
+        kind: nullableRowString(message.kind),
+        status: nullableRowString(message.status),
+        subject: nullableRowString(message.subject),
+        body: clipText(nullableRowString(message.body) ?? "", 900),
+        occurred_at: nullableRowString(message.occurred_at),
+      })),
+      inbound_replies: replyRows.map((reply) => ({
+        id: nullableRowString(reply.id),
+        status: nullableRowString(reply.status),
+        classification: nullableRowString(reply.classification),
+        body: clipText(nullableRowString(reply.body) ?? "", 900),
+        occurred_at: nullableRowString(reply.occurred_at),
+      })),
+    },
+    expected_output: [
+      "Actualizar o proponer contactos si el hilo muestra una persona útil nueva.",
+      "Crear acciones concretas si falta agregar, verificar o corregir un contacto.",
+      "No enviar mails sin aprobación explícita del usuario.",
+    ],
+  };
+
+  const rows = await sql`
+    insert into dom_tasks (
+      campaign_id,
+      description,
+      status,
+      created_by,
+      context,
+      chat_thread_id
+    ) values (
+      ${campaignContext.dbId},
+      ${description},
+      'pending',
+      'user',
+      ${sql.json(context as Parameters<typeof sql.json>[0])},
+      ${thread?.id ?? null}
+    )
+    returning id::text as id
+  `;
+
+  if (thread?.id) {
+    await sql`
+      insert into chat_messages (
+        thread_id,
+        role,
+        content,
+        metadata
+      ) values (
+        ${thread.id},
+        'user',
+        ${`Tarea para Dom sobre ${companyName}: ${instruction}`},
+        ${sql.json({
+          event: "dom_task_created",
+          taskId: rows[0]?.id ?? null,
+          source: "company_overview",
+          companyId,
+        })}
+      )
+    `;
+  }
+
+  revalidateProspectingPaths(scope);
+  await sendAgentEvent({
+    event: "dom_task_created",
+    campaignId: campaignContext.dbId,
+    companyId,
+    data: {
+      task_id: String(rows[0]?.id ?? ""),
+      description,
+      instruction,
+      source: "company_overview",
+      company_name: companyName,
+    },
+    priority: "normal",
+    source: "company_overview",
+  });
+
+  return { ok: true, message: "Tarea creada y enviada a Dom." };
+}
+
 export async function reviewDomCandidateAction(
   _previousState: ActionState,
   formData: FormData,
@@ -3103,6 +3330,11 @@ function nullIfEmpty(value: string) {
   return trimmed || null;
 }
 
+function clipText(value: string, maxLength: number) {
+  if (value.length <= maxLength) return value;
+  return `${value.slice(0, Math.max(0, maxLength - 3)).trimEnd()}...`;
+}
+
 function guessSourceType(sourceName: string) {
   const lower = sourceName.toLowerCase();
   if (lower.endsWith(".xlsx") || lower.endsWith(".xls")) return "excel";
@@ -3125,6 +3357,7 @@ function revalidateProspectingPaths(scope?: string) {
 
   if (scope) {
     revalidatePath(`/campaigns/${scope}`);
+    revalidatePath(`/campaigns/${scope}/overview`);
     revalidatePath(`/campaigns/${scope}/contacts`);
     revalidatePath(`/campaigns/${scope}/companies`);
     revalidatePath(`/campaigns/${scope}/imports`);

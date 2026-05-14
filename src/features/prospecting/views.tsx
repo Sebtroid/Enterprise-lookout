@@ -10,6 +10,7 @@ import {
 
 import { CampaignDomChat } from "@/components/campaign-dom-chat";
 import { CompanyExplorer } from "@/components/company-explorer";
+import { CompanyOverviewBoard } from "@/components/company-overview-board";
 import { DomTaskForm } from "@/components/dom-task-form";
 import { DomTaskList } from "@/components/dom-task-list";
 import { ImportWorkbench } from "@/components/import-workbench";
@@ -219,7 +220,12 @@ export async function CampaignOverviewView({ scope }: { scope: string }) {
       />
 
       {campaign || context ? (
-        <section className="grid gap-3 md:grid-cols-4">
+        <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <QuickAction
+            href={`/campaigns/${scope}/overview`}
+            label="Overview empresas"
+            description="Ver cada empresa con contactos, historial de mails y tareas rápidas para Dom."
+          />
           <QuickAction
             href={`/campaigns/${scope}/companies`}
             label="Clasificar empresas"
@@ -324,6 +330,28 @@ export async function CampaignOverviewView({ scope }: { scope: string }) {
           </Table>
         </section>
       ) : null}
+    </div>
+  );
+}
+
+export async function CompanyAccountOverviewView({ scope }: { scope: string }) {
+  const snapshot = await getProspectingSnapshot(scope);
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="Overview empresas"
+        eyebrow={getScopeLabel(snapshot)}
+      />
+      <CompanyOverviewBoard
+        campaign={snapshot.campaign}
+        companies={snapshot.companies}
+        contacts={snapshot.contacts}
+        messages={snapshot.messages}
+        now={new Date().toISOString()}
+        replies={snapshot.replies}
+        scope={scope}
+      />
     </div>
   );
 }
