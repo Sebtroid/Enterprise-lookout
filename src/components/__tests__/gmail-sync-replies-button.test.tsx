@@ -29,4 +29,17 @@ describe("GmailSyncRepliesButton", () => {
       "Mails enviados revisados: 0. Mensajes candidatos encontrados en Gmail: 6. Respuestas nuevas: 2.",
     );
   });
+
+  it("reports replies closed because they were already answered or duplicated", () => {
+    expect(
+      formatGmailSyncSummary({
+        sentMessagesChecked: 7,
+        gmailMessagesScanned: 3,
+        inserted: 0,
+        closed: 2,
+      }),
+    ).toBe(
+      "Mails enviados revisados: 7. Mensajes candidatos encontrados en Gmail: 3. Respuestas nuevas: 0. Respuestas cerradas por ya respondidas o duplicadas: 2.",
+    );
+  });
 });

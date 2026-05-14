@@ -7,6 +7,7 @@ import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 type GmailSyncSummary = {
+  closed?: number;
   gmailMessagesScanned?: number;
   inserted?: number;
   scanned?: number;
@@ -17,12 +18,18 @@ export function formatGmailSyncSummary(data: GmailSyncSummary) {
   const sentMessagesChecked = data.sentMessagesChecked ?? 0;
   const gmailMessagesScanned = data.gmailMessagesScanned ?? data.scanned ?? 0;
   const inserted = data.inserted ?? 0;
+  const closed = data.closed ?? 0;
 
   return [
     `Mails enviados revisados: ${sentMessagesChecked}.`,
     `Mensajes candidatos encontrados en Gmail: ${gmailMessagesScanned}.`,
     `Respuestas nuevas: ${inserted}.`,
-  ].join(" ");
+    closed
+      ? `Respuestas cerradas por ya respondidas o duplicadas: ${closed}.`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(" ");
 }
 
 export function GmailSyncRepliesButton({ scope }: { scope: string }) {

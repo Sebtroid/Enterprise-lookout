@@ -577,6 +577,36 @@ export async function getRepliesData(
       from messages m
       join campaigns c on c.id = m.campaign_id
       where m.kind = 'inbound_reply'
+        and (
+          m.status <> 'needs_review'
+          or not exists (
+            select 1
+            from messages newer
+            where newer.kind = 'inbound_reply'
+              and newer.campaign_id = m.campaign_id
+              and newer.id <> m.id
+              and (
+                (m.gmail_thread_id is not null and newer.gmail_thread_id = m.gmail_thread_id)
+                or (m.thread_id is not null and newer.thread_id = m.thread_id)
+              )
+              and coalesce(newer.received_at, newer.created_at) > coalesce(m.received_at, m.created_at)
+          )
+        )
+        and (
+          m.status <> 'needs_review'
+          or not exists (
+            select 1
+            from messages outbound
+            where outbound.kind = 'outbound_reply'
+              and outbound.status in ('approved', 'sent')
+              and outbound.campaign_id = m.campaign_id
+              and (
+                (m.gmail_thread_id is not null and outbound.gmail_thread_id = m.gmail_thread_id)
+                or (m.thread_id is not null and outbound.thread_id = m.thread_id)
+              )
+              and coalesce(outbound.sent_at, outbound.approved_at, outbound.created_at) > coalesce(m.received_at, m.created_at)
+          )
+        )
       ${scopeFilter}
       order by coalesce(m.received_at, m.created_at) desc
     `.execute(), "replies");

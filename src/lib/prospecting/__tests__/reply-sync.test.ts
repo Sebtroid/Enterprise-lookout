@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  analyzeGmailThreadForReplyReview,
   buildGmailReplySearchQuery,
   buildInboundReplyDraft,
   classifyInboundReply,
@@ -275,5 +276,45 @@ describe("reply sync", () => {
       },
       reason: "known_contact_domain",
     });
+  });
+
+  it("detects when an inbound reply already has a later sent answer in the same Gmail thread", () => {
+    const reviewState = analyzeGmailThreadForReplyReview({
+      candidate,
+      senderEmail: "sawitting@miuandes.cl",
+      threadMessages: [
+        candidate,
+        {
+          ...candidate,
+          gmailMessageId: "gmail-sent-reply-1",
+          fromEmail: "sawitting@miuandes.cl",
+          toEmail: "alianzas@empresa.cl",
+          body: "Hola, gracias. Te mando el detalle.",
+          receivedAt: "2026-05-02T16:00:00.000Z",
+        },
+      ],
+    });
+
+    expect(reviewState.hasLaterSenderReply).toBe(true);
+    expect(reviewState.latestSenderReplyAt).toBe("2026-05-02T16:00:00.000Z");
+  });
+
+  it("detects when an inbound reply was superseded by a newer inbound in the same Gmail thread", () => {
+    const reviewState = analyzeGmailThreadForReplyReview({
+      candidate,
+      senderEmail: "sawitting@miuandes.cl",
+      threadMessages: [
+        candidate,
+        {
+          ...candidate,
+          gmailMessageId: "gmail-reply-2",
+          body: "Perfecto, nos parece bien. Coméntanos para qué fecha lo necesitan.",
+          receivedAt: "2026-05-03T16:00:00.000Z",
+        },
+      ],
+    });
+
+    expect(reviewState.hasNewerInboundReply).toBe(true);
+    expect(reviewState.latestInboundMessageId).toBe("gmail-reply-2");
   });
 });

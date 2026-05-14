@@ -73,6 +73,14 @@ export type ReplyContactMatchInput = {
   senderEmail: string;
 };
 
+export type GmailThreadReplyReviewState = {
+  hasLaterSenderReply: boolean;
+  latestSenderReplyAt: string | null;
+  hasNewerInboundReply: boolean;
+  latestInboundMessageId: string | null;
+  latestInboundReplyAt: string | null;
+};
+
 const GENERIC_EMAIL_DOMAINS = new Set([
   "gmail.com",
   "googlemail.com",
@@ -494,6 +502,71 @@ export function shouldIngestReply(
   }
 
   return true;
+}
+
+export function analyzeGmailThreadForReplyReview({
+  candidate,
+  senderEmail,
+  threadMessages,
+}: {
+  candidate: GmailReplyCandidate;
+  senderEmail: string;
+  threadMessages: GmailReplyCandidate[];
+}): GmailThreadReplyReviewState {
+  const candidateTime = new Date(candidate.receivedAt).getTime();
+  if (Number.isNaN(candidateTime)) {
+    return {
+      hasLaterSenderReply: false,
+      latestSenderReplyAt: null,
+      hasNewerInboundReply: false,
+      latestInboundMessageId: null,
+      latestInboundReplyAt: null,
+    };
+  }
+
+  const normalizedSender = normalizeEmail(senderEmail);
+  let latestSenderReply: GmailReplyCandidate | null = null;
+  let latestInboundReply: GmailReplyCandidate | null = null;
+
+  for (const message of threadMessages) {
+    if (message.gmailMessageId === candidate.gmailMessageId) continue;
+
+    const messageTime = new Date(message.receivedAt).getTime();
+    if (Number.isNaN(messageTime) || messageTime <= candidateTime) continue;
+
+    const fromSender = normalizeEmail(message.fromEmail) === normalizedSender;
+    const toSender = normalizeEmail(message.toEmail) === normalizedSender;
+
+    if (fromSender) {
+      if (
+        !latestSenderReply ||
+        messageTime > new Date(latestSenderReply.receivedAt).getTime()
+      ) {
+        latestSenderReply = message;
+      }
+      continue;
+    }
+
+    if (
+      toSender ||
+      (candidate.gmailThreadId && message.gmailThreadId === candidate.gmailThreadId)
+    ) {
+      if (
+        !latestInboundReply ||
+        messageTime > new Date(latestInboundReply.receivedAt).getTime()
+      ) {
+        latestInboundReply = message;
+      }
+    }
+  }
+
+  return {
+    hasLaterSenderReply: Boolean(latestSenderReply),
+    latestSenderReplyAt: latestSenderReply?.receivedAt ?? null,
+    hasNewerInboundReply: Boolean(latestInboundReply),
+    latestInboundMessageId: latestInboundReply?.gmailMessageId ?? null,
+    latestInboundReplyAt: latestInboundReply?.receivedAt ?? null,
+  };
 }
 
 export function buildGmailReplySearchQuery(message: SentMessageMatchInput) {

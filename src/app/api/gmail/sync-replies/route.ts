@@ -5,6 +5,7 @@ import { sendAgentEvent } from "@/lib/agent/events";
 import { getAllowedUser } from "@/lib/auth/request";
 import { decryptToken, encryptToken } from "@/lib/gmail/token-crypto";
 import {
+  analyzeGmailThreadForReplyReview,
   buildGmailReplySearchQuery,
   matchInboundReply,
   matchInboundReplyToKnownContact,
@@ -13,6 +14,8 @@ import {
   resolveReplySyncScope,
   shouldIngestReply,
   type GmailReplyCandidate,
+  type GmailThreadReplyReviewState,
+  type ReplyMatch,
   type ReplyContactMatchInput,
   type ReplySyncScope,
   type SentMessageMatchInput,
@@ -52,6 +55,7 @@ export async function POST(req: NextRequest) {
     let matched = 0;
     let skipped = 0;
     let scanned = 0;
+    let closed = 0;
     let sentMessagesChecked = 0;
     let contactCandidatesChecked = 0;
 
@@ -85,6 +89,7 @@ export async function POST(req: NextRequest) {
       });
       contactCandidatesChecked += contactCandidates.length;
       const existingGmailMessageIds = await loadExistingGmailMessageIds(sql);
+      const gmailThreadCache = new Map<string, GmailReplyCandidate[]>();
 
       for (const sentMessage of sentMessages) {
         const candidates = await fetchReplyCandidatesForSentMessage({
@@ -100,6 +105,30 @@ export async function POST(req: NextRequest) {
             continue;
           }
 
+          if (isCandidateFromSender(candidate, match.message.senderEmail)) {
+            skipped += 1;
+            continue;
+          }
+
+          matched += 1;
+          const reviewState = await loadGmailThreadReviewState({
+            accessToken,
+            candidate,
+            senderEmail: match.message.senderEmail,
+            threadCache: gmailThreadCache,
+          });
+          const closeResult = await closeNonActionableReplyIfNeeded({
+            candidate,
+            match,
+            reviewState,
+            sql,
+          });
+          closed += closeResult.closed;
+          if (closeResult.shouldSkip) {
+            skipped += 1;
+            continue;
+          }
+
           if (
             !shouldIngestReply(candidate, {
               existingGmailMessageIds,
@@ -110,7 +139,6 @@ export async function POST(req: NextRequest) {
             continue;
           }
 
-          matched += 1;
           const result = await insertInboundReply({ candidate, match, sql });
           if (result === "inserted") {
             inserted += 1;
@@ -130,16 +158,6 @@ export async function POST(req: NextRequest) {
       scanned += recentInboundCandidates.length;
 
       for (const candidate of recentInboundCandidates) {
-        if (
-          !shouldIngestReply(candidate, {
-            existingGmailMessageIds,
-            senderEmail,
-          })
-        ) {
-          skipped += 1;
-          continue;
-        }
-
         const match =
           matchInboundReply(candidate, sentMessages) ??
           matchInboundReplyToKnownContact(candidate, contactCandidates);
@@ -149,6 +167,34 @@ export async function POST(req: NextRequest) {
         }
 
         matched += 1;
+        const reviewState = await loadGmailThreadReviewState({
+          accessToken,
+          candidate,
+          senderEmail: match.message.senderEmail,
+          threadCache: gmailThreadCache,
+        });
+        const closeResult = await closeNonActionableReplyIfNeeded({
+          candidate,
+          match,
+          reviewState,
+          sql,
+        });
+        closed += closeResult.closed;
+        if (closeResult.shouldSkip) {
+          skipped += 1;
+          continue;
+        }
+
+        if (
+          !shouldIngestReply(candidate, {
+            existingGmailMessageIds,
+            senderEmail: match.message.senderEmail,
+          })
+        ) {
+          skipped += 1;
+          continue;
+        }
+
         const result = await insertInboundReply({ candidate, match, sql });
         if (result === "inserted") {
           inserted += 1;
@@ -178,6 +224,7 @@ export async function POST(req: NextRequest) {
           scanned,
           matched,
           inserted,
+          closed,
           skipped,
         })}
       )
@@ -191,6 +238,7 @@ export async function POST(req: NextRequest) {
       scanned,
       matched,
       inserted,
+      closed,
       skipped,
     });
   } catch (error) {
@@ -455,6 +503,161 @@ async function fetchRecentInboundReplyCandidates({
   return messages.map(normalizeGmailMessage).filter(isReplyCandidate);
 }
 
+async function loadGmailThreadReviewState({
+  accessToken,
+  candidate,
+  senderEmail,
+  threadCache,
+}: {
+  accessToken: string;
+  candidate: GmailReplyCandidate;
+  senderEmail: string;
+  threadCache: Map<string, GmailReplyCandidate[]>;
+}) {
+  const neutral = () =>
+    analyzeGmailThreadForReplyReview({
+      candidate,
+      senderEmail,
+      threadMessages: [candidate],
+    });
+
+  if (!candidate.gmailThreadId) return neutral();
+
+  try {
+    const cachedThreadMessages = threadCache.get(candidate.gmailThreadId);
+    let threadMessages: GmailReplyCandidate[];
+    if (cachedThreadMessages) {
+      threadMessages = cachedThreadMessages;
+    } else {
+      const threadResponse = await gmailFetch(
+        accessToken,
+        `https://gmail.googleapis.com/gmail/v1/users/me/threads/${candidate.gmailThreadId}?format=full`,
+      );
+      const messages = Array.isArray(threadResponse.messages)
+        ? threadResponse.messages
+        : [];
+      threadMessages = messages
+        .map(normalizeGmailMessage)
+        .filter(isGmailThreadMessage);
+      threadCache.set(candidate.gmailThreadId, threadMessages);
+    }
+
+    return analyzeGmailThreadForReplyReview({
+      candidate,
+      senderEmail,
+      threadMessages,
+    });
+  } catch (error) {
+    console.warn("Could not inspect Gmail thread for reply review state:", error);
+    return neutral();
+  }
+}
+
+async function closeNonActionableReplyIfNeeded({
+  candidate,
+  match,
+  reviewState,
+  sql,
+}: {
+  candidate: GmailReplyCandidate;
+  match: ReplyMatch;
+  reviewState: GmailThreadReplyReviewState;
+  sql: NonNullable<ReturnType<typeof getPostgresClient>>;
+}) {
+  if (reviewState.hasLaterSenderReply && reviewState.latestSenderReplyAt) {
+    const closed = await closeAnsweredPendingReplies({
+      answeredAt: reviewState.latestSenderReplyAt,
+      candidate,
+      match,
+      sql,
+    });
+    return { shouldSkip: true, closed };
+  }
+
+  if (reviewState.hasNewerInboundReply && reviewState.latestInboundReplyAt) {
+    const closed = await closeSupersededPendingReplies({
+      candidate,
+      match,
+      newerInboundAt: reviewState.latestInboundReplyAt,
+      newerInboundMessageId: reviewState.latestInboundMessageId,
+      sql,
+    });
+    return { shouldSkip: true, closed };
+  }
+
+  return { shouldSkip: false, closed: 0 };
+}
+
+async function closeAnsweredPendingReplies({
+  answeredAt,
+  candidate,
+  match,
+  sql,
+}: {
+  answeredAt: string;
+  candidate: GmailReplyCandidate;
+  match: ReplyMatch;
+  sql: NonNullable<ReturnType<typeof getPostgresClient>>;
+}) {
+  const gmailThreadId = candidate.gmailThreadId ?? match.message.gmailThreadId;
+  const threadFilter = gmailThreadId
+    ? sql`or gmail_thread_id = ${gmailThreadId}`
+    : sql``;
+  const note = `Cerrado automaticamente: Gmail ya tiene una respuesta enviada desde ${match.message.senderEmail} despues de este reply.`;
+
+  const rows = await sql`
+    update messages
+    set
+      status = 'rejected',
+      future_note = concat_ws(E'\n', nullif(future_note, ''), ${note}::text),
+      updated_at = now()
+    where kind = 'inbound_reply'
+      and status = 'needs_review'
+      and campaign_id = ${match.message.campaignId}
+      and (gmail_message_id = ${candidate.gmailMessageId} ${threadFilter})
+      and coalesce(received_at, created_at) <= ${answeredAt}::timestamptz
+    returning id
+  `;
+
+  return rows.length;
+}
+
+async function closeSupersededPendingReplies({
+  candidate,
+  match,
+  newerInboundAt,
+  newerInboundMessageId,
+  sql,
+}: {
+  candidate: GmailReplyCandidate;
+  match: ReplyMatch;
+  newerInboundAt: string;
+  newerInboundMessageId: string | null;
+  sql: NonNullable<ReturnType<typeof getPostgresClient>>;
+}) {
+  const gmailThreadId = candidate.gmailThreadId ?? match.message.gmailThreadId;
+  const threadFilter = gmailThreadId
+    ? sql`or gmail_thread_id = ${gmailThreadId}`
+    : sql``;
+  const note = `Cerrado automaticamente: existe un reply posterior en el mismo hilo${newerInboundMessageId ? ` (${newerInboundMessageId})` : ""}.`;
+
+  const rows = await sql`
+    update messages
+    set
+      status = 'rejected',
+      future_note = concat_ws(E'\n', nullif(future_note, ''), ${note}::text),
+      updated_at = now()
+    where kind = 'inbound_reply'
+      and status = 'needs_review'
+      and campaign_id = ${match.message.campaignId}
+      and (gmail_message_id = ${candidate.gmailMessageId} ${threadFilter})
+      and coalesce(received_at, created_at) < ${newerInboundAt}::timestamptz
+    returning id
+  `;
+
+  return rows.length;
+}
+
 async function fetchGmailMessagesByIds(accessToken: string, ids: string[]) {
   const concurrency = 5;
   const messages: Record<string, unknown>[] = [];
@@ -560,6 +763,14 @@ function isReplyCandidate(candidate: GmailReplyCandidate) {
   );
 }
 
+function isGmailThreadMessage(candidate: GmailReplyCandidate) {
+  return Boolean(candidate.gmailMessageId && candidate.fromEmail && candidate.receivedAt);
+}
+
+function isCandidateFromSender(candidate: GmailReplyCandidate, senderEmail: string) {
+  return candidate.fromEmail.trim().toLowerCase() === senderEmail.trim().toLowerCase();
+}
+
 async function insertInboundReply({
   candidate,
   match,
@@ -619,6 +830,13 @@ async function insertInboundReply({
     `;
 
     if (!inserted[0]) return "duplicate" as const;
+
+    await closeOlderPendingRepliesInThread({
+      insertedReplyId: String(inserted[0].id),
+      record,
+      threadId: String(thread.id),
+      tx,
+    });
 
     if (isUuid(resolvedMessage.id)) {
       await tx`
@@ -680,6 +898,38 @@ async function insertInboundReply({
   }
 
   return result;
+}
+
+async function closeOlderPendingRepliesInThread({
+  insertedReplyId,
+  record,
+  threadId,
+  tx,
+}: {
+  insertedReplyId: string;
+  record: ReturnType<typeof prepareInboundReplyRecord>;
+  threadId: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  tx: any;
+}) {
+  const gmailThreadFilter = record.gmailThreadId
+    ? tx`or gmail_thread_id = ${record.gmailThreadId}`
+    : tx``;
+  const note = `Cerrado automaticamente: existe un reply posterior en el mismo hilo (${record.gmailMessageId}).`;
+
+  await tx`
+    update messages
+    set
+      status = 'rejected',
+      future_note = concat_ws(E'\n', nullif(future_note, ''), ${note}::text),
+      updated_at = now()
+    where kind = 'inbound_reply'
+      and status = 'needs_review'
+      and id <> ${insertedReplyId}
+      and campaign_id = ${record.campaignId}
+      and (thread_id = ${threadId} ${gmailThreadFilter})
+      and coalesce(received_at, created_at) <= ${record.receivedAt}::timestamptz
+  `;
 }
 
 async function resolveReplyContactForCandidate({
