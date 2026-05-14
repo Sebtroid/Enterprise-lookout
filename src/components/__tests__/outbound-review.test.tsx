@@ -92,6 +92,31 @@ const message: AppMessage = {
 };
 
 describe("OutboundReview", () => {
+  it("keeps outbound mail bodies collapsed until the user expands them", () => {
+    render(
+      <OutboundReview
+        campaigns={[campaign]}
+        companies={[company]}
+        contacts={[contact]}
+        messages={[message]}
+        scope={campaign.id}
+        senders={[sender]}
+        gmailConnectedEmails={[sender.email]}
+      />,
+    );
+
+    expect(screen.queryByDisplayValue(message.body)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Ver mail" }));
+
+    expect(
+      screen.getByRole("button", { name: "Guardar cambios" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Ocultar mail" }),
+    ).toBeInTheDocument();
+  });
+
   it("keeps rejection fields mounted while submitting so feedback is included", () => {
     render(
       <OutboundReview

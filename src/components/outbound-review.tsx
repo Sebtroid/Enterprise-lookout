@@ -13,6 +13,8 @@ import { useRouter } from "next/navigation";
 import {
   Building2,
   Check,
+  ChevronDown,
+  ChevronUp,
   ExternalLink,
   Loader2,
   Mail,
@@ -92,6 +94,9 @@ export function OutboundReview({
     Record<string, OutboundRejectionReason>
   >({});
   const [bodyOverrides, setBodyOverrides] = useState<Record<string, string>>({});
+  const [expandedMessageIds, setExpandedMessageIds] = useState<Set<string>>(
+    () => new Set(),
+  );
   const items = useMemo(
     () => mapMessagesToReviewMessages(messages, bodyOverrides),
     [bodyOverrides, messages],
@@ -198,6 +203,26 @@ export function OutboundReview({
     setBodyOverrides((current) => ({ ...current, [id]: body }));
   }
 
+  function expandMessage(id: string) {
+    setExpandedMessageIds((current) => {
+      const next = new Set(current);
+      next.add(id);
+      return next;
+    });
+  }
+
+  function toggleExpandedMessage(id: string) {
+    setExpandedMessageIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
+
   function updateRejectionReason(
     id: string,
     reason: OutboundRejectionReason,
@@ -212,6 +237,7 @@ export function OutboundReview({
     const sender = senders.find((item) => item.id === message.senderId);
     const rejectionReason = rejectionReasons[message.id] ?? "bad_copy";
     const envelope = buildOutboundEnvelope({ company, contact, sender });
+    const isExpanded = expandedMessageIds.has(message.id);
     const autoSendsWithGmail = shouldAutoSendAfterApproval({
       connectedGmailEmails: gmailConnectedEmails,
       senderAccountType: sender?.accountType,
@@ -249,14 +275,30 @@ export function OutboundReview({
           </div>
           <div className="flex flex-wrap gap-2">
             <Button
+              aria-controls={`message-body-${message.id}`}
+              aria-expanded={isExpanded}
               type="button"
               variant="outline"
               size="sm"
-              onClick={() =>
+              onClick={() => toggleExpandedMessage(message.id)}
+            >
+              {isExpanded ? (
+                <ChevronUp className="size-4" />
+              ) : (
+                <ChevronDown className="size-4" />
+              )}
+              {isExpanded ? "Ocultar mail" : "Ver mail"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                expandMessage(message.id);
                 setRejectingId((current) =>
                   current === message.id ? null : message.id,
-                )
-              }
+                );
+              }}
             >
               <X className="size-4" />
               Rechazar
@@ -288,25 +330,36 @@ export function OutboundReview({
           senderLabel={envelope.senderLabel}
         />
 
-        <Textarea
-          className="mt-4 min-h-64 font-mono text-sm"
-          name="body"
-          value={message.localBody}
-          onChange={(event) => updateBody(message.id, event.target.value)}
-        />
-        <div className="mt-3 flex justify-end">
-          <Button
-            disabled={isReviewPending}
-            name="intent"
-            size="sm"
-            type="submit"
-            value="save"
-            variant="outline"
-          >
-            <Save className="size-4" />
-            Guardar cambios
-          </Button>
-        </div>
+        {isExpanded ? (
+          <div id={`message-body-${message.id}`}>
+            <Textarea
+              className="mt-4 min-h-64 font-mono text-sm"
+              name="body"
+              value={message.localBody}
+              onChange={(event) => updateBody(message.id, event.target.value)}
+            />
+            <div className="mt-3 flex justify-end">
+              <Button
+                disabled={isReviewPending}
+                name="intent"
+                size="sm"
+                type="submit"
+                value="save"
+                variant="outline"
+              >
+                <Save className="size-4" />
+                Guardar cambios
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div id={`message-body-${message.id}`}>
+            <input type="hidden" name="body" value={message.localBody} />
+            <p className="mt-4 truncate rounded-md border border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+              {formatMailPreview(message.localBody)}
+            </p>
+          </div>
+        )}
 
         {rejectingId === message.id ? (
           <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm">
@@ -388,6 +441,7 @@ export function OutboundReview({
     const campaign = campaigns.find((item) => item.id === message.campaignId);
     const sender = senders.find((item) => item.id === message.senderId);
     const envelope = buildOutboundEnvelope({ company, contact, sender });
+    const isExpanded = expandedMessageIds.has(message.id);
 
     return (
       <article
@@ -410,12 +464,30 @@ export function OutboundReview({
                 </span>
               ) : null}
             </div>
+            <div className="mt-1 text-sm text-muted-foreground">
+              {envelope.recipientLabel} · {envelope.senderLabel}
+            </div>
             {message.futureNote ? (
               <p className="mt-2 text-sm text-muted-foreground">
                 {message.futureNote}
               </p>
             ) : null}
           </div>
+          <Button
+            aria-controls={`message-body-${message.id}`}
+            aria-expanded={isExpanded}
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => toggleExpandedMessage(message.id)}
+          >
+            {isExpanded ? (
+              <ChevronUp className="size-4" />
+            ) : (
+              <ChevronDown className="size-4" />
+            )}
+            {isExpanded ? "Ocultar mail" : "Ver mail"}
+          </Button>
         </div>
 
         <MailEnvelope
@@ -427,9 +499,21 @@ export function OutboundReview({
           senderLabel={envelope.senderLabel}
         />
 
-        <p className="mt-4 max-h-36 overflow-auto whitespace-pre-wrap rounded-md border border-border bg-muted/30 p-3 text-sm text-muted-foreground">
-          {message.localBody}
-        </p>
+        {isExpanded ? (
+          <p
+            className="mt-4 max-h-72 overflow-auto whitespace-pre-wrap rounded-md border border-border bg-muted/30 p-3 text-sm text-muted-foreground"
+            id={`message-body-${message.id}`}
+          >
+            {message.localBody}
+          </p>
+        ) : (
+          <p
+            className="mt-4 truncate rounded-md border border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground"
+            id={`message-body-${message.id}`}
+          >
+            {formatMailPreview(message.localBody)}
+          </p>
+        )}
       </article>
     );
   }
@@ -557,6 +641,7 @@ export function OutboundReview({
           const campaign = campaigns.find((item) => item.id === message.campaignId);
           const sender = senders.find((item) => item.id === message.senderId);
           const envelope = buildOutboundEnvelope({ company, contact, sender });
+          const isExpanded = expandedMessageIds.has(message.id);
           const composeHref =
             contact?.email && sender
               ? buildComposeHref({
@@ -592,8 +677,26 @@ export function OutboundReview({
                       </span>
                     ) : null}
                   </div>
+                  <div className="mt-1 text-sm text-muted-foreground">
+                    {envelope.recipientLabel} · {envelope.senderLabel}
+                  </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
+                  <Button
+                    aria-controls={`message-body-${message.id}`}
+                    aria-expanded={isExpanded}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => toggleExpandedMessage(message.id)}
+                  >
+                    {isExpanded ? (
+                      <ChevronUp className="size-4" />
+                    ) : (
+                      <ChevronDown className="size-4" />
+                    )}
+                    {isExpanded ? "Ocultar mail" : "Ver mail"}
+                  </Button>
                   {hasGmail ? (
                     <Button
                       disabled={sendingGmailId === message.id}
@@ -644,9 +747,21 @@ export function OutboundReview({
                 projectLabel={formatProjectDetail(campaign)}
                 senderLabel={envelope.senderLabel}
               />
-              <p className="mt-4 max-h-36 overflow-auto whitespace-pre-wrap rounded-md border border-border bg-muted/30 p-3 text-sm text-muted-foreground">
-                {message.localBody}
-              </p>
+              {isExpanded ? (
+                <p
+                  className="mt-4 max-h-72 overflow-auto whitespace-pre-wrap rounded-md border border-border bg-muted/30 p-3 text-sm text-muted-foreground"
+                  id={`message-body-${message.id}`}
+                >
+                  {message.localBody}
+                </p>
+              ) : (
+                <p
+                  className="mt-4 truncate rounded-md border border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground"
+                  id={`message-body-${message.id}`}
+                >
+                  {formatMailPreview(message.localBody)}
+                </p>
+              )}
             </form>
           );
         })}
@@ -788,6 +903,12 @@ function formatSenderProvider(provider: AppSender["accountType"]) {
   };
 
   return labels[provider] ?? provider;
+}
+
+function formatMailPreview(value: string) {
+  const text = value.replace(/\s+/g, " ").trim();
+  if (!text) return "Mail sin cuerpo.";
+  return text.length > 180 ? `${text.slice(0, 180)}...` : text;
 }
 
 function buildComposeHref({

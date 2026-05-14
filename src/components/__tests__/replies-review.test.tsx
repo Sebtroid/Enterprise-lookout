@@ -82,6 +82,25 @@ const reply: AppReply = {
 };
 
 describe("RepliesReview", () => {
+  it("keeps reply bodies and drafts collapsed until the user expands them", () => {
+    render(
+      <RepliesReview
+        companies={[company]}
+        contacts={[contact]}
+        replies={[reply]}
+        senders={[sender]}
+      />,
+    );
+
+    expect(screen.queryByDisplayValue(reply.draftResponse)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Ver mail" }));
+
+    expect(screen.getByText("Reply recibido")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Guardar draft" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Ocultar mail" })).toBeInTheDocument();
+  });
+
   it("keeps feedback controls mounted and offers no-reply for automatic messages", () => {
     render(
       <RepliesReview

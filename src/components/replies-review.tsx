@@ -2,7 +2,15 @@
 
 import { useActionState, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Ban, Check, RefreshCw, Save, X } from "lucide-react";
+import {
+  Ban,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  RefreshCw,
+  Save,
+  X,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -49,6 +57,9 @@ export function RepliesReview({
     })),
   );
   const [rejectingReplyId, setRejectingReplyId] = useState<string | null>(null);
+  const [expandedReplyIds, setExpandedReplyIds] = useState<Set<string>>(
+    () => new Set(),
+  );
 
   useEffect(() => {
     if (actionState.message) {
@@ -72,6 +83,26 @@ export function RepliesReview({
     );
   }
 
+  function expandReply(id: string) {
+    setExpandedReplyIds((current) => {
+      const next = new Set(current);
+      next.add(id);
+      return next;
+    });
+  }
+
+  function toggleExpandedReply(id: string) {
+    setExpandedReplyIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
+
   return (
     <div className="space-y-4">
       <div className="rounded-lg border border-border bg-muted/30 p-3 text-sm text-muted-foreground">
@@ -89,6 +120,7 @@ export function RepliesReview({
         const company = companies.find((item) => item.id === reply.companyId);
         const contact = contacts.find((item) => item.id === reply.contactId);
         const sender = senders.find((item) => item.id === reply.senderId);
+        const isExpanded = expandedReplyIds.has(reply.id);
 
         return (
           <form
@@ -112,11 +144,30 @@ export function RepliesReview({
               </div>
               <div className="flex flex-wrap gap-2">
                 <Button
+                  aria-controls={`reply-body-${reply.id}`}
+                  aria-expanded={isExpanded}
                   disabled={isPending}
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => setRejectingReplyId(reply.id)}
+                  onClick={() => toggleExpandedReply(reply.id)}
+                >
+                  {isExpanded ? (
+                    <ChevronUp className="size-4" />
+                  ) : (
+                    <ChevronDown className="size-4" />
+                  )}
+                  {isExpanded ? "Ocultar mail" : "Ver mail"}
+                </Button>
+                <Button
+                  disabled={isPending}
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    expandReply(reply.id);
+                    setRejectingReplyId(reply.id);
+                  }}
                 >
                   <X className="size-4" />
                   Rechazar
@@ -147,85 +198,112 @@ export function RepliesReview({
               </div>
             </div>
 
-            <div className="mt-4 grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
-              <div className="rounded-md border border-border bg-muted/40 p-3">
-                <div className="mb-2 text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
-                  Reply recibido
-                </div>
-                <p className="whitespace-pre-wrap text-sm">{reply.body}</p>
-              </div>
-              <div>
-                <div className="mb-2 text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
-                  Draft respuesta
-                </div>
-                <Textarea
-                  className="min-h-44 font-mono text-sm"
-                  name="draft"
-                  value={reply.localDraft}
-                  onChange={(event) => updateDraft(reply.id, event.target.value)}
-                />
-                {rejectingReplyId === reply.id ? (
-                  <div className="mt-3 rounded-md border border-border bg-muted/30 p-3">
-                    <label
-                      className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground"
-                      htmlFor={`reply-feedback-${reply.id}`}
-                    >
-                      Feedback para nueva respuesta
-                    </label>
-                    <Textarea
-                      className="mt-2 min-h-24 text-sm"
-                      id={`reply-feedback-${reply.id}`}
-                      name="feedback"
-                      placeholder="Ej: más breve, pedir datos logísticos, no mandar presentación todavía..."
-                    />
-                    <div className="mt-3 flex flex-wrap justify-end gap-2">
-                      <Button
-                        disabled={isPending}
-                        size="sm"
-                        type="button"
-                        variant="ghost"
-                        onClick={() => setRejectingReplyId(null)}
-                      >
-                        Cancelar
-                      </Button>
-                      <Button
-                        disabled={isPending}
-                        name="intent"
-                        size="sm"
-                        type="submit"
-                        value="rejected"
-                        variant="destructive"
-                        onClick={() => updateStatus(reply.id, "rejected")}
-                      >
-                        <RefreshCw className="size-4" />
-                        Rechazar y redactar de nuevo
-                      </Button>
-                    </div>
+            {isExpanded ? (
+              <div
+                className="mt-4 grid gap-4 lg:grid-cols-[0.9fr_1.1fr]"
+                id={`reply-body-${reply.id}`}
+              >
+                <div className="rounded-md border border-border bg-muted/40 p-3">
+                  <div className="mb-2 text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                    Reply recibido
                   </div>
-                ) : null}
-                <div className="mt-3 flex justify-end">
-                  <Button
-                    disabled={isPending}
-                    name="intent"
-                    size="sm"
-                    type="submit"
-                    value="save"
-                    variant="outline"
-                  >
-                    <Save className="size-4" />
-                    Guardar draft
-                  </Button>
+                  <p className="whitespace-pre-wrap text-sm">{reply.body}</p>
+                </div>
+                <div>
+                  <div className="mb-2 text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                    Draft respuesta
+                  </div>
+                  <Textarea
+                    className="min-h-44 font-mono text-sm"
+                    name="draft"
+                    value={reply.localDraft}
+                    onChange={(event) => updateDraft(reply.id, event.target.value)}
+                  />
+                  {rejectingReplyId === reply.id ? (
+                    <div className="mt-3 rounded-md border border-border bg-muted/30 p-3">
+                      <label
+                        className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground"
+                        htmlFor={`reply-feedback-${reply.id}`}
+                      >
+                        Feedback para nueva respuesta
+                      </label>
+                      <Textarea
+                        className="mt-2 min-h-24 text-sm"
+                        id={`reply-feedback-${reply.id}`}
+                        name="feedback"
+                        placeholder="Ej: más breve, pedir datos logísticos, no mandar presentación todavía..."
+                      />
+                      <div className="mt-3 flex flex-wrap justify-end gap-2">
+                        <Button
+                          disabled={isPending}
+                          size="sm"
+                          type="button"
+                          variant="ghost"
+                          onClick={() => setRejectingReplyId(null)}
+                        >
+                          Cancelar
+                        </Button>
+                        <Button
+                          disabled={isPending}
+                          name="intent"
+                          size="sm"
+                          type="submit"
+                          value="rejected"
+                          variant="destructive"
+                          onClick={() => updateStatus(reply.id, "rejected")}
+                        >
+                          <RefreshCw className="size-4" />
+                          Rechazar y redactar de nuevo
+                        </Button>
+                      </div>
+                    </div>
+                  ) : null}
+                  <div className="mt-3 flex justify-end">
+                    <Button
+                      disabled={isPending}
+                      name="intent"
+                      size="sm"
+                      type="submit"
+                      value="save"
+                      variant="outline"
+                    >
+                      <Save className="size-4" />
+                      Guardar draft
+                    </Button>
+                  </div>
                 </div>
               </div>
-            </div>
-            <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-              Nota futura: {reply.futureNote}
-            </div>
+            ) : (
+              <div id={`reply-body-${reply.id}`}>
+                <input type="hidden" name="draft" value={reply.localDraft} />
+                <div className="mt-4 grid gap-2 rounded-md border border-border bg-muted/30 p-3 text-sm text-muted-foreground md:grid-cols-2">
+                  <div className="min-w-0">
+                    <span className="font-medium text-foreground">Reply: </span>
+                    <span>{formatMailPreview(reply.body)}</span>
+                  </div>
+                  <div className="min-w-0">
+                    <span className="font-medium text-foreground">Draft: </span>
+                    <span>{formatMailPreview(reply.localDraft)}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+            {isExpanded && reply.futureNote ? (
+              <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                Nota futura: {reply.futureNote}
+              </div>
+            ) : null}
           </form>
         );
       })}
     </div>
   );
+}
+
+function formatMailPreview(value: string) {
+  const text = value.replace(/\s+/g, " ").trim();
+  if (!text) return "Sin contenido.";
+  return text.length > 120 ? `${text.slice(0, 120)}...` : text;
 }
 
 function ActionMessage({ state }: { state: ActionState }) {
