@@ -96,7 +96,7 @@ const reply: AppReply = {
   receivedAt: "2026-05-13T20:00:00.000Z",
   body: "Perfecto, coméntanos para qué fecha necesitan la gift card.",
   draftResponse: "Gracias, te confirmo.",
-  approvalStatus: "rejected",
+  approvalStatus: "needs_review",
   futureNote: "Cerrado automáticamente.",
 };
 
@@ -171,5 +171,118 @@ describe("CompanyOverviewBoard", () => {
     expect(formData.get("scope")).toBe("dia-del-ingeniero");
     expect(formData.get("companyId")).toBe("company-escapology");
     expect(formData.get("instruction")).toContain("respondió otra persona");
+  });
+
+  it("only lists companies that are approved or already contacted in the project", () => {
+    const approvedCompany: AppCompany = {
+      ...company,
+      id: "company-approved",
+      name: "Empresa aprobada",
+      status: "approved_to_send",
+    };
+    const untouchedCompany: AppCompany = {
+      ...company,
+      id: "company-untouched",
+      name: "Empresa sin aprobar",
+      status: "qualified",
+    };
+    const contactedCompany: AppCompany = {
+      ...company,
+      id: "company-contacted",
+      name: "Empresa contactada",
+      status: "new",
+    };
+    const closedWithoutContactCompany: AppCompany = {
+      ...company,
+      id: "company-closed-without-contact",
+      name: "Empresa cerrada sin contacto",
+      status: "closed_negative",
+    };
+    const contactedMessage: AppMessage = {
+      ...message,
+      id: "message-contacted",
+      companyId: "company-contacted",
+      status: "sent",
+    };
+
+    render(
+      <CompanyOverviewBoard
+        campaign={campaign}
+        companies={[
+          approvedCompany,
+          untouchedCompany,
+          contactedCompany,
+          closedWithoutContactCompany,
+        ]}
+        contacts={[]}
+        messages={[contactedMessage]}
+        now="2026-05-14T00:00:00.000Z"
+        replies={[]}
+        scope={campaign.id}
+      />,
+    );
+
+    expect(screen.getByText("Empresa aprobada")).toBeInTheDocument();
+    expect(screen.getByText("Empresa contactada")).toBeInTheDocument();
+    expect(screen.queryByText("Empresa sin aprobar")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Empresa cerrada sin contacto"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("removes rejected mails from history and lets each remaining mail open", () => {
+    const fullBody =
+      "Hola Humberto,\n\nPrimera línea visible.\n\nDetalle interno de visibilidad, pantallas y menciones para entender el contexto completo.";
+    const activeMessage: AppMessage = {
+      ...message,
+      body: fullBody,
+    };
+    const rejectedMessage: AppMessage = {
+      ...message,
+      id: "message-rejected",
+      status: "rejected",
+      subject: "Borrador rechazado",
+      body: "Este texto rechazado no debería aparecer.",
+    };
+    const rejectedReply: AppReply = {
+      ...reply,
+      id: "reply-rejected",
+      approvalStatus: "rejected",
+      body: "Esta respuesta rechazada no debería aparecer.",
+    };
+
+    render(
+      <CompanyOverviewBoard
+        campaign={campaign}
+        companies={[company]}
+        contacts={[contact]}
+        messages={[activeMessage, rejectedMessage]}
+        now="2026-05-14T00:00:00.000Z"
+        replies={[reply, rejectedReply]}
+        scope={campaign.id}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Ver registro de Escapology Chile",
+      }),
+    );
+
+    expect(screen.queryByText("Borrador rechazado")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Esta respuesta rechazada no debería aparecer."),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/Detalle interno de visibilidad/),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Abrir mail Propuesta Día del Ingeniero",
+      }),
+    );
+
+    expect(screen.getByText(/Detalle interno de visibilidad/)).toBeInTheDocument();
   });
 });

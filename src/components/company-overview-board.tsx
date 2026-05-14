@@ -26,6 +26,8 @@ import {
 import {
   buildCompanyExplorerRecords,
   filterCompanyExplorerRecords,
+  type CompanyExplorerRecord,
+  type CompanyExplorerStatus,
 } from "@/lib/prospecting/company-intelligence";
 import type {
   AppCampaign,
@@ -36,6 +38,12 @@ import type {
 } from "@/lib/prospecting/demo-data";
 
 const initialActionState: ActionState = { ok: false, message: "" };
+const overviewCompanyStatuses = new Set<CompanyExplorerStatus>([
+  "approved_to_send",
+  "sent",
+  "replied",
+  "followup_due",
+]);
 
 export function CompanyOverviewBoard({
   campaign,
@@ -71,16 +79,40 @@ export function CompanyOverviewBoard({
       }),
     [companies, contacts, messages, now, replies, scope],
   );
+  const overviewRecords = useMemo(
+    () => records.filter(isApprovedOrContactedRecord),
+    [records],
+  );
   const filteredRecords = useMemo(
     () =>
-      filterCompanyExplorerRecords(records, {
+      filterCompanyExplorerRecords(overviewRecords, {
         query,
         membership: "all",
         status: "all",
       }),
-    [query, records],
+    [overviewRecords, query],
   );
-  const sentCount = messages.filter((message) => message.status === "sent").length;
+  const visibleContactCount = useMemo(() => {
+    const ids = new Set<string>();
+    for (const record of overviewRecords) {
+      for (const contact of record.contacts) {
+        ids.add(contact.id);
+      }
+    }
+    return ids.size;
+  }, [overviewRecords]);
+  const sentCount = useMemo(
+    () =>
+      overviewRecords.reduce(
+        (count, record) =>
+          count +
+          getVisibleMessages(record.messages).filter(
+            (message) => message.status === "sent",
+          ).length,
+        0,
+      ),
+    [overviewRecords],
+  );
 
   function toggleCompany(companyId: string) {
     setExpandedCompanyIds((current) => {
@@ -107,8 +139,8 @@ export function CompanyOverviewBoard({
           />
         </label>
         <div className="grid grid-cols-3 gap-2 text-sm md:min-w-[28rem]">
-          <OverviewMetric label="Empresas" value={companies.length} />
-          <OverviewMetric label="Contactos" value={contacts.length} />
+          <OverviewMetric label="Empresas" value={overviewRecords.length} />
+          <OverviewMetric label="Contactos" value={visibleContactCount} />
           <OverviewMetric label="Mails enviados" value={sentCount} />
         </div>
       </section>
@@ -125,10 +157,12 @@ export function CompanyOverviewBoard({
         {filteredRecords.map((record) => {
           const company = record.company;
           const isExpanded = expandedCompanyIds.has(company.id);
-          const companySentCount = record.messages.filter(
+          const visibleMessages = getVisibleMessages(record.messages);
+          const visibleReplies = getVisibleReplies(record.replies);
+          const companySentCount = visibleMessages.filter(
             (message) => message.status === "sent",
           ).length;
-          const timeline = buildTimeline(record.messages, record.replies);
+          const timeline = buildTimeline(visibleMessages, visibleReplies);
 
           return (
             <div
@@ -167,7 +201,7 @@ export function CompanyOverviewBoard({
                   </div>
                   <div className="flex items-center gap-2">
                     <MessageSquareText className="size-4 text-muted-foreground" />
-                    {plural(record.replies.length, "respuesta", "respuestas")}
+                    {plural(visibleReplies.length, "respuesta", "respuestas")}
                   </div>
                 </div>
 
@@ -295,7 +329,7 @@ export function CompanyOverviewBoard({
 
         {!filteredRecords.length ? (
           <div className="px-4 py-8 text-sm text-muted-foreground">
-            No hay empresas que calcen con la búsqueda.
+            No hay empresas aprobadas o contactadas que calcen con la búsqueda.
           </div>
         ) : null}
       </section>
@@ -437,6 +471,9 @@ function buildTimeline(messages: AppMessage[], replies: AppReply[]): TimelineIte
 }
 
 function TimelineRow({ item }: { item: TimelineItem }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const itemTypeLabel = item.type === "mail" ? "mail" : "respuesta";
+
   return (
     <div className="py-3 first:pt-0 last:pb-0">
       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -454,13 +491,60 @@ function TimelineRow({ item }: { item: TimelineItem }) {
             {formatDate(item.date)}
           </div>
         </div>
-        <StatusBadge status={item.status} />
+        <div className="flex items-center gap-2">
+          <StatusBadge status={item.status} />
+          <Button
+            aria-expanded={isOpen}
+            aria-label={`${isOpen ? "Cerrar" : "Abrir"} ${itemTypeLabel} ${item.title}`}
+            size="sm"
+            type="button"
+            variant="outline"
+            onClick={() => setIsOpen((current) => !current)}
+          >
+            {isOpen ? (
+              <ChevronUp className="size-4" />
+            ) : (
+              <ChevronDown className="size-4" />
+            )}
+            {isOpen ? "Cerrar" : "Abrir"}
+          </Button>
+        </div>
       </div>
-      <p className="mt-2 line-clamp-3 whitespace-pre-line text-sm text-muted-foreground">
-        {item.body}
+      <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">
+        {isOpen ? item.body : getMailPreview(item.body)}
       </p>
     </div>
   );
+}
+
+function isApprovedOrContactedRecord(record: CompanyExplorerRecord) {
+  if (overviewCompanyStatuses.has(record.campaignStatus)) return true;
+
+  const hasApprovedOrSentMail = getVisibleMessages(record.messages).some(
+    (message) => message.status === "approved" || message.status === "sent",
+  );
+  if (hasApprovedOrSentMail) return true;
+
+  return getVisibleReplies(record.replies).length > 0;
+}
+
+function getVisibleMessages(messages: AppMessage[]) {
+  return messages.filter((message) => message.status !== "rejected");
+}
+
+function getVisibleReplies(replies: AppReply[]) {
+  return replies.filter((reply) => reply.approvalStatus !== "rejected");
+}
+
+function getMailPreview(body: string) {
+  const firstParagraph =
+    body
+      .split(/\n{2,}/)
+      .map((part) => part.trim())
+      .find(Boolean) ?? body.trim();
+
+  if (firstParagraph.length <= 140) return firstParagraph;
+  return `${firstParagraph.slice(0, 137).trimEnd()}...`;
 }
 
 function CompanyDetailBlock({
