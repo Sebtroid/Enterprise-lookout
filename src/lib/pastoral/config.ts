@@ -1,7 +1,13 @@
 export const PASTORAL_CAMPAIGN_SLUG = "pastoral-invierno-2026";
 
-export const PASTORAL_CONTACT_SHEET_ID =
+export const DEFAULT_PASTORAL_CONTACT_SHEET_ID =
   "10SpS_-eUS0Trhf6YZiZuolRgmVuh3zkHgKzXvwDR7AI";
+
+export const PASTORAL_CONTACT_SHEET_ID =
+  process.env.PASTORAL_CONTACT_SHEET_ID ?? DEFAULT_PASTORAL_CONTACT_SHEET_ID;
+
+export const PASTORAL_CONTACT_SHEET_RANGE =
+  process.env.PASTORAL_CONTACT_SHEET_RANGE ?? "A:F";
 
 export const PASTORAL_CONTACT_SHEET_URL =
   `https://docs.google.com/spreadsheets/d/${PASTORAL_CONTACT_SHEET_ID}/edit`;

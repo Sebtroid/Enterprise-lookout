@@ -12,10 +12,9 @@ import {
 import { decryptToken, encryptToken } from "@/lib/gmail/token-crypto";
 import { PASTORAL_CAMPAIGN_SLUG } from "@/lib/pastoral/config";
 import {
-  fetchPastoralSheetContacts,
-  findPastoralDuplicate,
-  reservePastoralSheetContact,
-} from "@/lib/pastoral/sheet";
+  preparePastoralInitialSendGuard,
+  type PastoralSendGuardMessage,
+} from "@/lib/pastoral/send-guard";
 import { getPostgresClient } from "@/lib/supabase/postgres";
 
 const sendBodySchema = z.object({
@@ -120,38 +119,18 @@ export async function POST(req: NextRequest) {
       message.campaign_slug === PASTORAL_CAMPAIGN_SLUG &&
       message.kind === "outbound_initial";
 
-    if (isPastoralInitialMail) {
-      let sheetContacts;
-      try {
-        sheetContacts = await fetchPastoralSheetContacts();
-      } catch (error) {
-        return NextResponse.json(
-          {
-            ok: false,
-            error:
-              error instanceof Error
-                ? error.message
-                : "No pude revisar el Sheets de Pastoral antes de enviar.",
-          },
-          { status: 502 },
-        );
-      }
+    const pastoralGuard = isPastoralInitialMail
+      ? await preparePastoralInitialSendGuard({
+          message: message as PastoralSendGuardMessage,
+          sql,
+        })
+      : null;
 
-      const duplicate = findPastoralDuplicate({
-        companyName: message.company_name,
-        email: message.to_email,
-        sheetContacts,
-      });
-
-      if (duplicate) {
-        return NextResponse.json(
-          {
-            ok: false,
-            error: `Bloqueado por Sheets Pastoral: ya aparece ${duplicate.contact.name || duplicate.contact.email} (${formatPastoralDuplicateReason(duplicate.reason)}), contactado por ${duplicate.contact.contactedBy || "sin responsable"}.`,
-          },
-          { status: 409 },
-        );
-      }
+    if (pastoralGuard && !pastoralGuard.ok) {
+      return NextResponse.json(
+        { ok: false, error: pastoralGuard.error },
+        { status: pastoralGuard.status },
+      );
     }
 
     const tokenRows = await sql`
@@ -194,23 +173,6 @@ export async function POST(req: NextRequest) {
       `;
     }
 
-    if (isPastoralInitialMail) {
-      const reservation = await reservePastoralSheetContact({
-        comments: `Registrado por Enterprise Lookout antes de enviar Gmail. Message ID: ${messageId}.`,
-        contactedBy: String(message.sender_display_name || message.sender_email),
-        email: String(message.to_email),
-        name: String(message.company_name || message.contact_name || message.to_email),
-        status: "Contactado",
-      });
-
-      if (!reservation.ok) {
-        return NextResponse.json(
-          { ok: false, error: reservation.error },
-          { status: 409 },
-        );
-      }
-    }
-
     const encodedMessage = encodeRawMessage(
       buildMimeMessage({
         body: message.email_body,
@@ -243,6 +205,12 @@ export async function POST(req: NextRequest) {
 
     if (!sendResponse.ok) {
       console.error("Gmail send error:", sendResult);
+      if (pastoralGuard?.ok) {
+        await pastoralGuard.markFailed({
+          error: sendResult.error?.message || "Gmail API error",
+          stage: "gmail_send",
+        });
+      }
       return NextResponse.json(
         { ok: false, error: sendResult.error?.message || "Gmail API error" },
         { status: 500 },
@@ -354,6 +322,13 @@ export async function POST(req: NextRequest) {
       source: "gmail_send_api",
     });
 
+    if (pastoralGuard?.ok) {
+      await pastoralGuard.markSent({
+        gmail_message_id: sendResult.id,
+        gmail_thread_id: sendResult.threadId ?? sendThreadId ?? null,
+      });
+    }
+
     return NextResponse.json({
       ok: true,
       gmailMessageId: sendResult.id,
@@ -366,12 +341,6 @@ export async function POST(req: NextRequest) {
       { status: 500 },
     );
   }
-}
-
-function formatPastoralDuplicateReason(reason: "domain" | "email" | "name") {
-  if (reason === "email") return "mismo mail";
-  if (reason === "domain") return "mismo dominio";
-  return "mismo nombre";
 }
 
 async function refreshAccessToken(refreshToken: string): Promise<{ access_token: string; expires_in: number } | null> {

@@ -381,6 +381,28 @@ create table automation_runs (
   error text
 );
 
+create table pastoral_sheet_reservations (
+  id uuid primary key default gen_random_uuid(),
+  campaign_id uuid not null references campaigns(id) on delete cascade,
+  company_id uuid references companies(id) on delete set null,
+  contact_id uuid references contacts(id) on delete set null,
+  message_id uuid not null references messages(id) on delete cascade,
+  contact_name text not null,
+  contact_email citext not null,
+  contact_domain text,
+  sender_email citext not null,
+  sheet_id text not null,
+  sheet_range text not null,
+  status text not null default 'reserved' check (
+    status in ('reserved', 'appended', 'verified', 'sent', 'failed')
+  ),
+  detail jsonb not null default '{}',
+  sent_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (message_id)
+);
+
 create index campaign_contacts_status_idx on campaign_contacts (campaign_id, status);
 create index campaign_contacts_company_idx on campaign_contacts (company_id, updated_at desc);
 create index campaign_contacts_campaign_company_idx on campaign_contacts (campaign_id, company_id);
@@ -406,6 +428,15 @@ create index agent_inbox_campaign_idx on agent_inbox (campaign_id, status);
 create index agent_inbox_created_idx on agent_inbox (created_at desc);
 create index ai_memory_rules_campaign_idx on ai_memory_rules (campaign_id, active, updated_at desc);
 create index ai_memory_rules_scope_idx on ai_memory_rules (scope, rule_type, active);
+create unique index pastoral_sheet_reservations_active_email_unique
+  on pastoral_sheet_reservations (campaign_id, contact_email)
+  where status in ('reserved', 'appended', 'verified', 'sent');
+create unique index pastoral_sheet_reservations_active_domain_unique
+  on pastoral_sheet_reservations (campaign_id, contact_domain)
+  where contact_domain is not null
+    and status in ('reserved', 'appended', 'verified', 'sent');
+create index pastoral_sheet_reservations_status_idx
+  on pastoral_sheet_reservations (campaign_id, status, updated_at desc);
 
 alter table campaigns enable row level security;
 alter table sender_accounts enable row level security;
@@ -429,6 +460,7 @@ alter table gmail_tokens enable row level security;
 alter table agent_inbox enable row level security;
 alter table ai_memory_rules enable row level security;
 alter table automation_runs enable row level security;
+alter table pastoral_sheet_reservations enable row level security;
 
 -- V1 policy: authenticated users can operate the private workspace.
 -- Restrict further with an allowed-user table before inviting more people.
@@ -454,6 +486,7 @@ create policy "authenticated workspace access" on gmail_tokens for all using (au
 create policy "authenticated workspace access" on agent_inbox for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 create policy "authenticated workspace access" on ai_memory_rules for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 create policy "authenticated workspace access" on automation_runs for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+create policy "authenticated workspace access" on pastoral_sheet_reservations for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 
 grant select, insert, update, delete on chat_threads to authenticated;
 grant select, insert, update, delete on chat_messages to authenticated;
@@ -463,3 +496,4 @@ grant select, insert, update, delete on company_research_cache to authenticated;
 grant select, insert, update, delete on gmail_tokens to authenticated;
 grant select, insert, update, delete on agent_inbox to authenticated;
 grant select, insert, update, delete on ai_memory_rules to authenticated;
+grant select, insert, update, delete on pastoral_sheet_reservations to authenticated;

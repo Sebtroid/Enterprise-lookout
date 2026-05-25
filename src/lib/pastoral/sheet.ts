@@ -99,54 +99,6 @@ export function buildPastoralSheetRow({
   return [name, email, contactedBy, status, comments, ""];
 }
 
-export async function reservePastoralSheetContact({
-  comments,
-  contactedBy,
-  email,
-  name,
-  status = "Contactado",
-}: {
-  comments: string;
-  contactedBy: string;
-  email: string;
-  name: string;
-  status?: string;
-}) {
-  const webhookUrl = process.env.PASTORAL_CONTACT_SHEET_WEBHOOK_URL;
-  if (!webhookUrl) {
-    return {
-      ok: false,
-      error:
-        "Falta PASTORAL_CONTACT_SHEET_WEBHOOK_URL para registrar el contacto en Sheets antes de enviar.",
-    };
-  }
-
-  const response = await fetch(webhookUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      row: buildPastoralSheetRow({
-        comments,
-        contactedBy,
-        email,
-        name,
-        status,
-      }),
-      secret: process.env.PASTORAL_CONTACT_SHEET_WEBHOOK_SECRET ?? null,
-      source: "enterprise-lookout",
-    }),
-  });
-
-  if (!response.ok) {
-    return {
-      ok: false,
-      error: `No pude registrar el contacto en Sheets (${response.status}).`,
-    };
-  }
-
-  return { ok: true };
-}
-
 function readCell(row: Record<string, string>, ...keys: string[]) {
   for (const key of keys) {
     const value = row[key];

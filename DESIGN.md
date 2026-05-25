@@ -103,3 +103,106 @@ Cuando se usen habilidades de diseño en este repo, partir de estas premisas:
 - Mejorar jerarquía, escaneo, empty states y ergonomía de revisión antes de agregar flourish visual.
 - Si el cambio afecta layout compartido, navegación, estados o flujos de revisión, verificar pantallas representativas en desktop y mobile.
 
+## Pastoral UC Cockpit
+
+### Product Intent
+
+Pastoral UC no es una vista de exploración general. Es un cockpit diario para recaudar plata con velocidad y bajo riesgo. La pantalla debe responder tres preguntas en menos de 10 segundos:
+
+1. Qué puedo hacer ahora.
+2. Qué está bloqueado y por qué.
+3. Qué aprendió el sistema para redactar mejor la próxima vez.
+
+### UX Principles
+
+- Fail-closed visible: si Sheets, Gmail o duplicados están mal, el bloqueo debe verse antes de cualquier acción de envío.
+- Cola primero: las métricas ayudan, pero la unidad principal es la siguiente empresa accionable.
+- Ruido bajo: mostrar solo empresas aprobadas, contactadas, respondidas o con follow-up pendiente.
+- Historial bajo demanda: mails, plantillas y detalles largos deben ir desplegables o truncados.
+- Acción clara: cada fila accionable debe tener un botón obvio y un motivo breve.
+- Autonomía gradual: la IA puede aprender y proponer, pero las respuestas a marcas siguen revisadas por humano.
+
+### Layout
+
+- Header: título, acceso directo a Sheets, respuestas y revisión de mails.
+- Health strip: 5 tarjetas compactas para Gmail, Sheets API, duplicados, follow-ups y respuestas pendientes.
+- Critical banner: regla anti-duplicados y secuencia fail-closed.
+- Main grid:
+  - Left: cola priorizada.
+  - Right: meta de recaudación y estado de Sheets.
+- Secondary grid:
+  - Guardrail paso a paso.
+  - Duplicados detectados.
+- Learning grid:
+  - Reglas activas de IA con desactivar.
+  - Actividad reciente sin cargar cuerpos completos.
+- Bottom:
+  - Datos de donación/certificado.
+  - Plantillas desplegables.
+  - Empresas aprobadas/contactadas solamente.
+
+### Visual System
+
+- Radius: 8px máximo para paneles operativos.
+- Cards: solo para herramientas discretas o registros repetidos; no cards dentro de cards.
+- Palette:
+  - Primary: token teal/navy existente.
+  - Success: emerald para seguro.
+  - Warning: amber para acción pendiente.
+  - Critical: red para bloqueado.
+  - Info: blue/cyan para replies y estados de revisión.
+- Density: compacta, escaneable, sin hero.
+- Typography:
+  - Page title solo a escala grande.
+  - Panel titles: equivalente a 18px.
+  - Row text: 14px compacto con empresa fuerte.
+- Icons: solo lucide; cada fila accionable debe tener un icono familiar.
+
+### States
+
+- Gmail:
+  - Listo: al menos un token Gmail conectado.
+  - Falta: sin token, envío bloqueado.
+- Sheets:
+  - Seguro: service account configurada y lectura exitosa.
+  - Bloquea: credenciales faltantes o error de API.
+  - CSV público: permitido para vista, nunca para enviar.
+- Duplicate:
+  - 0: señal segura.
+  - >0: crítico, filas explican conflicto de email/dominio/nombre.
+- Queue:
+  - Respondió: replies abiertos.
+  - Follow-up: 5+ días sin respuesta.
+  - Seguro enviar: outbound aprobado, listo para guardrail.
+  - Revisar mail: falta draft/research.
+  - Esperando: enviado pero no accionable.
+  - Bloqueado: do_not_contact o conflicto de guardrail.
+
+### Guardrail Contract
+
+Orden de envío inicial Pastoral:
+
+1. Leer Sheets fresco con service account.
+2. Detectar duplicado por email, dominio corporativo y nombre normalizado.
+3. Crear reserva local idempotente por email/dominio.
+4. Agregar fila al Sheets antes de Gmail.
+5. Releer Sheets y verificar la fila.
+6. Enviar Gmail solo después de verificar.
+
+Si cualquier paso falla, la UI/API debe mostrar el motivo de bloqueo y no enviar.
+
+### Accessibility And Responsiveness
+
+- Sin scroll horizontal a 390px, 1024px o 1440px.
+- Botones deben mantener icono y etiqueta visibles o envolver sin solaparse.
+- Estados importantes no pueden depender solo del color.
+- El tab order debe alcanzar links y formularios primarios en orden de documento.
+- Details/summary son aceptables para plantillas largas.
+
+### QA Checklist
+
+- Unit tests cubren parser de Sheets, duplicados, reservas, elegibilidad de follow-up y matching de replies.
+- Playwright verifica desktop 1440, laptop 1024 y mobile 390.
+- Screenshots deben mostrar cero overflow, texto no cortado y overlays sanos.
+- El build debe pasar sin envs de service account, pero el envío debe fallar cerrado.
+- Producción debe tener envs de service account antes de habilitar envíos reales de Pastoral.
