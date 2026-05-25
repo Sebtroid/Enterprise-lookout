@@ -10,6 +10,12 @@ import {
   encodeRawMessage,
 } from "@/lib/gmail/mime";
 import { decryptToken, encryptToken } from "@/lib/gmail/token-crypto";
+import { PASTORAL_CAMPAIGN_SLUG } from "@/lib/pastoral/config";
+import {
+  fetchPastoralSheetContacts,
+  findPastoralDuplicate,
+  reservePastoralSheetContact,
+} from "@/lib/pastoral/sheet";
 import { getPostgresClient } from "@/lib/supabase/postgres";
 
 const sendBodySchema = z.object({
@@ -40,18 +46,23 @@ export async function POST(req: NextRequest) {
         m.kind::text as kind,
         m.status::text as status,
         m.campaign_id,
+        c.slug as campaign_slug,
         m.company_id,
         m.contact_id,
         sa.email::text as sender_email,
+        sa.display_name as sender_display_name,
         sa.account_type,
         sa.status::text as sender_status,
         ct.email::text as to_email,
+        ct.full_name as contact_name,
+        co.canonical_name as company_name,
         coalesce(m.subject_final, m.subject_draft) as subject,
         coalesce(m.body_final, m.body_draft) as email_body,
         coalesce(m.gmail_thread_id, t.gmail_thread_id) as gmail_thread_id,
         coalesce(co.do_not_contact, false) as company_do_not_contact,
         coalesce(ct.do_not_contact, false) as contact_do_not_contact
       from messages m
+      join campaigns c on c.id = m.campaign_id
       join sender_accounts sa on sa.id = m.sender_account_id
       left join threads t on t.id = m.thread_id
       left join companies co on co.id = m.company_id
@@ -105,6 +116,44 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const isPastoralInitialMail =
+      message.campaign_slug === PASTORAL_CAMPAIGN_SLUG &&
+      message.kind === "outbound_initial";
+
+    if (isPastoralInitialMail) {
+      let sheetContacts;
+      try {
+        sheetContacts = await fetchPastoralSheetContacts();
+      } catch (error) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error:
+              error instanceof Error
+                ? error.message
+                : "No pude revisar el Sheets de Pastoral antes de enviar.",
+          },
+          { status: 502 },
+        );
+      }
+
+      const duplicate = findPastoralDuplicate({
+        companyName: message.company_name,
+        email: message.to_email,
+        sheetContacts,
+      });
+
+      if (duplicate) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: `Bloqueado por Sheets Pastoral: ya aparece ${duplicate.contact.name || duplicate.contact.email} (${formatPastoralDuplicateReason(duplicate.reason)}), contactado por ${duplicate.contact.contactedBy || "sin responsable"}.`,
+          },
+          { status: 409 },
+        );
+      }
+    }
+
     const tokenRows = await sql`
       select access_token, refresh_token, expires_at
       from gmail_tokens
@@ -143,6 +192,23 @@ export async function POST(req: NextRequest) {
             updated_at = now()
         where user_email = ${message.sender_email}
       `;
+    }
+
+    if (isPastoralInitialMail) {
+      const reservation = await reservePastoralSheetContact({
+        comments: `Registrado por Enterprise Lookout antes de enviar Gmail. Message ID: ${messageId}.`,
+        contactedBy: String(message.sender_display_name || message.sender_email),
+        email: String(message.to_email),
+        name: String(message.company_name || message.contact_name || message.to_email),
+        status: "Contactado",
+      });
+
+      if (!reservation.ok) {
+        return NextResponse.json(
+          { ok: false, error: reservation.error },
+          { status: 409 },
+        );
+      }
     }
 
     const encodedMessage = encodeRawMessage(
@@ -300,6 +366,12 @@ export async function POST(req: NextRequest) {
       { status: 500 },
     );
   }
+}
+
+function formatPastoralDuplicateReason(reason: "domain" | "email" | "name") {
+  if (reason === "email") return "mismo mail";
+  if (reason === "domain") return "mismo dominio";
+  return "mismo nombre";
 }
 
 async function refreshAccessToken(refreshToken: string): Promise<{ access_token: string; expires_in: number } | null> {

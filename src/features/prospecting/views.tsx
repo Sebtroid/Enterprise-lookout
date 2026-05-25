@@ -38,6 +38,7 @@ import {
 } from "@/components/ui/table";
 import { GmailConnectButton } from "@/components/gmail-connect-button";
 import { GmailSyncRepliesButton } from "@/components/gmail-sync-replies-button";
+import { PASTORAL_CAMPAIGN_SLUG } from "@/lib/pastoral/config";
 import { getContactPriority } from "@/lib/prospecting/demo-data";
 import {
   getPostgresClient,
@@ -220,7 +221,14 @@ export async function CampaignOverviewView({ scope }: { scope: string }) {
       />
 
       {campaign || context ? (
-        <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+        <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+          {scope === PASTORAL_CAMPAIGN_SLUG ? (
+            <QuickAction
+              href={`/campaigns/${scope}/pastoral`}
+              label="Pastoral UC"
+              description="Metas, Sheets anti-duplicados, plantillas y flujo de donaciones."
+            />
+          ) : null}
           <QuickAction
             href={`/campaigns/${scope}/overview`}
             label="Overview empresas"

@@ -6,6 +6,7 @@ import { Menu } from "lucide-react";
 
 const ITEMS = [
   ["Resumen", ""],
+  ["Pastoral", "/pastoral", "pastoral"],
   ["Overview", "/overview"],
   ["Pipeline", "/pipeline"],
   ["Empresas", "/companies"],
@@ -49,7 +50,10 @@ export function MobileNav() {
             >
               Ver todo
             </Link>
-            {ITEMS.map(([label, path]) => {
+            {ITEMS.filter(
+              ([, , visibility]) =>
+                visibility !== "pastoral" || scope === "pastoral-invierno-2026",
+            ).map(([label, path]) => {
               const href = `${baseHref}${path}`;
               return (
                 <Link

@@ -7,6 +7,7 @@ import {
   Bot,
   ContactRound,
   FileDown,
+  HandHeart,
   Inbox,
   LayoutDashboard,
   Mail,
@@ -20,6 +21,7 @@ import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
   { path: "", label: "Resumen", icon: LayoutDashboard },
+  { path: "/pastoral", label: "Pastoral", icon: HandHeart, pastoralOnly: true },
   { path: "/overview", label: "Overview", icon: NotebookTabs },
   { path: "/pipeline", label: "Pipeline", icon: LayoutDashboard },
   { path: "/companies", label: "Empresas", icon: Building2 },
@@ -69,7 +71,9 @@ export function AppSidebar() {
         </div>
 
         <nav className="mt-8 space-y-1">
-          {NAV_ITEMS.map((item) => {
+          {NAV_ITEMS.filter(
+            (item) => !item.pastoralOnly || scope === "pastoral-invierno-2026",
+          ).map((item) => {
             const Icon = item.icon;
             const href = `${baseHref}${item.path}`;
             const active = item.path
