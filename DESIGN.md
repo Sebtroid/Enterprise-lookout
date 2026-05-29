@@ -170,6 +170,10 @@ Pastoral UC no es una vista de exploración general. Es un cockpit diario para r
 - Duplicate:
   - 0: señal segura.
   - >0: crítico, filas explican conflicto de email/dominio/nombre.
+- AI memory:
+  - Reglas duras: `ai_memory_rules`, editables/desactivables.
+  - Memoria semántica: `ai_memory_events` con pgvector dentro de Supabase.
+  - Si falta `OPENAI_API_KEY`, se guarda el evento sin embedding y no bloquea operación.
 - Queue:
   - Respondió: replies abiertos.
   - Follow-up: 5+ días sin respuesta.
@@ -202,6 +206,7 @@ Si cualquier paso falla, la UI/API debe mostrar el motivo de bloqueo y no enviar
 ### QA Checklist
 
 - Unit tests cubren parser de Sheets, duplicados, reservas, elegibilidad de follow-up y matching de replies.
+- Memoria IA usa Postgres/pgvector como contexto, nunca para saltarse guardrails.
 - Playwright verifica desktop 1440, laptop 1024 y mobile 390.
 - Screenshots deben mostrar cero overflow, texto no cortado y overlays sanos.
 - El build debe pasar sin credenciales de cuenta técnica; Sheets usa Google OAuth del remitente.

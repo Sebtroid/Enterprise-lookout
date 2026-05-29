@@ -8,6 +8,7 @@ import {
   fetchPastoralSheetContacts,
   type PastoralSheetContact,
 } from "@/lib/pastoral/sheet";
+import { listRecentAiMemoryEvents } from "@/lib/gpt/semantic-memory";
 import {
   getPostgresClient,
   withPostgresQueryTimeout,
@@ -61,6 +62,13 @@ export type PastoralOpsSnapshot = {
     ruleText: string;
     ruleType: string;
     source: string;
+  }>;
+  semanticMemory: Array<{
+    confidence: number | null;
+    createdAt: string | null;
+    id: string;
+    preview: string;
+    sourceType: string;
   }>;
   queue: PastoralQueueItem[];
   recentActivity: Array<{
@@ -252,7 +260,7 @@ export async function getPastoralOpsSnapshot(
     const campaignId = stringValue(campaignRows[0]?.id);
     if (!campaignId) return emptyOpsSnapshot();
 
-    const [countRows, queueRows, memoryRows, activityRows] = await Promise.all([
+    const [countRows, queueRows, memoryRows, activityRows, semanticMemoryRows] = await Promise.all([
       withPostgresQueryTimeout(sql`
         select
           count(*) filter (
@@ -419,6 +427,7 @@ export async function getPastoralOpsSnapshot(
         order by coalesce(m.sent_at, m.approved_at, m.received_at, m.created_at) desc
         limit 10
       `.execute(), "pastoral activity"),
+      listRecentAiMemoryEvents({ campaignId, limit: 6 }),
     ]);
 
     const counts = countRows[0] ?? {};
@@ -433,6 +442,13 @@ export async function getPastoralOpsSnapshot(
         sentInitial: numberValue(counts.sent_initial),
       },
       memoryRules: memoryRows.map(mapMemoryRule),
+      semanticMemory: semanticMemoryRows.map((memory) => ({
+        confidence: memory.confidence,
+        createdAt: memory.created_at || null,
+        id: memory.id,
+        preview: memory.memory_text,
+        sourceType: memory.source_type,
+      })),
       queue: queueRows.map((row) => mapQueueItem(row, scope)),
       recentActivity: activityRows.map(mapActivity),
     };
@@ -573,6 +589,7 @@ function emptyOpsSnapshot(): PastoralOpsSnapshot {
       sentInitial: 0,
     },
     memoryRules: [],
+    semanticMemory: [],
     queue: [],
     recentActivity: [],
   };

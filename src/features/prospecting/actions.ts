@@ -30,6 +30,11 @@ import {
   getDomCampaignContextBySlug,
 } from "@/lib/dom/repository";
 import { PROJECT_CONTEXT_REFINEMENT_TASK_TYPE } from "@/lib/dom/project-context";
+import {
+  buildMemoryText,
+  createAiMemoryEvent,
+  type AiMemoryEventInput,
+} from "@/lib/gpt/semantic-memory";
 import { getExistingContextName } from "@/lib/prospecting/context";
 import { getPostgresClient } from "@/lib/supabase/postgres";
 
@@ -91,6 +96,7 @@ export async function updateOutboundMessageAction(
       c.slug as campaign_slug,
       m.company_id::text as company_id,
       m.contact_id::text as contact_id,
+      m.sender_account_id::text as sender_account_id,
       m.status::text as status,
       coalesce(m.subject_final, m.subject_draft) as subject,
       co.canonical_name as company_name,
@@ -166,6 +172,29 @@ export async function updateOutboundMessageAction(
   });
 
   revalidateProspectingPaths();
+
+  if (intent.data === "approved") {
+    await rememberAiEvent({
+      campaignId: String(message.campaign_id),
+      companyId: nullableString(message.company_id),
+      confidence: 0.76,
+      contactId: nullableString(message.contact_id),
+      memoryText: buildMemoryText([
+        "Mail aprobado por el usuario.",
+        `Empresa: ${message.company_name ?? "sin empresa"}.`,
+        `Contacto: ${message.contact_email ?? "sin contacto"}.`,
+        `Asunto: ${message.subject ?? "(sin asunto)"}.`,
+        `Cuerpo aprobado:\n${body}`,
+      ]),
+      metadata: {
+        intent: "approved",
+        subject: message.subject ?? null,
+      },
+      senderAccountId: nullableString(message.sender_account_id),
+      sourceId: messageId,
+      sourceType: "approved_message",
+    });
+  }
 
   return {
     ok: true,
@@ -368,7 +397,7 @@ export async function rejectOutboundMessageAction(
     if (!message) return { kind: "missing" as const };
     if (message.status === "sent") return { kind: "sent" as const };
 
-    await tx`
+    const feedbackRows = await tx`
       insert into outbound_feedback (
         message_id,
         campaign_id,
@@ -386,7 +415,9 @@ export async function rejectOutboundMessageAction(
         ${comment || null},
         ${rememberForFuture}
       )
+      returning id::text as id
     `;
+    const feedbackId = String(feedbackRows[0]?.id ?? "");
 
     await tx`
       update messages
@@ -432,6 +463,10 @@ export async function rejectOutboundMessageAction(
         campaignId: String(message.campaign_id),
         companyId: String(message.company_id ?? ""),
         contactId: String(message.contact_id ?? ""),
+        feedbackId,
+        originalBody: String(message.body ?? ""),
+        senderAccountId: String(message.sender_account_id ?? ""),
+        subject: String(message.subject ?? ""),
       };
     }
 
@@ -449,6 +484,8 @@ export async function rejectOutboundMessageAction(
       campaignId: String(message.campaign_id),
       companyId: String(message.company_id ?? ""),
       contactId: String(message.contact_id ?? ""),
+      feedbackId,
+      senderAccountId: String(message.sender_account_id ?? ""),
       subject: String(message.subject ?? ""),
       originalBody: String(message.body ?? ""),
       rememberForFuture,
@@ -467,6 +504,34 @@ export async function rejectOutboundMessageAction(
 
   if (result.kind === "sent") {
     return { ok: false, message: "Ese mail ya fue enviado; no se rechaza." };
+  }
+
+  if (
+    "feedbackId" in result &&
+    result.feedbackId &&
+    rememberForFuture &&
+    (comment || result.kind === "closed")
+  ) {
+    await rememberAiEvent({
+      campaignId: result.campaignId,
+      companyId: result.companyId || null,
+      confidence: reason.data === "bad_copy" ? 0.82 : 0.74,
+      contactId: result.contactId || null,
+      memoryText: buildMemoryText([
+        "Feedback recordado desde rechazo de mail.",
+        `Motivo: ${outboundRejectionReasons[reason.data]}.`,
+        comment ? `Comentario del usuario: ${comment}` : null,
+        `Asunto: ${result.subject ?? ""}.`,
+        result.originalBody ? `Borrador rechazado:\n${result.originalBody}` : null,
+      ]),
+      metadata: {
+        reason: reason.data,
+        source: "outbound_review",
+      },
+      senderAccountId: result.senderAccountId || null,
+      sourceId: result.feedbackId,
+      sourceType: "outbound_feedback",
+    });
   }
 
   if (result.kind === "closed") {
@@ -947,6 +1012,21 @@ export async function createResearchRequestAction(
   }
 
   revalidateProspectingPaths(scope);
+  await rememberAiEvent({
+    campaignId: String(campaign.id),
+    confidence: 0.66,
+    memoryText: buildMemoryText([
+      "Tarea de investigacion creada para Dom.",
+      `Rubros: ${rubrics}.`,
+      notes ? `Notas: ${notes}` : null,
+    ]),
+    metadata: {
+      source: "research_request_form",
+      task_id: taskRows[0]?.id ?? null,
+    },
+    sourceId: taskRows[0]?.id ? String(taskRows[0].id) : null,
+    sourceType: "dom_task",
+  });
   await sendAgentEvent({
     event: "dom_task_created",
     campaignId: String(campaign.id),
@@ -1040,6 +1120,21 @@ export async function createDomTaskAction(
   }
 
   revalidateProspectingPaths(scope);
+  await rememberAiEvent({
+    campaignId: campaignContext.dbId,
+    confidence: 0.66,
+    memoryText: buildMemoryText([
+      "Tarea manual creada para Dom.",
+      description,
+      context ? `Contexto:\n${context}` : null,
+    ]),
+    metadata: {
+      source: "manual_task_form",
+      task_id: rows[0]?.id ?? null,
+    },
+    sourceId: rows[0]?.id ? String(rows[0].id) : null,
+    sourceType: "dom_task",
+  });
   await sendAgentEvent({
     event: "dom_task_created",
     campaignId: campaignContext.dbId,
@@ -1264,6 +1359,29 @@ export async function createCompanyOverviewDomTaskAction(
   }
 
   revalidateProspectingPaths(scope);
+  await rememberAiEvent({
+    campaignId: campaignContext.dbId,
+    companyId,
+    confidence: 0.72,
+    memoryText: buildMemoryText([
+      "Tarea de Dom creada desde el overview de empresa.",
+      `Empresa: ${companyName}.`,
+      `Instruccion del usuario: ${instruction}`,
+      nullableRowString(company.campaign_notes)
+        ? `Notas del proyecto:\n${nullableRowString(company.campaign_notes)}`
+        : null,
+      nullableRowString(company.future_notes)
+        ? `Notas futuras:\n${nullableRowString(company.future_notes)}`
+        : null,
+    ]),
+    metadata: {
+      company_name: companyName,
+      source: "company_overview",
+      task_id: rows[0]?.id ?? null,
+    },
+    sourceId: rows[0]?.id ? String(rows[0].id) : null,
+    sourceType: "dom_task",
+  });
   await sendAgentEvent({
     event: "dom_task_created",
     campaignId: campaignContext.dbId,
@@ -2227,6 +2345,7 @@ export async function updateReplyDraftAction(
         replyBody: String(reply.reply_body ?? ""),
         currentDraft: String(reply.current_draft ?? ""),
         feedback,
+        senderAccountId: String(reply.sender_account_id ?? ""),
       };
     }
 
@@ -2290,6 +2409,10 @@ export async function updateReplyDraftAction(
       companyId: String(reply.company_id ?? ""),
       contactId: String(reply.contact_id ?? ""),
       campaignSlug: String(reply.campaign_slug),
+      currentDraft: draft,
+      replyBody: String(reply.reply_body ?? ""),
+      senderAccountId: String(reply.sender_account_id ?? ""),
+      subject: String(reply.subject ?? ""),
     };
   });
 
@@ -2307,6 +2430,73 @@ export async function updateReplyDraftAction(
   }
 
   revalidateProspectingPaths(campaignSlug);
+
+  if (result.kind === "approved") {
+    await rememberAiEvent({
+      campaignId: result.campaignId,
+      companyId: result.companyId || null,
+      confidence: 0.78,
+      contactId: result.contactId || null,
+      memoryText: buildMemoryText([
+        "Respuesta a reply aprobada por el usuario.",
+        `Asunto: ${result.subject}.`,
+        result.replyBody ? `Reply recibido:\n${result.replyBody}` : null,
+        result.currentDraft ? `Respuesta aprobada:\n${result.currentDraft}` : null,
+      ]),
+      metadata: {
+        source: "reply_review",
+        status: "approved",
+      },
+      senderAccountId: result.senderAccountId || null,
+      sourceId: replyId,
+      sourceType: "approved_message",
+    });
+  }
+
+  if (result.kind === "no_reply") {
+    await rememberAiEvent({
+      campaignId: result.campaignId,
+      companyId: result.companyId || null,
+      confidence: 0.8,
+      contactId: result.contactId || null,
+      memoryText: buildMemoryText([
+        "El usuario marco este reply como no responder.",
+        "Usar como ejemplo de mensajes automaticos o sin accion necesaria.",
+        `Asunto: ${result.subject}.`,
+        result.replyBody ? `Reply recibido:\n${result.replyBody}` : null,
+      ]),
+      metadata: {
+        source: "reply_review",
+        status: "no_reply",
+      },
+      senderAccountId: result.senderAccountId || null,
+      sourceId: replyId,
+      sourceType: "no_reply",
+    });
+  }
+
+  if (result.kind === "rejected") {
+    await rememberAiEvent({
+      campaignId: result.campaignId,
+      companyId: result.companyId || null,
+      confidence: 0.84,
+      contactId: result.contactId || null,
+      memoryText: buildMemoryText([
+        "Draft de respuesta rechazado por el usuario.",
+        result.feedback ? `Feedback: ${result.feedback}` : null,
+        `Asunto: ${result.subject}.`,
+        result.replyBody ? `Reply recibido:\n${result.replyBody}` : null,
+        result.currentDraft ? `Draft rechazado:\n${result.currentDraft}` : null,
+      ]),
+      metadata: {
+        source: "reply_review",
+        status: "rejected",
+      },
+      senderAccountId: result.senderAccountId || null,
+      sourceId: replyId,
+      sourceType: "reply_feedback",
+    });
+  }
 
   if (result.kind === "rejected") {
     const taskDescription = `Redactar nueva respuesta para ${result.companyName || result.subject}.`;
@@ -3328,6 +3518,16 @@ function stringArrayFromRow(value: unknown) {
 function nullIfEmpty(value: string) {
   const trimmed = value.trim();
   return trimmed || null;
+}
+
+function nullableString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+async function rememberAiEvent(input: AiMemoryEventInput) {
+  await createAiMemoryEvent(input).catch((error) => {
+    console.error("[ai_memory_events] non-blocking remember failed:", error);
+  });
 }
 
 function clipText(value: string, maxLength: number) {

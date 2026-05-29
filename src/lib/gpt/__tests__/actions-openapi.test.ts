@@ -29,6 +29,8 @@ describe("GPT Actions OpenAPI schema", () => {
         "submitGptJobResult",
         "listMemoryRules",
         "createMemoryRule",
+        "searchSemanticMemory",
+        "createSemanticMemory",
       ]),
     );
   });

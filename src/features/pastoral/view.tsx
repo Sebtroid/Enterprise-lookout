@@ -330,7 +330,7 @@ export async function PastoralFundraisingView({ scope }: { scope: string }) {
             Qué aprendió la IA
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
-            Reglas activas creadas desde feedback, rechazos, aprobaciones y tareas.
+            Reglas duras y memoria vectorial creada desde feedback, aprobaciones y tareas.
           </p>
           <div className="mt-4 divide-y divide-border">
             {ops.memoryRules.length ? (
@@ -362,6 +362,36 @@ export async function PastoralFundraisingView({ scope }: { scope: string }) {
                 text="Aún no hay reglas activas. Cuando rechaces, edites o apruebes, Dom podrá convertir patrones útiles en memoria."
               />
             )}
+          </div>
+          <div className="mt-4 border-t border-border pt-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold">Memoria semántica</h3>
+              <Badge variant="outline">{ops.semanticMemory.length}</Badge>
+            </div>
+            <div className="mt-2 divide-y divide-border">
+              {ops.semanticMemory.length ? (
+                ops.semanticMemory.map((memory) => (
+                  <div className="py-2 first:pt-0 last:pb-0" key={memory.id}>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant="outline">{formatMemorySource(memory.sourceType)}</Badge>
+                      {memory.confidence == null ? null : (
+                        <span className="text-xs text-muted-foreground">
+                          {Math.round(memory.confidence * 100)}%
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">
+                      {memory.preview}
+                    </p>
+                  </div>
+                ))
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Aún no hay embeddings guardados. Se crearán con rechazos,
+                  aprobaciones, no responder y tareas a Dom.
+                </p>
+              )}
+            </div>
           </div>
         </div>
 
@@ -699,6 +729,15 @@ function formatMessageType(type: string) {
 
 function formatCompanyStatus(status: string) {
   return status.replaceAll("_", " ");
+}
+
+function formatMemorySource(source: string) {
+  if (source === "approved_message") return "aprobado";
+  if (source === "dom_task") return "tarea";
+  if (source === "no_reply") return "no responder";
+  if (source === "outbound_feedback") return "feedback";
+  if (source === "reply_feedback") return "reply";
+  return source.replaceAll("_", " ");
 }
 
 function formatSheetMode(mode: "google_oauth" | "public_csv" | "unavailable") {

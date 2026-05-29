@@ -3,6 +3,12 @@ import { persistDomApiResponse } from "@/lib/dom/client";
 import { getDomCampaignContextById } from "@/lib/dom/repository";
 import type { DomApiResponse } from "@/lib/dom/types";
 import { normalizeDomTaskStatus, type DOM_TASK_STATUSES } from "@/lib/dom/status";
+import {
+  createAiMemoryEvent,
+  listRecentAiMemoryEvents,
+  searchAiMemoryEvents,
+  type AiMemorySourceType,
+} from "@/lib/gpt/semantic-memory";
 import { getPostgresClient } from "@/lib/supabase/postgres";
 
 type DomTaskStatus = (typeof DOM_TASK_STATUSES)[number];
@@ -50,6 +56,27 @@ export type GptMemoryRuleInput = {
   confidence?: number | null;
 };
 
+export type GptMemoryEventInput = {
+  campaignId?: string | null;
+  companyId?: string | null;
+  confidence?: number | null;
+  contactId?: string | null;
+  memoryText: string;
+  metadata?: Record<string, unknown> | null;
+  senderAccountId?: string | null;
+  sourceId?: string | null;
+  sourceType?: AiMemorySourceType | null;
+};
+
+export type GptMemorySearchInput = {
+  campaignId?: string | null;
+  companyId?: string | null;
+  contactId?: string | null;
+  limit?: number;
+  query: string;
+  sourceTypes?: AiMemorySourceType[];
+};
+
 export async function listGptCampaigns() {
   const sql = requireSql();
   const rows = await sql`
@@ -76,7 +103,7 @@ export async function getGptCampaignWorkspace(campaignKey: string) {
   const campaignId = await resolveCampaignId(sql, campaignKey);
   if (!campaignId) return null;
 
-  const [campaigns, tasks, rules, feedback] = await Promise.all([
+  const [campaigns, tasks, rules, feedback, semanticMemory] = await Promise.all([
     sql`
       select
         id::text as id,
@@ -114,6 +141,7 @@ export async function getGptCampaignWorkspace(campaignKey: string) {
     `,
     listGptMemoryRules({ campaignId }),
     listRememberedOutboundFeedback(sql, campaignId),
+    listRecentAiMemoryEvents({ campaignId, limit: 12 }),
   ]);
 
   const campaign = campaigns[0];
@@ -123,6 +151,7 @@ export async function getGptCampaignWorkspace(campaignKey: string) {
     campaign: mapCampaignRow(campaign),
     active_tasks: tasks.map(mapTaskRow),
     memory_rules: rules,
+    semantic_memory: semanticMemory,
     remembered_feedback: feedback,
   };
 }
@@ -294,16 +323,36 @@ export async function getGptJobContext(jobId: string) {
   ]);
   const companyId = findContextString(context, ["company_id"]);
   const contactId = findContextString(context, ["contact_id"]);
+  const memoryQuery = [
+    String(row.description ?? ""),
+    stringifyResult(row.context),
+  ].filter(Boolean).join("\n\n");
 
-  const [rules, rememberedFeedback, message, company, contact, candidates] =
-    await Promise.all([
-      campaignId ? listGptMemoryRules({ campaignId }) : Promise.resolve([]),
-      campaignId ? listRememberedOutboundFeedback(sql, campaignId) : Promise.resolve([]),
-      messageId ? getMessageContext(sql, messageId) : Promise.resolve(null),
-      companyId ? getCompanyContext(sql, companyId) : Promise.resolve(null),
-      contactId ? getContactContext(sql, contactId) : Promise.resolve(null),
-      getCandidateContext(sql, jobId),
-    ]);
+  const [
+    rules,
+    rememberedFeedback,
+    semanticMemory,
+    message,
+    company,
+    contact,
+    candidates,
+  ] = await Promise.all([
+    campaignId ? listGptMemoryRules({ campaignId }) : Promise.resolve([]),
+    campaignId ? listRememberedOutboundFeedback(sql, campaignId) : Promise.resolve([]),
+    campaignId && memoryQuery
+      ? searchAiMemoryEvents({
+          campaignId,
+          companyId,
+          contactId,
+          limit: 8,
+          query: memoryQuery,
+        })
+      : Promise.resolve({ events: [] }),
+    messageId ? getMessageContext(sql, messageId) : Promise.resolve(null),
+    companyId ? getCompanyContext(sql, companyId) : Promise.resolve(null),
+    contactId ? getContactContext(sql, contactId) : Promise.resolve(null),
+    getCandidateContext(sql, jobId),
+  ]);
 
   return {
     task,
@@ -322,6 +371,11 @@ export async function getGptJobContext(jobId: string) {
       : null,
     memory_rules: rules,
     remembered_feedback: rememberedFeedback,
+    semantic_memory: semanticMemory.events,
+    semantic_memory_status: {
+      database_error: "databaseError" in semanticMemory ? semanticMemory.databaseError : null,
+      embedding_error: "embeddingError" in semanticMemory ? semanticMemory.embeddingError : null,
+    },
     related: {
       message,
       company: company ?? message?.company ?? null,
@@ -484,6 +538,26 @@ export async function submitGptJobResult(jobId: string, input: GptResultInput) {
     }
   }
 
+  if (result.task.campaign_id && status === "completed" && (resultText || message)) {
+    await createAiMemoryEvent({
+      campaignId: String(result.task.campaign_id),
+      confidence: 0.62,
+      createdBy: "custom_gpt",
+      memoryText: [
+        "Resultado completado por GPT/Dom.",
+        message ? `Mensaje: ${message}` : null,
+        resultText ? `Resultado:\n${resultText}` : null,
+      ].filter(Boolean).join("\n\n"),
+      metadata: {
+        action_count: rawActions.length,
+        candidate_count: candidates.length,
+        source: "custom_gpt_result",
+      },
+      sourceId: jobId,
+      sourceType: "gpt_result",
+    });
+  }
+
   return {
     task_id: result.task.id,
     status: result.task.status,
@@ -578,6 +652,36 @@ export async function createGptMemoryRule(input: GptMemoryRuleInput) {
   `;
 
   return rows[0] ?? null;
+}
+
+export async function createGptMemoryEvent(input: GptMemoryEventInput) {
+  const sql = requireSql();
+  const campaignId = await resolveCampaignId(sql, input.campaignId);
+  return createAiMemoryEvent({
+    campaignId,
+    companyId: input.companyId,
+    confidence: input.confidence,
+    contactId: input.contactId,
+    createdBy: "custom_gpt",
+    memoryText: input.memoryText,
+    metadata: input.metadata,
+    senderAccountId: input.senderAccountId,
+    sourceId: input.sourceId,
+    sourceType: input.sourceType ?? "manual",
+  });
+}
+
+export async function searchGptMemoryEvents(input: GptMemorySearchInput) {
+  const sql = requireSql();
+  const campaignId = await resolveCampaignId(sql, input.campaignId);
+  return searchAiMemoryEvents({
+    campaignId,
+    companyId: input.companyId,
+    contactId: input.contactId,
+    limit: input.limit,
+    query: input.query,
+    sourceTypes: input.sourceTypes,
+  });
 }
 
 function requireSql() {
