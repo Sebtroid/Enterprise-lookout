@@ -19,7 +19,7 @@ create table if not exists ai_memory_events (
   ),
   source_id uuid,
   memory_text text not null,
-  embedding vector(1536),
+  embedding vector(3072),
   embedding_model text,
   metadata jsonb not null default '{}',
   confidence numeric(4, 3) not null default 0.7 check (
@@ -41,13 +41,8 @@ create index if not exists ai_memory_events_company_idx
 create index if not exists ai_memory_events_source_idx
   on ai_memory_events (source_type, source_id);
 
-create index if not exists ai_memory_events_embedding_idx
-  on ai_memory_events using ivfflat (embedding vector_cosine_ops)
-  with (lists = 100)
-  where active = true and embedding is not null;
-
 create or replace function match_ai_memory_events(
-  query_embedding vector(1536),
+  query_embedding vector(3072),
   match_campaign_id uuid default null,
   match_company_id uuid default null,
   match_contact_id uuid default null,

@@ -389,7 +389,7 @@ create table ai_memory_events (
   ),
   source_id uuid,
   memory_text text not null,
-  embedding vector(1536),
+  embedding vector(3072),
   embedding_model text,
   metadata jsonb not null default '{}',
   confidence numeric(4, 3) not null default 0.7 check (
@@ -464,10 +464,6 @@ create index ai_memory_rules_scope_idx on ai_memory_rules (scope, rule_type, act
 create index ai_memory_events_campaign_idx on ai_memory_events (campaign_id, active, created_at desc);
 create index ai_memory_events_company_idx on ai_memory_events (company_id, active, created_at desc);
 create index ai_memory_events_source_idx on ai_memory_events (source_type, source_id);
-create index ai_memory_events_embedding_idx
-  on ai_memory_events using ivfflat (embedding vector_cosine_ops)
-  with (lists = 100)
-  where active = true and embedding is not null;
 create unique index pastoral_sheet_reservations_active_email_unique
   on pastoral_sheet_reservations (campaign_id, contact_email)
   where status in ('reserved', 'appended', 'verified', 'sent');
@@ -542,7 +538,7 @@ grant select, insert, update, delete on ai_memory_events to authenticated;
 grant select, insert, update, delete on pastoral_sheet_reservations to authenticated;
 
 create or replace function match_ai_memory_events(
-  query_embedding vector(1536),
+  query_embedding vector(3072),
   match_campaign_id uuid default null,
   match_company_id uuid default null,
   match_contact_id uuid default null,

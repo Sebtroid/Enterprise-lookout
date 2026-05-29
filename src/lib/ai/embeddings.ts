@@ -1,5 +1,5 @@
-const DEFAULT_EMBEDDING_MODEL = "text-embedding-3-small";
-export const OPENAI_EMBEDDING_DIMENSIONS = 1536;
+const DEFAULT_EMBEDDING_MODEL = "text-embedding-3-large";
+export const OPENAI_EMBEDDING_DIMENSIONS = 3072;
 
 export type EmbeddingResult =
   | {
