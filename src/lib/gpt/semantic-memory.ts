@@ -57,6 +57,14 @@ export type AiMemoryEvent = {
   source_type: string;
 };
 
+export type AiMemoryBackfillResult = {
+  databaseError?: string;
+  embeddingError?: string;
+  failed: number;
+  processed: number;
+  updated: number;
+};
+
 export async function createAiMemoryEvent(input: AiMemoryEventInput) {
   const sql = getPostgresClient();
   if (!sql) return null;
@@ -128,6 +136,108 @@ export async function createAiMemoryEvent(input: AiMemoryEventInput) {
       console.error("[ai_memory_events] create failed:", error);
     }
     return null;
+  }
+}
+
+export async function backfillAiMemoryEmbeddings({
+  limit = 25,
+}: {
+  limit?: number;
+} = {}): Promise<AiMemoryBackfillResult> {
+  const sql = getPostgresClient();
+  if (!sql) {
+    return {
+      databaseError: "Database unavailable.",
+      failed: 0,
+      processed: 0,
+      updated: 0,
+    };
+  }
+
+  const boundedLimit = Math.min(Math.max(limit, 1), 100);
+
+  try {
+    const rows = await sql`
+      select id::text as id, memory_text
+      from ai_memory_events
+      where active = true
+        and embedding is null
+      order by created_at asc
+      limit ${boundedLimit}
+    `;
+
+    let failed = 0;
+    let updated = 0;
+    let firstEmbeddingError = "";
+
+    for (const row of rows) {
+      const id = String(row.id ?? "");
+      const memoryText = normalizeMemoryText(String(row.memory_text ?? ""));
+      if (!id || !memoryText) {
+        failed += 1;
+        continue;
+      }
+
+      const embedding = await createEmbedding(memoryText);
+      if (!embedding.ok) {
+        failed += 1;
+        firstEmbeddingError ||= embedding.error;
+        await sql`
+          update ai_memory_events
+          set
+            embedding_model = ${embedding.model},
+            metadata = jsonb_set(
+              coalesce(metadata, '{}'::jsonb),
+              '{embedding}',
+              ${sql.json({
+                error: embedding.error,
+                model: embedding.model,
+                status: "missing",
+              } as JsonInput)}::jsonb,
+              true
+            ),
+            updated_at = now()
+          where id = ${id}
+        `;
+        continue;
+      }
+
+      await sql`
+        update ai_memory_events
+        set
+          embedding = ${toPgVectorLiteral(embedding.embedding)}::vector,
+          embedding_model = ${embedding.model},
+          metadata = jsonb_set(
+            coalesce(metadata, '{}'::jsonb),
+            '{embedding}',
+            ${sql.json({
+              model: embedding.model,
+              status: "ready",
+            } as JsonInput)}::jsonb,
+            true
+          ),
+          updated_at = now()
+        where id = ${id}
+      `;
+      updated += 1;
+    }
+
+    return {
+      embeddingError: firstEmbeddingError || undefined,
+      failed,
+      processed: rows.length,
+      updated,
+    };
+  } catch (error) {
+    if (!isMissingSemanticMemoryStorage(error)) {
+      console.error("[ai_memory_events] backfill failed:", error);
+    }
+    return {
+      databaseError: error instanceof Error ? error.message : "Memory backfill failed.",
+      failed: 0,
+      processed: 0,
+      updated: 0,
+    };
   }
 }
 
