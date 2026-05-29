@@ -10,22 +10,26 @@ import {
 } from "@/lib/pastoral/google-sheets";
 import { buildPastoralSheetRow } from "@/lib/pastoral/sheet";
 
-describe("pastoral Google Sheets service account", () => {
-  it("normalizes service account config from env values", () => {
+describe("pastoral Google Sheets OAuth", () => {
+  it("reads sheet config from env values without technical account credentials", () => {
     const config = getPastoralSheetsConfig({
-      GOOGLE_SHEETS_PRIVATE_KEY: "-----BEGIN PRIVATE KEY-----\\nabc\\n-----END PRIVATE KEY-----\\n",
-      GOOGLE_SHEETS_SERVICE_ACCOUNT_EMAIL: "bot@example.iam.gserviceaccount.com",
       PASTORAL_CONTACT_SHEET_ID: "sheet-123",
       PASTORAL_CONTACT_SHEET_RANGE: "'Contactados'!A:F",
     });
 
     expect(config).toMatchObject({
-      clientEmail: "bot@example.iam.gserviceaccount.com",
-      privateKey: "-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----",
       range: "'Contactados'!A:F",
       spreadsheetId: "sheet-123",
     });
     expect(isPastoralSheetsConfigured(config)).toBe(true);
+    expect(
+      isPastoralSheetsConfigured(
+        getPastoralSheetsConfig({
+          PASTORAL_CONTACT_SHEET_ID: "",
+          PASTORAL_CONTACT_SHEET_RANGE: "A:F",
+        }),
+      ),
+    ).toBe(false);
   });
 
   it("parses values returned by the Sheets API using the shared columns", () => {
@@ -47,8 +51,6 @@ describe("pastoral Google Sheets service account", () => {
 
   it("appends a contact row and verifies it by reading the sheet again", async () => {
     const config = getPastoralSheetsConfig({
-      GOOGLE_SHEETS_PRIVATE_KEY: "key",
-      GOOGLE_SHEETS_SERVICE_ACCOUNT_EMAIL: "bot@example.iam.gserviceaccount.com",
       PASTORAL_CONTACT_SHEET_ID: "sheet-123",
       PASTORAL_CONTACT_SHEET_RANGE: "A:F",
     });

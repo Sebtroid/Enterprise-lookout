@@ -119,20 +119,6 @@ export async function POST(req: NextRequest) {
       message.campaign_slug === PASTORAL_CAMPAIGN_SLUG &&
       message.kind === "outbound_initial";
 
-    const pastoralGuard = isPastoralInitialMail
-      ? await preparePastoralInitialSendGuard({
-          message: message as PastoralSendGuardMessage,
-          sql,
-        })
-      : null;
-
-    if (pastoralGuard && !pastoralGuard.ok) {
-      return NextResponse.json(
-        { ok: false, error: pastoralGuard.error },
-        { status: pastoralGuard.status },
-      );
-    }
-
     const tokenRows = await sql`
       select access_token, refresh_token, expires_at
       from gmail_tokens
@@ -171,6 +157,21 @@ export async function POST(req: NextRequest) {
             updated_at = now()
         where user_email = ${message.sender_email}
       `;
+    }
+
+    const pastoralGuard = isPastoralInitialMail
+      ? await preparePastoralInitialSendGuard({
+          accessToken: access_token,
+          message: message as PastoralSendGuardMessage,
+          sql,
+        })
+      : null;
+
+    if (pastoralGuard && !pastoralGuard.ok) {
+      return NextResponse.json(
+        { ok: false, error: pastoralGuard.error },
+        { status: pastoralGuard.status },
+      );
     }
 
     const encodedMessage = encodeRawMessage(

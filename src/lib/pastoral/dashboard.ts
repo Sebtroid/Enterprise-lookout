@@ -1,9 +1,9 @@
 import {
   fetchPastoralSheetContactsFromApi,
-  getPastoralSheetsAccessToken,
   getPastoralSheetsConfig,
   isPastoralSheetsConfigured,
 } from "@/lib/pastoral/google-sheets";
+import { decryptToken, encryptToken } from "@/lib/gmail/token-crypto";
 import {
   fetchPastoralSheetContacts,
   type PastoralSheetContact,
@@ -18,10 +18,11 @@ type DbRow = Record<string, unknown>;
 export type PastoralSheetStatus = {
   contacts: PastoralSheetContact[];
   error: string | null;
-  mode: "service_account" | "public_csv" | "unavailable";
+  mode: "google_oauth" | "public_csv" | "unavailable";
+  oauthUserEmail: string | null;
   ok: boolean;
   range: string;
-  serviceAccountConfigured: boolean;
+  sheetConfigured: boolean;
   sheetId: string;
 };
 
@@ -74,23 +75,37 @@ export type PastoralOpsSnapshot = {
 
 export async function getPastoralSheetStatus(): Promise<PastoralSheetStatus> {
   const config = getPastoralSheetsConfig();
-  const serviceAccountConfigured = isPastoralSheetsConfigured(config);
+  const sheetConfigured = isPastoralSheetsConfigured(config);
 
-  if (serviceAccountConfigured) {
+  if (!sheetConfigured) {
+    return {
+      contacts: [],
+      error: "Falta configurar PASTORAL_CONTACT_SHEET_ID o PASTORAL_CONTACT_SHEET_RANGE.",
+      mode: "unavailable",
+      oauthUserEmail: null,
+      ok: false,
+      range: config.range,
+      sheetConfigured,
+      sheetId: config.spreadsheetId,
+    };
+  }
+
+  const oauth = await getPastoralDashboardOAuthToken();
+  if (oauth) {
     try {
-      const accessToken = await getPastoralSheetsAccessToken({ config });
       const contacts = await fetchPastoralSheetContactsFromApi({
-        accessToken,
+        accessToken: oauth.accessToken,
         config,
       });
 
       return {
         contacts,
         error: null,
-        mode: "service_account",
+        mode: "google_oauth",
+        oauthUserEmail: oauth.userEmail,
         ok: true,
         range: config.range,
-        serviceAccountConfigured,
+        sheetConfigured,
         sheetId: config.spreadsheetId,
       };
     } catch (error) {
@@ -99,11 +114,12 @@ export async function getPastoralSheetStatus(): Promise<PastoralSheetStatus> {
         error:
           error instanceof Error
             ? error.message
-            : "No pude leer Google Sheets con service account.",
-        mode: "unavailable",
+            : "No pude leer Google Sheets con la cuenta Google conectada.",
+        mode: "google_oauth",
+        oauthUserEmail: oauth.userEmail,
         ok: false,
         range: config.range,
-        serviceAccountConfigured,
+        sheetConfigured,
         sheetId: config.spreadsheetId,
       };
     }
@@ -114,11 +130,12 @@ export async function getPastoralSheetStatus(): Promise<PastoralSheetStatus> {
     return {
       contacts,
       error:
-        "Falta service account: la vista pudo leer CSV publico, pero los envios quedan bloqueados hasta configurar Google Sheets API.",
+        "Vista leida por CSV publico. Para enviar o hacer follow-up, cada remitente debe reconectar Google con permiso de Sheets.",
       mode: "public_csv",
+      oauthUserEmail: null,
       ok: true,
       range: config.range,
-      serviceAccountConfigured,
+      sheetConfigured,
       sheetId: config.spreadsheetId,
     };
   } catch (error) {
@@ -129,11 +146,93 @@ export async function getPastoralSheetStatus(): Promise<PastoralSheetStatus> {
           ? error.message
           : "No pude leer el Sheets de Pastoral.",
       mode: "unavailable",
+      oauthUserEmail: null,
       ok: false,
       range: config.range,
-      serviceAccountConfigured,
+      sheetConfigured,
       sheetId: config.spreadsheetId,
     };
+  }
+}
+
+async function getPastoralDashboardOAuthToken() {
+  const sql = getPostgresClient();
+  if (!sql) return null;
+
+  try {
+    const rows = await withPostgresQueryTimeout(sql`
+      select
+        gt.user_email::text as user_email,
+        gt.access_token,
+        gt.refresh_token,
+        gt.expires_at::text as expires_at
+      from gmail_tokens gt
+      join sender_accounts sa
+        on lower(sa.email::text) = lower(gt.user_email::text)
+        and sa.account_type = 'gmail'
+        and sa.status = 'active'
+      order by gt.updated_at desc nulls last, gt.expires_at desc
+      limit 1
+    `.execute(), "pastoral sheet oauth token");
+    const row = rows[0] as DbRow | undefined;
+    if (!row) return null;
+
+    const userEmail = stringValue(row.user_email);
+    let accessToken = decryptToken(stringValue(row.access_token));
+    const refreshToken = decryptToken(stringValue(row.refresh_token));
+
+    if (!accessToken || !refreshToken || !userEmail) return null;
+    if (new Date(stringValue(row.expires_at)) >= new Date()) {
+      return { accessToken, userEmail };
+    }
+
+    const refreshed = await refreshGoogleAccessToken(refreshToken);
+    if (!refreshed) return null;
+
+    accessToken = refreshed.access_token;
+    const newExpiresAt = new Date(Date.now() + refreshed.expires_in * 1000);
+    await sql`
+      update gmail_tokens
+      set
+        access_token = ${encryptToken(accessToken)},
+        expires_at = ${newExpiresAt},
+        updated_at = now()
+      where user_email = ${userEmail}
+    `;
+
+    return { accessToken, userEmail };
+  } catch (error) {
+    console.error("Could not load Pastoral dashboard OAuth token", error);
+    return null;
+  }
+}
+
+async function refreshGoogleAccessToken(
+  refreshToken: string,
+): Promise<{ access_token: string; expires_in: number } | null> {
+  const clientId = process.env.GMAIL_CLIENT_ID;
+  const clientSecret = process.env.GMAIL_CLIENT_SECRET;
+  if (!clientId || !clientSecret) return null;
+
+  try {
+    const response = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        grant_type: "refresh_token",
+        refresh_token: refreshToken,
+      }),
+    });
+    const data = await response.json();
+    if (!response.ok || data.error || !data.access_token) return null;
+    return {
+      access_token: String(data.access_token),
+      expires_in: Number(data.expires_in ?? 3600),
+    };
+  } catch {
+    return null;
   }
 }
 

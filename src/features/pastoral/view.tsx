@@ -55,12 +55,12 @@ import {
 import { cn } from "@/lib/utils";
 
 export async function PastoralFundraisingView({ scope }: { scope: string }) {
-  const [companies, contacts, sheetStatus, ops] = await Promise.all([
+  const [companies, contacts, ops] = await Promise.all([
     getCompaniesData(scope),
     getContactsData(scope),
-    getPastoralSheetStatus(),
     getPastoralOpsSnapshot(scope),
   ]);
+  const sheetStatus = await getPastoralSheetStatus();
   const currentGoal = getCurrentPastoralGoal();
   const localDuplicates = contacts
     .map((contact) => {
@@ -123,20 +123,22 @@ export async function PastoralFundraisingView({ scope }: { scope: string }) {
         />
         <HealthTile
           detail={
-            sheetStatus.serviceAccountConfigured
-              ? sheetStatus.ok
-                ? `${sheetStatus.contacts.length} filas verificables`
-                : sheetStatus.error ?? "Error de Sheets API"
-              : "CSV solo para vista; envío bloqueado"
+            sheetStatus.mode === "google_oauth" && sheetStatus.ok
+              ? `${sheetStatus.contacts.length} filas verificadas como ${sheetStatus.oauthUserEmail}`
+              : sheetStatus.mode === "google_oauth"
+                ? sheetStatus.error ?? "Reconecta Google con permiso de Sheets"
+                : sheetStatus.ok
+                  ? "CSV solo vista; enviar valida OAuth del remitente"
+                  : sheetStatus.error ?? "Sheets no disponible"
           }
-          label="Sheets API"
+          label="Sheets OAuth"
           state={
-            sheetStatus.serviceAccountConfigured && sheetStatus.ok
+            sheetStatus.mode === "google_oauth" && sheetStatus.ok
               ? "ok"
               : "critical"
           }
           value={
-            sheetStatus.serviceAccountConfigured && sheetStatus.ok
+            sheetStatus.mode === "google_oauth" && sheetStatus.ok
               ? "Seguro"
               : "Bloquea"
           }
@@ -239,6 +241,10 @@ export async function PastoralFundraisingView({ scope }: { scope: string }) {
             </div>
             <div className="mt-4 grid gap-2 text-sm">
               <InfoLine label="Modo" value={formatSheetMode(sheetStatus.mode)} />
+              <InfoLine
+                label="Cuenta"
+                value={sheetStatus.oauthUserEmail ?? "Se valida al enviar"}
+              />
               <InfoLine label="Rango" value={sheetStatus.range || "A:F"} />
               <InfoLine
                 label="Filas"
@@ -262,7 +268,7 @@ export async function PastoralFundraisingView({ scope }: { scope: string }) {
           </div>
           <div className="mt-4 grid gap-3">
             {[
-              "Leer Sheets fresco con service account.",
+              "Leer Sheets fresco con la cuenta Google conectada del remitente.",
               "Detectar duplicado por email, dominio y nombre normalizado.",
               "Reservar localmente por mail y dominio antes de tocar Gmail.",
               "Append al Sheets, releer y verificar la fila.",
@@ -695,8 +701,8 @@ function formatCompanyStatus(status: string) {
   return status.replaceAll("_", " ");
 }
 
-function formatSheetMode(mode: "public_csv" | "service_account" | "unavailable") {
-  if (mode === "service_account") return "Google Sheets API";
+function formatSheetMode(mode: "google_oauth" | "public_csv" | "unavailable") {
+  if (mode === "google_oauth") return "Google OAuth";
   if (mode === "public_csv") return "CSV público solo lectura";
   return "No disponible";
 }

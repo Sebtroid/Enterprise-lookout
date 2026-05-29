@@ -164,8 +164,8 @@ Pastoral UC no es una vista de exploración general. Es un cockpit diario para r
   - Listo: al menos un token Gmail conectado.
   - Falta: sin token, envío bloqueado.
 - Sheets:
-  - Seguro: service account configurada y lectura exitosa.
-  - Bloquea: credenciales faltantes o error de API.
+  - Seguro: lectura exitosa con Google OAuth de una cuenta conectada.
+  - Bloquea: falta reconectar Google con permiso de Sheets o hay error de API.
   - CSV público: permitido para vista, nunca para enviar.
 - Duplicate:
   - 0: señal segura.
@@ -182,7 +182,7 @@ Pastoral UC no es una vista de exploración general. Es un cockpit diario para r
 
 Orden de envío inicial Pastoral:
 
-1. Leer Sheets fresco con service account.
+1. Leer Sheets fresco con la cuenta Google conectada del remitente.
 2. Detectar duplicado por email, dominio corporativo y nombre normalizado.
 3. Crear reserva local idempotente por email/dominio.
 4. Agregar fila al Sheets antes de Gmail.
@@ -204,5 +204,5 @@ Si cualquier paso falla, la UI/API debe mostrar el motivo de bloqueo y no enviar
 - Unit tests cubren parser de Sheets, duplicados, reservas, elegibilidad de follow-up y matching de replies.
 - Playwright verifica desktop 1440, laptop 1024 y mobile 390.
 - Screenshots deben mostrar cero overflow, texto no cortado y overlays sanos.
-- El build debe pasar sin envs de service account, pero el envío debe fallar cerrado.
-- Producción debe tener envs de service account antes de habilitar envíos reales de Pastoral.
+- El build debe pasar sin credenciales de cuenta técnica; Sheets usa Google OAuth del remitente.
+- Producción debe tener `PASTORAL_CONTACT_SHEET_ID/RANGE` y los remitentes deben reconectar Google con permiso de Sheets antes de habilitar envíos reales de Pastoral.

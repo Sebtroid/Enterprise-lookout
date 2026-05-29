@@ -3,17 +3,19 @@ import { getSafeOAuthRedirectPath } from "@/lib/gmail/connection-policy";
 import { signOAuthState } from "@/lib/gmail/oauth-state";
 
 /**
- * Gmail OAuth2 Flow
+ * Google OAuth2 Flow
  * 
  * 1. Usuario visita /settings/gmail
  * 2. Frontend llama a /api/gmail/auth para obtener URL de autorización
  * 3. Google redirige a /api/gmail/callback con código
  * 4. Backend intercambia código por tokens y los guarda en DB
  * 5. Para enviar: /api/gmail/send usa el access_token
+ * 6. Para Pastoral: el mismo token valida y actualiza Google Sheets antes de Gmail
  * 
  * Requiere configurar en Google Cloud Console:
  * - Proyecto nuevo
  * - Gmail API enabled
+ * - Google Sheets API enabled
  * - OAuth consent screen (External)
  * - Credentials > OAuth client ID (Web application)
  * - Redirect URI: https://enterprise-lookout.vercel.app/api/gmail/callback
@@ -43,6 +45,7 @@ export async function GET(req: NextRequest) {
     const scopes = [
       "https://www.googleapis.com/auth/gmail.send",
       "https://www.googleapis.com/auth/gmail.readonly",
+      "https://www.googleapis.com/auth/spreadsheets",
     ].join(" ");
 
     const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");

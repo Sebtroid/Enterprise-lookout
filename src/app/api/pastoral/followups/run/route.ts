@@ -9,13 +9,16 @@ import {
 } from "@/lib/gmail/mime";
 import { decryptToken, encryptToken } from "@/lib/gmail/token-crypto";
 import { PASTORAL_CAMPAIGN_SLUG } from "@/lib/pastoral/config";
-import { getPastoralSheetStatus } from "@/lib/pastoral/dashboard";
 import {
   buildPastoralFollowupDraft,
   evaluatePastoralFollowupEligibility,
   isPastoralFollowupWindow,
 } from "@/lib/pastoral/followups";
-import { verifyPastoralSheetContact } from "@/lib/pastoral/google-sheets";
+import {
+  fetchPastoralSheetContactsFromApi,
+  verifyPastoralSheetContact,
+} from "@/lib/pastoral/google-sheets";
+import type { PastoralSheetContact } from "@/lib/pastoral/sheet";
 import { getPostgresClient } from "@/lib/supabase/postgres";
 
 export const dynamic = "force-dynamic";
@@ -77,23 +80,6 @@ async function runPastoralFollowups(req: NextRequest) {
     return NextResponse.json(
       { ok: false, error: "Falta SUPABASE_DB_URL." },
       { status: 500 },
-    );
-  }
-
-  const sheetStatus = await getPastoralSheetStatus();
-  if (
-    !sheetStatus.serviceAccountConfigured ||
-    sheetStatus.mode !== "service_account" ||
-    !sheetStatus.ok
-  ) {
-    return NextResponse.json(
-      {
-        ok: false,
-        error:
-          sheetStatus.error ??
-          "Sheets API no está configurado con service account; no se envían follow-ups.",
-      },
-      { status: 409 },
     );
   }
 
@@ -174,13 +160,61 @@ async function runPastoralFollowups(req: NextRequest) {
   `;
 
   const sentTodayBySender = new Map<string, number>();
+  const sheetContactsBySender = new Map<
+    string,
+    { contacts: PastoralSheetContact[]; error: string | null }
+  >();
   const results = [];
 
   for (const row of rows) {
     const alreadySentToday =
       sentTodayBySender.get(row.sender_email) ?? Number(row.sender_sent_today);
+
+    const accessToken = await getValidAccessToken({
+      accessToken: row.token_access,
+      expiresAt: row.token_expires_at,
+      refreshToken: row.token_refresh,
+      sql,
+      userEmail: row.sender_email,
+    });
+
+    if (!accessToken) {
+      results.push({
+        company: row.company_name,
+        ok: false,
+        reason:
+          "Google OAuth expiró o no tiene refresh válido; reconecta Google antes de follow-ups.",
+      });
+      continue;
+    }
+
+    let sheetContacts = sheetContactsBySender.get(row.sender_email);
+    if (!sheetContacts) {
+      sheetContacts = await fetchPastoralSheetContactsFromApi({
+        accessToken,
+      })
+        .then((contacts) => ({ contacts, error: null }))
+        .catch((error: Error) => ({
+          contacts: [],
+          error:
+            error instanceof Error
+              ? error.message
+              : "No pude leer Sheets con la cuenta Google del remitente.",
+        }));
+      sheetContactsBySender.set(row.sender_email, sheetContacts);
+    }
+
+    if (sheetContacts.error) {
+      results.push({
+        company: row.company_name,
+        ok: false,
+        reason: `Bloqueado por Sheets OAuth: ${sheetContacts.error}`,
+      });
+      continue;
+    }
+
     const registeredInSheets = verifyPastoralSheetContact({
-      contacts: sheetStatus.contacts,
+      contacts: sheetContacts.contacts,
       email: row.contact_email,
       name: row.company_name,
     });
@@ -214,6 +248,7 @@ async function runPastoralFollowups(req: NextRequest) {
       contactName: row.contact_name,
     });
     const sendResult = await createAndSendFollowup({
+      accessToken,
       body: draftBody,
       row,
       sql,
@@ -239,27 +274,17 @@ async function runPastoralFollowups(req: NextRequest) {
 }
 
 async function createAndSendFollowup({
+  accessToken,
   body,
   row,
   sql,
 }: {
+  accessToken: string;
   body: string;
   row: CandidateRow;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   sql: any;
 }) {
-  const accessToken = await getValidAccessToken({
-    accessToken: row.token_access,
-    expiresAt: row.token_expires_at,
-    refreshToken: row.token_refresh,
-    sql,
-    userEmail: row.sender_email,
-  });
-
-  if (!accessToken) {
-    return { ok: false as const, error: "Gmail token expirado; reconectar Gmail." };
-  }
-
   const inserted = await sql`
     insert into messages (
       thread_id,

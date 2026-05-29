@@ -1,7 +1,6 @@
 import {
   appendPastoralSheetContact,
   fetchPastoralSheetContactsFromApi,
-  getPastoralSheetsAccessToken,
   getPastoralSheetsConfig,
   isPastoralSheetsConfigured,
   verifyPastoralSheetContact,
@@ -28,9 +27,11 @@ export type PastoralSendGuardMessage = {
 };
 
 export async function preparePastoralInitialSendGuard({
+  accessToken,
   message,
   sql,
 }: {
+  accessToken: string;
   message: PastoralSendGuardMessage;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   sql: any;
@@ -40,15 +41,21 @@ export async function preparePastoralInitialSendGuard({
     return {
       ok: false as const,
       error:
-        "Faltan credenciales de Google Sheets para Pastoral. Configura GOOGLE_SHEETS_SERVICE_ACCOUNT_EMAIL, GOOGLE_SHEETS_PRIVATE_KEY, PASTORAL_CONTACT_SHEET_ID y PASTORAL_CONTACT_SHEET_RANGE antes de enviar.",
+        "Falta configurar PASTORAL_CONTACT_SHEET_ID o PASTORAL_CONTACT_SHEET_RANGE antes de enviar Pastoral.",
+      status: 409,
+    };
+  }
+  if (!accessToken) {
+    return {
+      ok: false as const,
+      error:
+        "Falta permiso OAuth de Google Sheets para Pastoral. Reconecta Google desde la app para autorizar Sheets antes de enviar.",
       status: 409,
     };
   }
 
-  let accessToken: string;
   let sheetContacts: Awaited<ReturnType<typeof fetchPastoralSheetContactsFromApi>>;
   try {
-    accessToken = await getPastoralSheetsAccessToken({ config });
     sheetContacts = await fetchPastoralSheetContactsFromApi({
       accessToken,
       config,

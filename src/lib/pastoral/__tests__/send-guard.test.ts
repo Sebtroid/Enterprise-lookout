@@ -10,7 +10,6 @@ const mocks = vi.hoisted(() => {
     createPastoralLocalReservation: vi.fn(),
     createPostgresPastoralReservationStore: vi.fn(() => store),
     fetchPastoralSheetContactsFromApi: vi.fn(),
-    getPastoralSheetsAccessToken: vi.fn(),
     getPastoralSheetsConfig: vi.fn(),
     isPastoralSheetsConfigured: vi.fn(),
     store,
@@ -21,7 +20,6 @@ const mocks = vi.hoisted(() => {
 vi.mock("@/lib/pastoral/google-sheets", () => ({
   appendPastoralSheetContact: mocks.appendPastoralSheetContact,
   fetchPastoralSheetContactsFromApi: mocks.fetchPastoralSheetContactsFromApi,
-  getPastoralSheetsAccessToken: mocks.getPastoralSheetsAccessToken,
   getPastoralSheetsConfig: mocks.getPastoralSheetsConfig,
   isPastoralSheetsConfigured: mocks.isPastoralSheetsConfigured,
   verifyPastoralSheetContact: mocks.verifyPastoralSheetContact,
@@ -53,23 +51,19 @@ describe("Pastoral initial send guard", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getPastoralSheetsConfig.mockReturnValue({
-      clientEmail: "bot@example.iam.gserviceaccount.com",
-      privateKey: "private-key",
       range: "A:F",
       spreadsheetId: "sheet-1",
     });
     mocks.isPastoralSheetsConfigured.mockReturnValue(true);
-    mocks.getPastoralSheetsAccessToken.mockResolvedValue("access-token");
     mocks.fetchPastoralSheetContactsFromApi.mockResolvedValue([]);
     mocks.createPastoralLocalReservation.mockResolvedValue({ ok: true });
     mocks.appendPastoralSheetContact.mockResolvedValue({ ok: true });
     mocks.verifyPastoralSheetContact.mockReturnValue(true);
   });
 
-  it("fails closed before reading Sheets when service account credentials are missing", async () => {
-    mocks.isPastoralSheetsConfigured.mockReturnValue(false);
-
+  it("fails closed before reading Sheets when OAuth access token is missing", async () => {
     const result = await preparePastoralInitialSendGuard({
+      accessToken: "",
       message,
       sql: {},
     });
@@ -79,9 +73,9 @@ describe("Pastoral initial send guard", () => {
       status: 409,
     });
     expect(result.ok === false ? result.error : "").toContain(
-      "Faltan credenciales",
+      "OAuth",
     );
-    expect(mocks.getPastoralSheetsAccessToken).not.toHaveBeenCalled();
+    expect(mocks.fetchPastoralSheetContactsFromApi).not.toHaveBeenCalled();
     expect(mocks.createPastoralLocalReservation).not.toHaveBeenCalled();
   });
 
@@ -97,6 +91,7 @@ describe("Pastoral initial send guard", () => {
     ]);
 
     const result = await preparePastoralInitialSendGuard({
+      accessToken: "access-token",
       message,
       sql: {},
     });
@@ -124,6 +119,7 @@ describe("Pastoral initial send guard", () => {
       ]);
 
     const result = await preparePastoralInitialSendGuard({
+      accessToken: "access-token",
       message,
       sql: {},
     });
@@ -174,6 +170,7 @@ describe("Pastoral initial send guard", () => {
     });
 
     const result = await preparePastoralInitialSendGuard({
+      accessToken: "access-token",
       message,
       sql: {},
     });
