@@ -1,10 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { type ComponentProps, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Mail, Loader2 } from "lucide-react";
 
-export function GmailConnectButton() {
+export function GmailConnectButton({
+  label = "Conectar Gmail",
+  loadingLabel = "Cargando...",
+  size = "lg",
+}: {
+  label?: string;
+  loadingLabel?: string;
+  size?: ComponentProps<typeof Button>["size"];
+}) {
   const [loading, setLoading] = useState(false);
 
   async function handleConnect() {
@@ -25,13 +33,13 @@ export function GmailConnectButton() {
   }
 
   return (
-    <Button onClick={handleConnect} disabled={loading} size="lg">
+    <Button onClick={handleConnect} disabled={loading} size={size}>
       {loading ? (
         <Loader2 className="mr-2 size-4 animate-spin" />
       ) : (
         <Mail className="mr-2 size-4" />
       )}
-      {loading ? "Cargando..." : "Conectar Gmail"}
+      {loading ? loadingLabel : label}
     </Button>
   );
 }

@@ -828,16 +828,17 @@ export async function GmailSettingsView({
   };
 } = {}) {
   const sql = getPostgresClient();
-  let tokens: { user_email: string; updated_at: string }[] = [];
+  let tokens: { expires_at: string; user_email: string; updated_at: string }[] = [];
 
   if (sql) {
     try {
       const tokenRows = await withPostgresQueryTimeout(sql`
-        select user_email, updated_at::text
+        select user_email, expires_at::text, updated_at::text
         from gmail_tokens
         order by updated_at desc
       `.execute(), "gmail settings tokens");
       tokens = tokenRows.map((row) => ({
+        expires_at: String(row.expires_at ?? ""),
         user_email: String(row.user_email ?? ""),
         updated_at: String(row.updated_at ?? ""),
       }));
@@ -882,26 +883,52 @@ export async function GmailSettingsView({
         <CardContent>
           {tokens.length > 0 ? (
             <div className="space-y-3">
-              {tokens.map((token) => (
-                <div
-                  key={token.user_email}
-                  className="flex items-center justify-between rounded-lg border p-3"
-                >
-                  <div className="flex items-center gap-3">
-                    <Check className="size-4 text-emerald-500" />
-                    <div>
-                      <div className="font-medium">{token.user_email}</div>
-                      <div className="text-xs text-muted-foreground">
-                        Conectado el{" "}
-                        {new Date(token.updated_at).toLocaleDateString("es-CL", {
-                          timeZone: "America/Santiago",
-                        })}
+              {tokens.map((token) => {
+                const expiresAt = new Date(token.expires_at);
+                const isExpired =
+                  token.expires_at && Number.isFinite(expiresAt.getTime())
+                    ? expiresAt <= new Date()
+                    : false;
+
+                return (
+                  <div
+                    key={token.user_email}
+                    className="flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div className="flex items-center gap-3">
+                      {isExpired ? (
+                        <AlertTriangle className="size-4 text-amber-500" />
+                      ) : (
+                        <Check className="size-4 text-emerald-500" />
+                      )}
+                      <div>
+                        <div className="font-medium">{token.user_email}</div>
+                        <div className="text-xs text-muted-foreground">
+                          Conectado el{" "}
+                          {new Date(token.updated_at).toLocaleDateString("es-CL", {
+                            timeZone: "America/Santiago",
+                          })}
+                        </div>
+                        {isExpired ? (
+                          <div className="mt-1 text-xs text-amber-700">
+                            Token vencido o sin refrescar. Reconecta antes de enviar.
+                          </div>
+                        ) : null}
                       </div>
                     </div>
+                    <div className="flex items-center gap-2 self-start sm:self-center">
+                      <Badge variant="outline">
+                        {isExpired ? "Reconectar" : "Activo"}
+                      </Badge>
+                      <GmailConnectButton
+                        label="Reconectar Gmail"
+                        loadingLabel="Abriendo..."
+                        size="sm"
+                      />
+                    </div>
                   </div>
-                  <Badge variant="outline">Activo</Badge>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div className="flex flex-col items-center gap-4 py-6">
