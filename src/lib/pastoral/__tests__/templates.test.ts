@@ -13,4 +13,17 @@ describe("pastoral mail templates", () => {
       expect(template.body).not.toMatch(/\b6\s*MM\b/i);
     }
   });
+
+  it("keeps the local zone context in first outreach templates", () => {
+    const firstOutreachTemplates = pastoralMailTemplates.filter((template) =>
+      template.id.endsWith("-inicial"),
+    );
+
+    for (const template of firstOutreachTemplates) {
+      expect(template.body).toContain("Los Cardones");
+      expect(template.body).toContain("Ninhue");
+      expect(template.body).toContain("Itata");
+      expect(template.body).toContain("Ñuble");
+    }
+  });
 });

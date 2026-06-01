@@ -1,3 +1,5 @@
+import { pastoralZone } from "@/lib/pastoral/config";
+
 export const pastoralMailTemplates = [
   {
     id: "empresa-inicial",
@@ -11,9 +13,9 @@ Trabajo País es un voluntariado que desde 2006 convoca a jóvenes universitario
 
 A lo largo de este tiempo, más de 20.000 voluntarios han participado en el proyecto, trabajando junto a más de 450 comunidades a lo largo de Chile, lo que ha convertido a Trabajo País en el voluntariado católico más grande de Latinoamérica.
 
-Este invierno, en nuestro vigésimo aniversario, esperamos movilizar a más de 850 voluntarios distribuidos en 25 zonas del país. Cada aporte permite financiar materiales, herramientas, transporte y recursos necesarios para ejecutar el trabajo directamente con la comunidad.
+Este invierno, en nuestro vigésimo aniversario, nuestra zona trabajará junto a la comunidad de ${pastoralZone.locality}, en la comuna de ${pastoralZone.commune}, Provincia de ${pastoralZone.province}, Región de ${pastoralZone.region}. Cada aporte permite financiar materiales, herramientas, transporte y recursos necesarios para ejecutar el trabajo directamente en terreno.
 
-Les escribo porque creemos que [Nombre de la empresa] podría ser un aliado valioso para nuestra zona, ya sea mediante una donación, apoyo en materiales o colaboración institucional.
+Les escribo porque creemos que [Nombre de la empresa] podría ser un aliado valioso para esta comunidad, especialmente si existe algún vínculo territorial o interés en apoyar iniciativas locales en la zona de ${pastoralZone.commune} e Itata. La colaboración puede ser mediante una donación, apoyo en materiales o algún aporte institucional.
 
 Nos gustaría presentarles brevemente el proyecto y evaluar si existe una forma de colaboración que tenga sentido para ustedes. Contamos con información formal sobre beneficios tributarios, detallada en la carta adjunta.
 
@@ -68,7 +70,7 @@ Junto con saludar, me presento. Mi nombre es Sebastián Witting y soy jefe de Fi
 
 Trabajo País es un voluntariado que desde 2006 convoca a jóvenes universitarios para construir espacios de encuentro comunitario en distintas zonas vulnerables del país.
 
-En este vigésimo aniversario esperamos movilizar a más de 850 voluntarios en 25 zonas. Cada aporte ayuda a financiar materiales, herramientas, transporte y recursos que se usan directamente en el trabajo con la comunidad.
+En este vigésimo aniversario, nuestra zona trabajará junto a la comunidad de ${pastoralZone.locality}, en la comuna de ${pastoralZone.commune}, Provincia de ${pastoralZone.province}, Región de ${pastoralZone.region}. Cada aporte ayuda a financiar materiales, herramientas, transporte y recursos que se usan directamente en el trabajo con la comunidad.
 
 Quisiera invitarlo personalmente a ser parte de este proyecto mediante una donación voluntaria que nos permita seguir llevando adelante esta misión.
 

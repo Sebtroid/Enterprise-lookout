@@ -34,6 +34,7 @@ import {
   pastoralFundraisingGoals,
   pastoralImpactStats,
   pastoralSendRules,
+  pastoralZone,
 } from "@/lib/pastoral/config";
 import {
   getPastoralOpsSnapshot,
@@ -216,6 +217,13 @@ export async function PastoralFundraisingView({ scope }: { scope: string }) {
             <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
               <Metric label="Meta actual" value={formatMoney(currentGoal.amount)} />
               <Metric label="Meta final" value="$6.000.000" />
+              <Metric label="Zona" value={pastoralZone.locality} />
+              <Metric label="Comuna" value={pastoralZone.commune} />
+            </div>
+            <div className="mt-4 rounded-md border border-border bg-muted/40 p-3 text-sm text-muted-foreground">
+              Trabajo en {pastoralZone.locality}, {pastoralZone.commune}, Provincia de{" "}
+              {pastoralZone.province}, Región de {pastoralZone.region}. Coord.:{" "}
+              {pastoralZone.coordinates}.
             </div>
             <Progress
               className="mt-4"

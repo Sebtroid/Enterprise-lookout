@@ -17,6 +17,14 @@ export const PASTORAL_CONTACT_SHEET_CSV_URL =
 
 export const PASTORAL_SHEET_CONTACTED_BY = "José Miguel Olavarría";
 
+export const pastoralZone = {
+  coordinates: `36°23'55.0"S 72°24'12.2"W`,
+  locality: "Los Cardones",
+  commune: "Ninhue",
+  province: "Itata",
+  region: "Ñuble",
+};
+
 export const pastoralFundraisingGoals = [
   { date: "2026-05-24", amount: 300000 },
   { date: "2026-05-31", amount: 600000 },
@@ -48,6 +56,7 @@ export const pastoralSendRules = [
   "Antes de enviar, revisar el Sheets compartido por email y nombre de empresa.",
   "No enviar si ya aparece contactado por otra persona o zona.",
   `Registrar siempre en Sheets como contactado por ${PASTORAL_SHEET_CONTACTED_BY}.`,
+  `Priorizar empresas con presencia o vínculo territorial con ${pastoralZone.locality}, ${pastoralZone.commune}, Provincia de ${pastoralZone.province} o Región de ${pastoralZone.region}.`,
   "Enviar preferentemente lunes, martes o miércoles entre 9:00 y 12:00.",
   "Adjuntar siempre la carta de beneficio tributario en PDF.",
   "Hacer seguimiento 5 a 7 días después si no contestan.",
