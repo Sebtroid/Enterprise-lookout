@@ -111,7 +111,7 @@ describe("Pastoral initial send guard", () => {
       .mockResolvedValueOnce([
         {
           comments: "Message ID: 11111111-1111-1111-1111-111111111111",
-          contactedBy: "Sebastian",
+          contactedBy: "José Miguel Olavarría",
           email: "contacto@empresazona.cl",
           name: "Empresa Zona",
           status: "Contactado",
@@ -136,7 +136,11 @@ describe("Pastoral initial send guard", () => {
     expect(mocks.appendPastoralSheetContact).toHaveBeenCalledWith(
       expect.objectContaining({
         accessToken: "access-token",
-        row: expect.arrayContaining(["Empresa Zona", "contacto@empresazona.cl"]),
+        row: expect.arrayContaining([
+          "Empresa Zona",
+          "contacto@empresazona.cl",
+          "José Miguel Olavarría",
+        ]),
       }),
     );
     expect(mocks.store.markStatus).toHaveBeenNthCalledWith(

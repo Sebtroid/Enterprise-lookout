@@ -5,6 +5,7 @@ import {
   isPastoralSheetsConfigured,
   verifyPastoralSheetContact,
 } from "@/lib/pastoral/google-sheets";
+import { PASTORAL_SHEET_CONTACTED_BY } from "@/lib/pastoral/config";
 import {
   createPastoralLocalReservation,
   createPostgresPastoralReservationStore,
@@ -120,7 +121,7 @@ export async function preparePastoralInitialSendGuard({
 
   const row = buildPastoralSheetRow({
     comments: `Registrado por Enterprise Lookout antes de enviar Gmail. Message ID: ${message.id}.`,
-    contactedBy: String(message.sender_display_name || message.sender_email),
+    contactedBy: PASTORAL_SHEET_CONTACTED_BY,
     email: String(message.to_email),
     name: contactName,
     status: "Contactado",

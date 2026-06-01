@@ -2,22 +2,22 @@ export const pastoralMailTemplates = [
   {
     id: "empresa-inicial",
     label: "Empresa - primer mail",
-    subject: "Invitación a proyecto Trabajo País UC 2026",
+    subject: "Colaboración con Trabajo País UC 2026",
     body: `Estimados/as [Nombre o equipo]:
 
 Junto con saludar, me presento. Mi nombre es Sebastián Witting y soy jefe de Finanzas de Trabajo País, proyecto de la Pastoral de la Pontificia Universidad Católica de Chile.
 
-Trabajo País es un voluntariado que nace en 2006 como respuesta a la falta de espiritualidad y soledad que viven muchas comunidades en Chile. Durante estos 20 años, el proyecto ha congregado a miles de jóvenes universitarios para construir espacios de encuentro comunitario a partir de necesidades detectadas en distintas zonas vulnerables del país.
+Trabajo País es un voluntariado que desde 2006 convoca a jóvenes universitarios para trabajar junto a comunidades vulnerables de Chile, construyendo espacios de encuentro comunitario a partir de necesidades levantadas en terreno.
 
 A lo largo de este tiempo, más de 20.000 voluntarios han participado en el proyecto, trabajando junto a más de 450 comunidades a lo largo de Chile, lo que ha convertido a Trabajo País en el voluntariado católico más grande de Latinoamérica.
 
-En julio de este año esperamos movilizar a más de 850 voluntarios, distribuidos en 25 zonas de trabajo. Para hacer realidad este desafío, nuestra zona debe reunir $6.000.000.
+Este invierno, en nuestro vigésimo aniversario, esperamos movilizar a más de 850 voluntarios distribuidos en 25 zonas del país. Cada aporte permite financiar materiales, herramientas, transporte y recursos necesarios para ejecutar el trabajo directamente con la comunidad.
 
-Por lo mismo, quisiera invitar a [Nombre de la empresa] a ser parte de este proyecto, colaborando mediante una donación o apoyo institucional que nos permita seguir llevando adelante esta misión.
+Les escribo porque creemos que [Nombre de la empresa] podría ser un aliado valioso para nuestra zona, ya sea mediante una donación, apoyo en materiales o colaboración institucional.
 
-Contamos con beneficios tributarios y comerciales, detallados en la carta adjunta.
+Nos gustaría presentarles brevemente el proyecto y evaluar si existe una forma de colaboración que tenga sentido para ustedes. Contamos con información formal sobre beneficios tributarios, detallada en la carta adjunta.
 
-Quedo disponible para coordinar una reunión online o presencial y contarles con más detalle cómo se vincula el proyecto con la comunidad de nuestra zona.
+¿Podríamos coordinar una llamada breve esta semana?
 
 Saludos,
 Sebastián Witting
@@ -61,14 +61,14 @@ Jefe de Finanzas - Trabajo País UC 2026`,
   {
     id: "persona-inicial",
     label: "Persona natural - primer mail",
-    subject: "Invitación a proyecto Trabajo País UC 2026",
+    subject: "Invitación a colaborar con Trabajo País UC 2026",
     body: `Estimado/a [Nombre]:
 
 Junto con saludar, me presento. Mi nombre es Sebastián Witting y soy jefe de Finanzas de Trabajo País, proyecto de la Pastoral de la Pontificia Universidad Católica de Chile.
 
 Trabajo País es un voluntariado que desde 2006 convoca a jóvenes universitarios para construir espacios de encuentro comunitario en distintas zonas vulnerables del país.
 
-En este vigésimo aniversario esperamos movilizar a más de 850 voluntarios en 25 zonas. Para hacer realidad este desafío, nuestra zona debe reunir $6.000.000.
+En este vigésimo aniversario esperamos movilizar a más de 850 voluntarios en 25 zonas. Cada aporte ayuda a financiar materiales, herramientas, transporte y recursos que se usan directamente en el trabajo con la comunidad.
 
 Quisiera invitarlo personalmente a ser parte de este proyecto mediante una donación voluntaria que nos permita seguir llevando adelante esta misión.
 

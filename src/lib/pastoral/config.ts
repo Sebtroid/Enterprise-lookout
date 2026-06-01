@@ -15,6 +15,8 @@ export const PASTORAL_CONTACT_SHEET_URL =
 export const PASTORAL_CONTACT_SHEET_CSV_URL =
   `https://docs.google.com/spreadsheets/d/${PASTORAL_CONTACT_SHEET_ID}/export?format=csv&gid=0`;
 
+export const PASTORAL_SHEET_CONTACTED_BY = "José Miguel Olavarría";
+
 export const pastoralFundraisingGoals = [
   { date: "2026-05-24", amount: 300000 },
   { date: "2026-05-31", amount: 600000 },
@@ -45,6 +47,7 @@ export const pastoralImpactStats = [
 export const pastoralSendRules = [
   "Antes de enviar, revisar el Sheets compartido por email y nombre de empresa.",
   "No enviar si ya aparece contactado por otra persona o zona.",
+  `Registrar siempre en Sheets como contactado por ${PASTORAL_SHEET_CONTACTED_BY}.`,
   "Enviar preferentemente lunes, martes o miércoles entre 9:00 y 12:00.",
   "Adjuntar siempre la carta de beneficio tributario en PDF.",
   "Hacer seguimiento 5 a 7 días después si no contestan.",
