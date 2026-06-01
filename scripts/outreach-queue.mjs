@@ -73,11 +73,25 @@ async function listApproved() {
     limit ${limit}
   `;
 
+  const selectedRows = [];
+  const plannedBySender = new Map();
+  for (const row of rows) {
+    const senderId = String(row.sender_account_id);
+    const planned = plannedBySender.get(senderId) ?? 0;
+    const remaining =
+      Number(row.effective_daily_limit ?? 0) - Number(row.sender_sent_today ?? 0);
+    if (remaining <= planned) continue;
+
+    selectedRows.push(row);
+    plannedBySender.set(senderId, planned + 1);
+    if (selectedRows.length >= limit) break;
+  }
+
   console.log(
     JSON.stringify(
       {
         ok: true,
-        messages: rows.map((row) => ({
+        messages: selectedRows.map((row) => ({
           ...row,
           compose_url: buildComposeUrl({
             accountType: row.sender_account_type,

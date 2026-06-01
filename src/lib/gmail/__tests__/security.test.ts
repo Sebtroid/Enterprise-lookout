@@ -74,6 +74,29 @@ describe("Gmail security helpers", () => {
     expect(buildGmailSendBody({ raw })).toEqual({ raw });
   });
 
+  it("builds multipart MIME messages with safe PDF attachments", () => {
+    const mime = buildMimeMessage({
+      attachments: [
+        {
+          content: Buffer.from("PDF"),
+          contentType: "application/pdf",
+          filename: "carta.pdf\r\nBcc: attacker@example.com",
+        },
+      ],
+      body: "Adjunto carta.",
+      from: "sawitting@miuandes.cl",
+      subject: "Trabajo País UC",
+      to: "contacto@empresa.cl",
+    });
+
+    expect(mime).toContain("Content-Type: multipart/mixed;");
+    expect(mime).toContain("Content-Type: text/plain; charset=utf-8");
+    expect(mime).toContain("Content-Type: application/pdf; name=\"carta.pdf\"");
+    expect(mime).toContain("Content-Disposition: attachment; filename=\"carta.pdf\"");
+    expect(mime).toContain("UERG");
+    expect(mime).not.toContain("Bcc: attacker@example.com");
+  });
+
   it("checks allowlisted emails case-insensitively", () => {
     expect(
       isAllowedEmail("SAWITTING@miuandes.cl", "sawitting@miuandes.cl,otro@test.cl"),

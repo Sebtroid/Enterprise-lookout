@@ -8,6 +8,7 @@ import {
   encodeRawMessage,
 } from "@/lib/gmail/mime";
 import { decryptToken, encryptToken } from "@/lib/gmail/token-crypto";
+import { getPastoralBenefitAttachments } from "@/lib/pastoral/attachments";
 import { PASTORAL_CAMPAIGN_SLUG } from "@/lib/pastoral/config";
 import {
   buildPastoralFollowupDraft,
@@ -249,6 +250,7 @@ async function runPastoralFollowups(req: NextRequest) {
     });
     const sendResult = await createAndSendFollowup({
       accessToken,
+      baseUrl: req.nextUrl.origin,
       body: draftBody,
       row,
       sql,
@@ -275,16 +277,19 @@ async function runPastoralFollowups(req: NextRequest) {
 
 async function createAndSendFollowup({
   accessToken,
+  baseUrl,
   body,
   row,
   sql,
 }: {
   accessToken: string;
+  baseUrl: string;
   body: string;
   row: CandidateRow;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   sql: any;
 }) {
+  const attachments = await getPastoralBenefitAttachments({ baseUrl });
   const inserted = await sql`
     insert into messages (
       thread_id,
@@ -326,6 +331,7 @@ async function createAndSendFollowup({
 
   const encodedMessage = encodeRawMessage(
     buildMimeMessage({
+      attachments,
       body,
       from: row.sender_email,
       subject: row.subject,

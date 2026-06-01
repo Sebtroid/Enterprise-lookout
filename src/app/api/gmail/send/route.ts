@@ -11,6 +11,7 @@ import {
 } from "@/lib/gmail/mime";
 import { decryptToken, encryptToken } from "@/lib/gmail/token-crypto";
 import { PASTORAL_CAMPAIGN_SLUG } from "@/lib/pastoral/config";
+import { getPastoralBenefitAttachments } from "@/lib/pastoral/attachments";
 import {
   preparePastoralInitialSendGuard,
   type PastoralSendGuardMessage,
@@ -118,6 +119,9 @@ export async function POST(req: NextRequest) {
     const isPastoralInitialMail =
       message.campaign_slug === PASTORAL_CAMPAIGN_SLUG &&
       message.kind === "outbound_initial";
+    const isPastoralOutreachMail =
+      message.campaign_slug === PASTORAL_CAMPAIGN_SLUG &&
+      (message.kind === "outbound_initial" || message.kind === "outbound_followup");
 
     const tokenRows = await sql`
       select access_token, refresh_token, expires_at
@@ -159,6 +163,10 @@ export async function POST(req: NextRequest) {
       `;
     }
 
+    const attachments = isPastoralOutreachMail
+      ? await getPastoralBenefitAttachments({ baseUrl: req.nextUrl.origin })
+      : [];
+
     const pastoralGuard = isPastoralInitialMail
       ? await preparePastoralInitialSendGuard({
           accessToken: access_token,
@@ -176,6 +184,7 @@ export async function POST(req: NextRequest) {
 
     const encodedMessage = encodeRawMessage(
       buildMimeMessage({
+        attachments,
         body: message.email_body,
         from: message.sender_email,
         subject: message.subject,
