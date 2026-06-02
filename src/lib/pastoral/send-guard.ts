@@ -120,11 +120,11 @@ export async function preparePastoralInitialSendGuard({
   }
 
   const row = buildPastoralSheetRow({
-    comments: `Registrado por Enterprise Lookout antes de enviar Gmail. Message ID: ${message.id}.`,
+    comments: "",
     contactedBy: PASTORAL_SHEET_CONTACTED_BY,
     email: String(message.to_email),
     name: contactName,
-    status: "Contactado",
+    status: "Esperando respuesta",
   });
   const appendResult = await appendPastoralSheetContact({
     accessToken,

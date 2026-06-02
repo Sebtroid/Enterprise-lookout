@@ -110,11 +110,11 @@ describe("Pastoral initial send guard", () => {
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([
         {
-          comments: "Message ID: 11111111-1111-1111-1111-111111111111",
+          comments: "",
           contactedBy: "José Miguel Olavarría",
           email: "contacto@empresazona.cl",
           name: "Empresa Zona",
-          status: "Contactado",
+          status: "Esperando respuesta",
         },
       ]);
 
@@ -140,6 +140,8 @@ describe("Pastoral initial send guard", () => {
           "Empresa Zona",
           "contacto@empresazona.cl",
           "José Miguel Olavarría",
+          "Esperando respuesta",
+          "",
         ]),
       }),
     );
