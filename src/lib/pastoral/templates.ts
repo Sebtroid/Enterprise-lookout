@@ -5,7 +5,7 @@ export const pastoralMailTemplates = [
     id: "empresa-inicial",
     label: "Empresa - primer mail",
     subject: "Colaboración con Trabajo País UC 2026",
-    body: `Estimados/as [Nombre o equipo]:
+    body: `Estimado equipo de [Nombre de la empresa]:
 
 Junto con saludar, me presento. Mi nombre es Sebastián Witting y soy jefe de Finanzas de Trabajo País, proyecto de la Pastoral de la Pontificia Universidad Católica de Chile.
 
@@ -29,7 +29,7 @@ Jefe de Finanzas - Trabajo País UC 2026`,
     id: "empresa-seguimiento-2",
     label: "Empresa - seguimiento 2",
     subject: "Invitación a proyecto Trabajo País UC 2026",
-    body: `Estimados/as [Nombre o equipo]:
+    body: `Estimado equipo de [Nombre de la empresa]:
 
 Junto con saludar, me permito escribir nuevamente para reiterar la invitación que les envié hace algunos días respecto a la posibilidad de que [Nombre de la empresa] pueda colaborar con Trabajo País UC 2026.
 
@@ -47,7 +47,7 @@ Jefe de Finanzas - Trabajo País UC 2026`,
     id: "empresa-seguimiento-3",
     label: "Empresa - seguimiento 3",
     subject: "Invitación a proyecto Trabajo País UC 2026",
-    body: `Estimados/as [Nombre o equipo]:
+    body: `Estimado equipo de [Nombre de la empresa]:
 
 Junto con saludar, quisiera hacer un breve seguimiento respecto a la invitación enviada para que [Nombre de la empresa] pueda colaborar con Trabajo País UC 2026.
 
