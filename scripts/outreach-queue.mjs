@@ -44,6 +44,8 @@ async function listApproved() {
       sa.account_type as sender_account_type,
       coalesce(m.subject_final, m.subject_draft, '(sin asunto)') as subject,
       coalesce(m.body_final, m.body_draft, '') as body,
+      coalesce(cc.priority_score, 0)::int as priority_score,
+      coalesce(cc.fit_score, 0)::int as fit_score,
       coalesce(sender_counts.sent_today, 0)::int as sender_sent_today,
       least(sa.daily_limit, csa.campaign_daily_limit)::int as effective_daily_limit
     from messages m
@@ -54,6 +56,10 @@ async function listApproved() {
       and csa.sender_account_id = m.sender_account_id
     left join companies co on co.id = m.company_id
     left join contacts ct on ct.id = m.contact_id
+    left join campaign_contacts cc
+      on cc.campaign_id = m.campaign_id
+      and cc.company_id = m.company_id
+      and (cc.contact_id = m.contact_id or cc.contact_id is null)
     left join lateral (
       select count(*)::int as sent_today
       from messages sent
@@ -69,7 +75,12 @@ async function listApproved() {
       and coalesce(ct.do_not_contact, false) = false
       and coalesce(sender_counts.sent_today, 0) < least(sa.daily_limit, csa.campaign_daily_limit)
       and (${campaign}::text is null or c.slug = ${campaign})
-    order by csa.priority asc, m.approved_at asc nulls last, m.created_at asc
+    order by
+      csa.priority asc,
+      coalesce(cc.priority_score, 0) desc,
+      coalesce(cc.fit_score, 0) desc,
+      m.approved_at asc nulls last,
+      m.created_at asc
     limit ${limit}
   `;
 
