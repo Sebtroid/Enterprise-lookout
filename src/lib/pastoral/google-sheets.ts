@@ -92,6 +92,18 @@ export async function appendPastoralSheetContact({
 
 export function parsePastoralSheetValues(values: unknown[][]) {
   if (!values.length) return [];
+  if (!isPastoralHeaderRow(values[0] ?? [])) {
+    return values
+      .map((row) => ({
+        comments: readDataCell(row, 4, "comentarios"),
+        contactedBy: readDataCell(row, 2, "contactado por"),
+        email: readSheetCell(row, 1),
+        name: readSheetCell(row, 0),
+        status: readDataCell(row, 3, "estado"),
+      }))
+      .filter((row) => row.name || row.email);
+  }
+
   const [headers, ...rows] = values;
   const csv = [headers, ...rows]
     .map((row) =>
@@ -137,6 +149,36 @@ function normalizeSheetName(value: string) {
     .normalize("NFD")
     .replace(/\p{Diacritic}/gu, "")
     .replace(/[^a-zA-Z0-9]+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function isPastoralHeaderRow(row: unknown[]) {
+  const first = normalizeHeaderCell(readSheetCell(row, 0));
+  const second = normalizeHeaderCell(readSheetCell(row, 1));
+  return (
+    first === "-" ||
+    first === "nombre" ||
+    first === "empresa" ||
+    second === "mail de contacto" ||
+    second === "email" ||
+    second === "correo"
+  );
+}
+
+function readSheetCell(row: unknown[], index: number) {
+  return String(row[index] ?? "").trim();
+}
+
+function readDataCell(row: unknown[], index: number, headerLabel: string) {
+  const value = readSheetCell(row, index);
+  return normalizeHeaderCell(value) === headerLabel ? "" : value;
+}
+
+function normalizeHeaderCell(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
     .trim()
     .toLowerCase();
 }

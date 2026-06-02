@@ -49,6 +49,37 @@ describe("pastoral Google Sheets OAuth", () => {
     ]);
   });
 
+  it("parses the live sheet when the first row mixes a contact with later headers", () => {
+    expect(
+      parsePastoralSheetValues([
+        [
+          "Cristóbal Bellolio",
+          "alamoclau@gmail.com",
+          "Contactado por",
+          "Estado",
+          "Comentarios",
+          "Columna 1",
+        ],
+        ["José Miguel Benavente", "malarcon@colbun.cl", "Consejo TP", "Va a donar"],
+      ]),
+    ).toEqual([
+      {
+        comments: "",
+        contactedBy: "",
+        email: "alamoclau@gmail.com",
+        name: "Cristóbal Bellolio",
+        status: "",
+      },
+      {
+        comments: "",
+        contactedBy: "Consejo TP",
+        email: "malarcon@colbun.cl",
+        name: "José Miguel Benavente",
+        status: "Va a donar",
+      },
+    ]);
+  });
+
   it("appends a contact row and verifies it by reading the sheet again", async () => {
     const config = getPastoralSheetsConfig({
       PASTORAL_CONTACT_SHEET_ID: "sheet-123",
