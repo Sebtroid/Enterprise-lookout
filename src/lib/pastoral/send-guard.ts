@@ -69,13 +69,25 @@ export async function preparePastoralInitialSendGuard({
     };
   }
 
+  const store = createPostgresPastoralReservationStore(sql);
+  const existingReservation = await store
+    .findByMessage(String(message.id))
+    .catch(() => null);
   const duplicate = findPastoralDuplicate({
     companyName: message.company_name,
     email: message.to_email,
     sheetContacts,
   });
+  const canReuseExistingSheetRow =
+    duplicate &&
+    existingReservation &&
+    REUSABLE_RESERVATION_STATUSES.has(existingReservation.status) &&
+    isSameEmail(duplicate.contact.email, message.to_email) &&
+    isSameEmail(existingReservation.contactEmail, message.to_email) &&
+    duplicate.contact.contactedBy.trim().toLowerCase() ===
+      PASTORAL_SHEET_CONTACTED_BY.trim().toLowerCase();
 
-  if (duplicate) {
+  if (duplicate && !canReuseExistingSheetRow) {
     return {
       ok: false as const,
       error: `Bloqueado por Sheets Pastoral: ya aparece ${duplicate.contact.name || duplicate.contact.email} (${formatPastoralDuplicateReason(duplicate.reason)}), contactado por ${duplicate.contact.contactedBy || "sin responsable"}.`,
@@ -86,7 +98,6 @@ export async function preparePastoralInitialSendGuard({
   const contactName = String(
     message.company_name || message.contact_name || message.to_email,
   );
-  const store = createPostgresPastoralReservationStore(sql);
   let reservation: Awaited<ReturnType<typeof createPastoralLocalReservation>>;
   try {
     reservation = await createPastoralLocalReservation(store, {
@@ -116,6 +127,22 @@ export async function preparePastoralInitialSendGuard({
           ? `Bloqueado por reserva local Pastoral: ${message.to_email} ya fue reservado para otro envío.`
           : `Bloqueado por reserva local Pastoral: el dominio de ${message.to_email} ya fue reservado para otro envío.`,
       status: 409,
+    };
+  }
+
+  if (canReuseExistingSheetRow) {
+    await store.markStatus(String(message.id), "verified", {
+      reused_existing_sheet_row: true,
+      contact_email: duplicate.contact.email,
+    });
+    return {
+      ok: true as const,
+      markSent: async (detail: unknown) => {
+        await store.markStatus(String(message.id), "sent", detail);
+      },
+      markFailed: async (detail: unknown) => {
+        await store.markStatus(String(message.id), "failed", detail);
+      },
     };
   }
 
@@ -191,3 +218,14 @@ function formatPastoralDuplicateReason(reason: "domain" | "email" | "name") {
   if (reason === "domain") return "mismo dominio";
   return "mismo nombre";
 }
+
+function isSameEmail(left: string | null | undefined, right: string | null | undefined) {
+  return left?.trim().toLowerCase() === right?.trim().toLowerCase();
+}
+
+const REUSABLE_RESERVATION_STATUSES = new Set([
+  "appended",
+  "failed",
+  "reserved",
+  "verified",
+]);

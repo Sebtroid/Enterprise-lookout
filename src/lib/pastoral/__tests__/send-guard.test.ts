@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => {
   const store = {
+    findByMessage: vi.fn(),
     markStatus: vi.fn(),
   };
 
@@ -58,6 +59,7 @@ describe("Pastoral initial send guard", () => {
     mocks.fetchPastoralSheetContactsFromApi.mockResolvedValue([]);
     mocks.createPastoralLocalReservation.mockResolvedValue({ ok: true });
     mocks.appendPastoralSheetContact.mockResolvedValue({ ok: true });
+    mocks.store.findByMessage.mockResolvedValue(null);
     mocks.verifyPastoralSheetContact.mockReturnValue(true);
   });
 
@@ -103,6 +105,38 @@ describe("Pastoral initial send guard", () => {
     expect(result.ok === false ? result.error : "").toContain("ya aparece");
     expect(mocks.createPastoralLocalReservation).not.toHaveBeenCalled();
     expect(mocks.appendPastoralSheetContact).not.toHaveBeenCalled();
+  });
+
+  it("reuses an existing self-written sheet row for the same message instead of appending again", async () => {
+    mocks.fetchPastoralSheetContactsFromApi.mockResolvedValue([
+      {
+        comments: "",
+        contactedBy: "José Miguel Olavarría",
+        email: "contacto@empresazona.cl",
+        name: "Empresa Zona",
+        status: "Esperando respuesta",
+      },
+    ]);
+    mocks.store.findByMessage.mockResolvedValue({
+      contactDomain: "empresazona.cl",
+      contactEmail: "contacto@empresazona.cl",
+      messageId: message.id,
+      status: "appended",
+    });
+
+    const result = await preparePastoralInitialSendGuard({
+      accessToken: "access-token",
+      message,
+      sql: {},
+    });
+
+    expect(result).toMatchObject({ ok: true });
+    expect(mocks.createPastoralLocalReservation).toHaveBeenCalled();
+    expect(mocks.appendPastoralSheetContact).not.toHaveBeenCalled();
+    expect(mocks.store.markStatus).toHaveBeenCalledWith(message.id, "verified", {
+      contact_email: "contacto@empresazona.cl",
+      reused_existing_sheet_row: true,
+    });
   });
 
   it("reserves locally, appends to Sheets, verifies by rereading, then exposes sent/failed markers", async () => {

@@ -15,6 +15,9 @@ describe("pastoral local sheet reservations", () => {
       status: string;
     }> = [];
     const store: PastoralReservationStore = {
+      async findByMessage(messageId) {
+        return rows.find((row) => row.messageId === messageId) ?? null;
+      },
       async findConflict(input) {
         return (
           rows.find(

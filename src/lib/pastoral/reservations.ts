@@ -19,6 +19,7 @@ export type PastoralReservationRecord = {
 
 export type PastoralReservationStore = {
   findConflict(input: PastoralReservationInput & { contactDomain: string | null }): Promise<PastoralReservationRecord | null>;
+  findByMessage(messageId: string): Promise<PastoralReservationRecord | null>;
   upsert(input: PastoralReservationInput & { contactDomain: string | null }): Promise<void>;
 };
 
@@ -50,6 +51,26 @@ export function createPostgresPastoralReservationStore(
   markStatus(messageId: string, status: string, detail?: unknown): Promise<void>;
 } {
   return {
+    async findByMessage(messageId) {
+      const rows = await sql`
+        select
+          message_id::text as message_id,
+          contact_email::text as contact_email,
+          contact_domain::text as contact_domain,
+          status
+        from pastoral_sheet_reservations
+        where message_id = ${messageId}
+        limit 1
+      `;
+      return rows[0]
+        ? {
+            contactDomain: rows[0].contact_domain ?? null,
+            contactEmail: String(rows[0].contact_email),
+            messageId: String(rows[0].message_id),
+            status: String(rows[0].status),
+          }
+        : null;
+    },
     async findConflict(input) {
       const rows = await sql`
         select
