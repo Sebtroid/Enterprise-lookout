@@ -61,6 +61,36 @@ Cencosud S.A.,,Mari Candia,,`);
     ).toMatchObject({ reason: "name", contact: { name: "Cencosud S.A." } });
   });
 
+  it("blocks related brand domains instead of only exact domains", () => {
+    const sheetContacts = parsePastoralContactsCsv(`-,Mail de contacto,Contactado por,Estado,Comentarios
+Copec,contacto@copec.cl,Otra zona,Esperando respuesta,
+Banco BICE,alianzas@bice.cl,Otra zona,Esperando respuesta,`);
+
+    expect(
+      findPastoralDuplicate({
+        companyName: "Empresas Copec",
+        email: "contacto@empresascopec.cl",
+        sheetContacts,
+      }),
+    ).toMatchObject({ reason: "domain", contact: { name: "Copec" } });
+
+    expect(
+      findPastoralDuplicate({
+        companyName: "Empresas COPEC Chile S.A.",
+        email: "donaciones@gmail.com",
+        sheetContacts,
+      }),
+    ).toMatchObject({ reason: "name", contact: { name: "Copec" } });
+
+    expect(
+      findPastoralDuplicate({
+        companyName: "BICECORP",
+        email: "contacto@bicecorp.cl",
+        sheetContacts,
+      }),
+    ).toMatchObject({ reason: "domain", contact: { name: "Banco BICE" } });
+  });
+
   it("builds a row compatible with the shared sheet columns", () => {
     expect(
       buildPastoralSheetRow({

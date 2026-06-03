@@ -76,6 +76,19 @@ export function findPastoralDuplicate({
       (contact) => getEmailDomain(contact.email) === domain,
     );
     if (match) return { contact: match, reason: "domain" };
+
+    const domainTokens = getDomainIdentityTokens(domain);
+    const relatedDomainMatch = sheetContacts.find((contact) => {
+      const contactDomain = getEmailDomain(contact.email);
+      if (!contactDomain || COMMON_EMAIL_DOMAINS.has(contactDomain)) return false;
+      return hasIdentityOverlap(
+        domainTokens,
+        getDomainIdentityTokens(contactDomain),
+      );
+    });
+    if (relatedDomainMatch) {
+      return { contact: relatedDomainMatch, reason: "domain" };
+    }
   }
 
   const normalizedName = normalizeName(companyName);
@@ -84,6 +97,21 @@ export function findPastoralDuplicate({
       (contact) => normalizeName(contact.name) === normalizedName,
     );
     if (match) return { contact: match, reason: "name" };
+
+    const nameTokens = getOrganizationIdentityTokens(companyName);
+    const relatedNameMatch = sheetContacts.find((contact) =>
+      hasIdentityOverlap(nameTokens, getOrganizationIdentityTokens(contact.name)),
+    );
+    if (relatedNameMatch) return { contact: relatedNameMatch, reason: "name" };
+
+    const relatedDomainMatch = sheetContacts.find((contact) => {
+      const contactDomain = getEmailDomain(contact.email);
+      if (!contactDomain || COMMON_EMAIL_DOMAINS.has(contactDomain)) return false;
+      return hasIdentityOverlap(nameTokens, getDomainIdentityTokens(contactDomain));
+    });
+    if (relatedDomainMatch) {
+      return { contact: relatedDomainMatch, reason: "name" };
+    }
   }
 
   return null;
@@ -121,7 +149,7 @@ function normalizeName(value: string | null | undefined) {
 
   return normalized
     .replace(
-      /\b(sociedad anonima|s p a|spa|s a|sa|ltda|limitada|chile)\b/g,
+      /\b(sociedad anonima|s p a|spa|s a|sa|ltda|limitada|empresa|empresas|grupo|holding|corporacion|corporation|corp|corporativo|corporativa|compania|cia|chile)\b/g,
       " ",
     )
     .replace(/\s+/g, " ")
@@ -135,13 +163,138 @@ function getEmailDomain(value: string | null | undefined) {
   return email.slice(atIndex + 1);
 }
 
+function getDomainIdentityTokens(domain: string) {
+  const host = domain.trim().toLowerCase().replace(/^www\./, "");
+  const labels = host.split(".").filter(Boolean);
+  const registrableLabel =
+    labels.length >= 2 ? labels[labels.length - 2] : labels[0] ?? "";
+  return getOrganizationIdentityTokens(registrableLabel.replace(/[-_]/g, " "));
+}
+
+function getOrganizationIdentityTokens(value: string | null | undefined) {
+  const tokens = normalizeName(value)
+    .split(" ")
+    .map(normalizeIdentityToken)
+    .filter(isUsefulIdentityToken);
+
+  return new Set(tokens);
+}
+
+function normalizeIdentityToken(value: string) {
+  let token = value.replace(/[^a-z0-9]/g, "");
+
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const prefix of GENERIC_IDENTITY_PREFIXES) {
+      if (token.startsWith(prefix) && token.length > prefix.length + 2) {
+        token = token.slice(prefix.length);
+        changed = true;
+      }
+    }
+    for (const suffix of GENERIC_IDENTITY_SUFFIXES) {
+      if (token.endsWith(suffix) && token.length > suffix.length + 2) {
+        token = token.slice(0, -suffix.length);
+        changed = true;
+      }
+    }
+  }
+
+  return token;
+}
+
+function isUsefulIdentityToken(token: string) {
+  if (!token || GENERIC_IDENTITY_TERMS.has(token)) return false;
+  return token.length >= 4 || STRONG_SHORT_BRAND_TOKENS.has(token);
+}
+
+function hasIdentityOverlap(left: Set<string>, right: Set<string>) {
+  if (!left.size || !right.size) return false;
+  for (const token of left) {
+    if (right.has(token)) return true;
+  }
+  return false;
+}
+
+const GENERIC_IDENTITY_PREFIXES = [
+  "empresas",
+  "empresa",
+  "grupo",
+  "holding",
+];
+
+const GENERIC_IDENTITY_SUFFIXES = [
+  "chile",
+  "corp",
+  "corporativo",
+  "corporativa",
+  "corporacion",
+  "corporation",
+];
+
+const GENERIC_IDENTITY_TERMS = new Set([
+  "a",
+  "and",
+  "anonima",
+  "banco",
+  "cl",
+  "cia",
+  "comercial",
+  "compania",
+  "company",
+  "contacto",
+  "corp",
+  "corporacion",
+  "corporation",
+  "corporativa",
+  "corporativo",
+  "correo",
+  "de",
+  "del",
+  "donaciones",
+  "el",
+  "empresa",
+  "empresas",
+  "equipo",
+  "grupo",
+  "holding",
+  "info",
+  "la",
+  "las",
+  "limitada",
+  "los",
+  "ltda",
+  "mail",
+  "p",
+  "s",
+  "sa",
+  "sociedad",
+  "spa",
+  "the",
+  "ventas",
+  "y",
+]);
+
+const STRONG_SHORT_BRAND_TOKENS = new Set([
+  "3m",
+  "bci",
+  "dhl",
+  "ibm",
+  "sap",
+  "wom",
+]);
+
 const COMMON_EMAIL_DOMAINS = new Set([
   "gmail.com",
+  "googlemail.com",
+  "hotmail.cl",
   "hotmail.com",
   "icloud.com",
   "live.com",
   "me.com",
+  "outlook.cl",
   "outlook.com",
   "uc.cl",
+  "yahoo.es",
   "yahoo.com",
 ]);
