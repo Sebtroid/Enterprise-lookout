@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
+import { isAuthorizedAgentRequest } from "@/lib/agent/auth";
 import { getAllowedUser } from "@/lib/auth/request";
 import { isAllowedEmail } from "@/lib/auth/allowed-emails";
 import { sendAgentEvent } from "@/lib/agent/events";
@@ -26,8 +27,9 @@ const sendBodySchema = z.object({
 export async function POST(req: NextRequest) {
   try {
     const user = await getAllowedUser({ allowDemoUser: true, request: req });
+    const agentAuthorized = isAuthorizedAgentRequest(req);
     const sql = getPostgresClient();
-    if (!user || !sql) {
+    if ((!user && !agentAuthorized) || !sql) {
       return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
     }
 
@@ -130,7 +132,7 @@ export async function POST(req: NextRequest) {
       message.campaign_slug === PASTORAL_CAMPAIGN_SLUG &&
       (message.kind === "outbound_initial" || message.kind === "outbound_followup");
 
-    if (isPastoralInitialMail) {
+    if (isPastoralInitialMail && !agentAuthorized) {
       const contactReadiness = getPastoralInitialContactSendReadiness({
         confidence: Number(message.contact_confidence ?? 0),
         email: message.to_email,
