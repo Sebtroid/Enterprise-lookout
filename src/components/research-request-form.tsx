@@ -51,8 +51,8 @@ export function ResearchRequestForm({
               Investigar empresas nuevas
             </div>
             <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-              KimiClaw debe buscar opciones nuevas con evidencia, y además revisar
-              si algo de la base existente sirve para {campaign.name}.
+              KimiClaw debe buscar empresas con evidencia y contactos directos:
+              persona, cargo, fuente y mail verificado o inferido como no verificado.
             </p>
           </div>
           <label className="space-y-1 text-sm md:w-56">
@@ -84,7 +84,7 @@ export function ResearchRequestForm({
           <Textarea
             className="min-h-20"
             name="notes"
-            placeholder="Ej: prioriza marcas con foco joven, empresas que puedan aportar producto, presencia en universidades o contactos de marketing/RSE."
+            placeholder="Ej: prioriza gerentes de asuntos corporativos, sostenibilidad/RSE, comunicaciones, fundaciones o partnerships. Evita info@ y contacto@ salvo como fallback."
           />
         </label>
 

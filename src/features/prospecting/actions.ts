@@ -25,6 +25,7 @@ import {
   getKimiDeepResearchInstructions,
   kimiDeepResearchJobName,
 } from "@/lib/prospecting/kimi-research";
+import { getPastoralInitialContactSendReadiness } from "@/lib/prospecting/contact-quality";
 import {
   ensureDomChatThread,
   getDomCampaignContextBySlug,
@@ -958,7 +959,7 @@ export async function createResearchRequestAction(
       })},
       ${sql.json({
         nextStep:
-          "KimiClaw debe investigar, guardar empresas/contactos no verificados y dejar evidencia.",
+          "KimiClaw debe investigar empresas, encontrar contactos directos con fuente, inferir patrones solo como unverified y dejar evidencia.",
       })}
     )
   `;
@@ -1045,7 +1046,7 @@ export async function createResearchRequestAction(
   return {
     ok: true,
     message:
-      "Pedido guardado para KimiClaw. Prioridad: empresas nuevas con investigación profunda y evidencia.",
+      "Pedido guardado para KimiClaw. Prioridad: empresas nuevas, contactos directos, fuentes claras y nada de mails genéricos salvo fallback.",
   };
 }
 
@@ -1791,6 +1792,58 @@ export async function updateCompanyQualityAction(
     ok: true,
     message: `${String(rows[0].canonical_name)} actualizada.`,
   };
+}
+
+export async function markContactVerifiedAction(
+  formData: FormData,
+): Promise<void> {
+  const sql = getPostgresClient();
+  if (!sql) return;
+
+  const contactId = readFormString(formData, "contactId");
+  const scope = readFormString(formData, "scope");
+  if (!contactId) return;
+
+  const rows = await sql`
+    select
+      id::text as id,
+      full_name,
+      role,
+      email::text as email,
+      source,
+      coalesce(confidence, 0)::float as confidence,
+      coalesce(is_decision_maker, false) as is_decision_maker,
+      verification_status::text as verification_status
+    from contacts
+    where id = ${contactId}
+    limit 1
+  `;
+  const contact = rows[0];
+  if (!contact) return;
+
+  const readiness = getPastoralInitialContactSendReadiness({
+    confidence: Number(contact.confidence ?? 0),
+    email: nullableRowString(contact.email),
+    fullName: nullableRowString(contact.full_name),
+    isDecisionMaker: Boolean(contact.is_decision_maker),
+    role: nullableRowString(contact.role),
+    source: nullableRowString(contact.source),
+    verificationStatus: "verified",
+  });
+
+  if (!readiness.ok) return;
+
+  await sql`
+    update contacts
+    set
+      verification_status = 'verified',
+      verified_at = coalesce(verified_at, now()),
+      confidence = greatest(confidence, 0.82),
+      updated_at = now()
+    where id = ${contactId}
+  `;
+
+  revalidateProspectingPaths(scope || undefined);
 }
 
 export async function createProjectAction(

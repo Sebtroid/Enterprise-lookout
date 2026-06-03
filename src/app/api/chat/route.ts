@@ -129,13 +129,13 @@ async function handleResearchCompanies(message: string, scope: string) {
       })},
       ${sql.json({
         nextStep:
-          "KimiClaw debe investigar empresas nuevas con evidencia y revisar fit de la base existente.",
+          "KimiClaw debe investigar empresas nuevas, encontrar contactos directos con fuente y dejar inferencias de email como unverified.",
       })}
     )
   `;
 
   return NextResponse.json({
-    content: `Listo. Dejé una tarea para KimiClaw: investigar ${rubrics} con investigación profunda para ${campaign.name}.\n\nCriterio guardado: primero empresas nuevas útiles, después revisar la base existente. Los contactos quedan no verificados hasta que respondan.`,
+    content: `Listo. Dejé una tarea para KimiClaw: investigar ${rubrics} con investigación profunda para ${campaign.name}.\n\nCriterio guardado: primero empresas nuevas útiles, después contactos directos con fuente. Los emails inferidos quedan no verificados y no se deben enviar hasta verificarlos.`,
     actionType: "research_companies",
     actionPayload: { rubrics, scope, jobName: kimiDeepResearchJobName },
     actionTaken: true,

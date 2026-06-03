@@ -38,8 +38,10 @@ import {
 } from "@/components/ui/table";
 import { GmailConnectButton } from "@/components/gmail-connect-button";
 import { GmailSyncRepliesButton } from "@/components/gmail-sync-replies-button";
+import { markContactVerifiedAction } from "@/features/prospecting/actions";
 import { PASTORAL_CAMPAIGN_SLUG } from "@/lib/pastoral/config";
 import { getContactPriority } from "@/lib/prospecting/demo-data";
+import { evaluateContactQuality } from "@/lib/prospecting/contact-quality";
 import {
   getPostgresClient,
   withPostgresQueryTimeout,
@@ -466,6 +468,7 @@ export async function ContactsView({ scope }: { scope: string }) {
               <TableHead>Cargo</TableHead>
               <TableHead>Email</TableHead>
               <TableHead>Verificación</TableHead>
+              <TableHead>Calidad</TableHead>
               <TableHead>Prioridad</TableHead>
               <TableHead>Fuente</TableHead>
             </TableRow>
@@ -475,6 +478,15 @@ export async function ContactsView({ scope }: { scope: string }) {
               const company = snapshot.companies.find(
                 (item) => item.id === contact.companyId,
               );
+              const quality = evaluateContactQuality({
+                confidence: contact.confidence,
+                email: contact.email,
+                fullName: contact.name,
+                isDecisionMaker: contact.isDecisionMaker,
+                role: contact.role,
+                source: contact.source,
+                verificationStatus: contact.verificationStatus,
+              });
 
               return (
                 <TableRow key={contact.id}>
@@ -499,6 +511,31 @@ export async function ContactsView({ scope }: { scope: string }) {
                         <span className="text-xs text-muted-foreground">
                           {contact.bounceCount} rebote(s)
                         </span>
+                      ) : null}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-col gap-1">
+                      <Badge variant={quality.sendReady ? "outline" : "secondary"}>
+                        {quality.sendReady ? "Listo" : "No enviar"} · {quality.score}/100
+                      </Badge>
+                      <span className="max-w-xs text-xs text-muted-foreground">
+                        {quality.summary}
+                      </span>
+                      {contact.verificationStatus !== "verified" &&
+                      !quality.blockers.includes("generic_inbox") &&
+                      !quality.blockers.includes("missing_named_contact") &&
+                      contact.email ? (
+                        <form action={markContactVerifiedAction}>
+                          <input name="contactId" type="hidden" value={contact.id} />
+                          <input name="scope" type="hidden" value={scope} />
+                          <button
+                            className="w-fit text-xs font-medium text-primary underline-offset-4 hover:underline"
+                            type="submit"
+                          >
+                            Marcar verificado
+                          </button>
+                        </form>
                       ) : null}
                     </div>
                   </TableCell>

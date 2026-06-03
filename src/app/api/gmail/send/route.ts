@@ -16,6 +16,7 @@ import {
   preparePastoralInitialSendGuard,
   type PastoralSendGuardMessage,
 } from "@/lib/pastoral/send-guard";
+import { getPastoralInitialContactSendReadiness } from "@/lib/prospecting/contact-quality";
 import { getPostgresClient } from "@/lib/supabase/postgres";
 
 const sendBodySchema = z.object({
@@ -55,6 +56,12 @@ export async function POST(req: NextRequest) {
         sa.status::text as sender_status,
         ct.email::text as to_email,
         ct.full_name as contact_name,
+        ct.role as contact_role,
+        ct.category as contact_category,
+        coalesce(ct.confidence, 0)::float as contact_confidence,
+        ct.verification_status::text as contact_verification_status,
+        ct.source as contact_source,
+        coalesce(ct.is_decision_maker, false) as contact_is_decision_maker,
         co.canonical_name as company_name,
         coalesce(m.subject_final, m.subject_draft) as subject,
         coalesce(m.body_final, m.body_draft) as email_body,
@@ -122,6 +129,29 @@ export async function POST(req: NextRequest) {
     const isPastoralOutreachMail =
       message.campaign_slug === PASTORAL_CAMPAIGN_SLUG &&
       (message.kind === "outbound_initial" || message.kind === "outbound_followup");
+
+    if (isPastoralInitialMail) {
+      const contactReadiness = getPastoralInitialContactSendReadiness({
+        confidence: Number(message.contact_confidence ?? 0),
+        email: message.to_email,
+        fullName: message.contact_name,
+        isDecisionMaker: Boolean(message.contact_is_decision_maker),
+        role: message.contact_role,
+        source: message.contact_source,
+        verificationStatus: message.contact_verification_status,
+      });
+
+      if (!contactReadiness.ok) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: `Bloqueado por calidad de contacto Pastoral: ${contactReadiness.message}`,
+            contactQuality: contactReadiness.assessment,
+          },
+          { status: 409 },
+        );
+      }
+    }
 
     const tokenRows = await sql`
       select access_token, refresh_token, expires_at

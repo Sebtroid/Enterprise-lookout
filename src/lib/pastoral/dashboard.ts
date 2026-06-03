@@ -9,6 +9,7 @@ import {
   type PastoralSheetContact,
 } from "@/lib/pastoral/sheet";
 import { listRecentAiMemoryEvents } from "@/lib/gpt/semantic-memory";
+import { getPastoralInitialContactSendReadiness } from "@/lib/prospecting/contact-quality";
 import {
   getPostgresClient,
   withPostgresQueryTimeout,
@@ -315,6 +316,11 @@ export async function getPastoralOpsSnapshot(
           cc.last_contacted_at::text as last_contacted_at,
           ct.full_name as contact_name,
           ct.email::text as contact_email,
+          ct.role as contact_role,
+          coalesce(ct.confidence, 0)::float as contact_confidence,
+          ct.verification_status::text as contact_verification_status,
+          ct.source as contact_source,
+          coalesce(ct.is_decision_maker, false) as contact_is_decision_maker,
           coalesce(co.do_not_contact, false) as company_do_not_contact,
           coalesce(ct.do_not_contact, false) as contact_do_not_contact,
           exists (
@@ -464,6 +470,15 @@ function mapQueueItem(row: DbRow, scope: string): PastoralQueueItem {
   const status = stringValue(row.campaign_status);
   const contactEmail = stringValue(row.contact_email);
   const contactName = stringValue(row.contact_name) || "Sin contacto";
+  const contactReadiness = getPastoralInitialContactSendReadiness({
+    confidence: numberValue(row.contact_confidence),
+    email: contactEmail,
+    fullName: contactName,
+    isDecisionMaker: Boolean(row.contact_is_decision_maker),
+    role: stringValue(row.contact_role),
+    source: stringValue(row.contact_source),
+    verificationStatus: stringValue(row.contact_verification_status) || "unverified",
+  });
 
   if (blocked) {
     return {
@@ -511,6 +526,21 @@ function mapQueueItem(row: DbRow, scope: string): PastoralQueueItem {
   }
 
   if (Boolean(row.has_approved_outbound) || status === "approved_to_send") {
+    if (!contactReadiness.ok) {
+      return {
+        actionHref: `/campaigns/${scope}/contacts`,
+        actionLabel: "Verificar contacto",
+        companyId: stringValue(row.company_id),
+        companyName,
+        contactEmail,
+        contactName,
+        fitScore: numberValue(row.fit_score),
+        lastActivityAt: stringValue(row.last_activity_at) || stringValue(row.last_contacted_at) || null,
+        reason: contactReadiness.message,
+        state: "blocked",
+      };
+    }
+
     return {
       actionHref: `/campaigns/${scope}/review/outbound`,
       actionLabel: "Enviar",
@@ -526,6 +556,21 @@ function mapQueueItem(row: DbRow, scope: string): PastoralQueueItem {
   }
 
   if (status === "draft_ready" || status === "ready_to_draft" || status === "qualified") {
+    if (!contactReadiness.ok) {
+      return {
+        actionHref: `/campaigns/${scope}/contacts`,
+        actionLabel: "Investigar contacto",
+        companyId: stringValue(row.company_id),
+        companyName,
+        contactEmail,
+        contactName,
+        fitScore: numberValue(row.fit_score),
+        lastActivityAt: stringValue(row.last_activity_at) || stringValue(row.last_contacted_at) || null,
+        reason: contactReadiness.message,
+        state: "blocked",
+      };
+    }
+
     return {
       actionHref: `/campaigns/${scope}/review/outbound`,
       actionLabel: "Revisar",

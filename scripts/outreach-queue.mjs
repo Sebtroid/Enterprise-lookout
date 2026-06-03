@@ -73,6 +73,40 @@ async function listApproved() {
       and ct.email is not null
       and coalesce(co.do_not_contact, false) = false
       and coalesce(ct.do_not_contact, false) = false
+      and (
+        c.slug <> 'pastoral-invierno-2026'
+        or m.kind <> 'outbound_initial'
+        or (
+          ct.verification_status = 'verified'
+          and lower(regexp_replace(split_part(ct.email::text, '@', 1), '[^a-z0-9]', '', 'g')) not in (
+            'administracion',
+            'alianzas',
+            'comercial',
+            'comunicaciones',
+            'contact',
+            'contacto',
+            'contactos',
+            'csr',
+            'donaciones',
+            'equipo',
+            'fundacion',
+            'hello',
+            'hola',
+            'info',
+            'informaciones',
+            'marketing',
+            'office',
+            'prensa',
+            'rse',
+            'rrhh',
+            'servicioalcliente',
+            'soporte',
+            'sustentabilidad',
+            'ventas'
+          )
+          and lower(coalesce(ct.full_name, '')) !~ '(contacto|equipo|general|ventas|marketing)'
+        )
+      )
       and coalesce(sender_counts.sent_today, 0) < least(sa.daily_limit, csa.campaign_daily_limit)
       and (${campaign}::text is null or c.slug = ${campaign})
     order by
