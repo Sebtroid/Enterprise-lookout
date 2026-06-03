@@ -78,14 +78,26 @@ export function createPostgresPastoralReservationStore(
         : null;
     },
     async markStatus(messageId, status, detail) {
+      if (detail == null) {
+        await sql`
+          update pastoral_sheet_reservations
+          set
+            status = ${status},
+            sent_at = case
+              when ${status} = 'sent' then coalesce(sent_at, now())
+              else sent_at
+            end,
+            updated_at = now()
+          where message_id = ${messageId}
+        `;
+        return;
+      }
+
       await sql`
         update pastoral_sheet_reservations
         set
           status = ${status},
-          detail = case
-            when ${detail == null} then detail
-            else ${sql.json(detail)}
-          end,
+          detail = ${sql.json(detail)},
           sent_at = case
             when ${status} = 'sent' then coalesce(sent_at, now())
             else sent_at

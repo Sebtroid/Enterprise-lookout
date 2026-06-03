@@ -227,14 +227,19 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const gmailMessageId =
+      typeof sendResult.id === "string" ? sendResult.id : null;
+    const gmailThreadId =
+      typeof sendResult.threadId === "string" ? sendResult.threadId : null;
+
     await sql.begin(async (tx) => {
       const updated = await tx`
         update messages
         set
           status = 'sent',
           sent_at = now(),
-          gmail_message_id = ${sendResult.id},
-          gmail_thread_id = coalesce(${sendResult.threadId}, ${sendThreadId}, gmail_thread_id),
+          gmail_message_id = ${gmailMessageId},
+          gmail_thread_id = coalesce(${gmailThreadId}, ${sendThreadId}, gmail_thread_id),
           future_note = concat_ws(' ', nullif(future_note, ''), 'Enviado vía Gmail API.'),
           updated_at = now()
         where id = ${messageId}
@@ -243,7 +248,7 @@ export async function POST(req: NextRequest) {
       `;
 
       if (updated[0]) {
-        const sentThreadId = sendResult.threadId ?? sendThreadId ?? null;
+        const sentThreadId = gmailThreadId ?? sendThreadId ?? null;
         let threadId = updated[0].thread_id;
 
         if (!threadId && sentThreadId) {
@@ -321,8 +326,8 @@ export async function POST(req: NextRequest) {
       contactId: String(message.contact_id ?? ""),
       messageId,
       data: {
-        gmail_message_id: sendResult.id,
-        gmail_thread_id: sendResult.threadId ?? sendThreadId ?? null,
+        gmail_message_id: gmailMessageId,
+        gmail_thread_id: gmailThreadId ?? sendThreadId ?? null,
         sender_email: String(message.sender_email),
         recipient_email: String(message.to_email),
         subject: String(message.subject),
@@ -334,15 +339,15 @@ export async function POST(req: NextRequest) {
 
     if (pastoralGuard?.ok) {
       await pastoralGuard.markSent({
-        gmail_message_id: sendResult.id,
-        gmail_thread_id: sendResult.threadId ?? sendThreadId ?? null,
+        gmail_message_id: gmailMessageId,
+        gmail_thread_id: gmailThreadId ?? sendThreadId ?? null,
       });
     }
 
     return NextResponse.json({
       ok: true,
-      gmailMessageId: sendResult.id,
-      threadId: sendResult.threadId,
+      gmailMessageId,
+      threadId: gmailThreadId,
     });
   } catch (err) {
     console.error("Gmail send error:", err);
