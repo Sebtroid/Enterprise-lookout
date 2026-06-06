@@ -62,6 +62,8 @@ const requestSchema = z.object({
   dryRun: z.boolean().optional().default(false),
   senderEmail: z.string().email().optional().default(DEFAULT_SENDER_EMAIL),
   sheetName: z.string().min(1).optional().default(DEFAULT_SHEET_NAME),
+  stageOnly: z.boolean().optional().default(false),
+  scheduledFor: z.string().datetime({ offset: true }).optional(),
   startRow: z.number().int().min(2).max(20000).optional().default(DEFAULT_START_ROW),
 });
 
@@ -136,7 +138,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const attachments = parsed.data.dryRun
+  const attachments = parsed.data.dryRun || parsed.data.stageOnly
     ? []
     : await getPastoralBenefitAttachments({ baseUrl: req.nextUrl.origin });
 
@@ -198,6 +200,7 @@ export async function POST(req: NextRequest) {
       candidate,
       contactName,
       senderAccountId: campaignSender.senderAccountId,
+      scheduledFor: parsed.data.scheduledFor ?? null,
       subject,
       sql,
     });
@@ -209,6 +212,19 @@ export async function POST(req: NextRequest) {
         ok: false,
         error: prepared.error,
       });
+      continue;
+    }
+
+    if (parsed.data.stageOnly) {
+      results.push({
+        company: candidate.company,
+        email: candidate.email,
+        messageId: prepared.record.messageId,
+        ok: true,
+        scheduledFor: parsed.data.scheduledFor ?? null,
+        staged: true,
+      });
+      knownSheetContacts.push(buildMemorySheetContact({ candidate, contactName }));
       continue;
     }
 
@@ -343,13 +359,16 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  const sent = results.filter((result) => result.ok && !("dryRun" in result)).length;
+  const sent = results.filter(
+    (result) => result.ok && !("dryRun" in result) && !("staged" in result),
+  ).length;
   const skipped = results.filter((result) => "skipped" in result && result.skipped).length;
   const failed = results.filter((result) => !result.ok && !("skipped" in result)).length;
 
   return NextResponse.json({
     ok: failed === 0,
     dryRun: parsed.data.dryRun,
+    stageOnly: parsed.data.stageOnly,
     sent,
     skipped,
     failed,
@@ -548,6 +567,7 @@ async function prepareDatabaseRecords({
   candidate,
   contactName,
   senderAccountId,
+  scheduledFor,
   subject,
   sql,
 }: {
@@ -556,6 +576,7 @@ async function prepareDatabaseRecords({
   candidate: Candidate;
   contactName: string;
   senderAccountId: string;
+  scheduledFor: string | null;
   subject: string;
   sql: SqlClient;
 }): Promise<
@@ -582,7 +603,8 @@ async function prepareDatabaseRecords({
           status,
           selected_contact_reason,
           campaign_notes,
-          future_notes
+          future_notes,
+          next_followup_at
         ) values (
           ${campaignId},
           ${company.id},
@@ -592,7 +614,13 @@ async function prepareDatabaseRecords({
           'approved_to_send',
           ${candidate.reason ?? "Contacto oficial validado para outreach Pastoral."},
           ${`Outreach Pastoral para ${pastoralZone.locality}, ${pastoralZone.commune}, Región de ${pastoralZone.region}.`},
-          ${candidate.source ? `Fuente: ${candidate.source}` : null}
+          ${[
+            candidate.source ? `Fuente: ${candidate.source}` : null,
+            scheduledFor ? `Preparado para envío manual el ${scheduledFor}.` : null,
+          ]
+            .filter(Boolean)
+            .join(" ") || null},
+          ${scheduledFor}
         )
         on conflict (campaign_id, company_id, contact_id) do update
         set
@@ -606,6 +634,7 @@ async function prepareDatabaseRecords({
           selected_contact_reason = excluded.selected_contact_reason,
           campaign_notes = concat_ws(E'\n', nullif(campaign_contacts.campaign_notes, ''), excluded.campaign_notes),
           future_notes = concat_ws(E'\n', nullif(campaign_contacts.future_notes, ''), excluded.future_notes),
+          next_followup_at = coalesce(excluded.next_followup_at, campaign_contacts.next_followup_at),
           updated_at = now()
       `;
 
@@ -635,7 +664,12 @@ async function prepareDatabaseRecords({
           ${subject},
           ${body},
           now(),
-          ${`Outreach Pastoral batch. Fuente: ${candidate.source ?? "investigacion manual/web"}.`}
+          ${[
+            `Outreach Pastoral batch. Fuente: ${candidate.source ?? "investigacion manual/web"}.`,
+            scheduledFor ? `Preparado para envío manual el ${scheduledFor}.` : null,
+          ]
+            .filter(Boolean)
+            .join(" ")}
         )
         returning id::text as id
       `;

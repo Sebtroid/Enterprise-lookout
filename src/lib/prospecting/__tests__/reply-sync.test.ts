@@ -10,6 +10,7 @@ import {
   matchInboundReplyToKnownContact,
   normalizeEmailSubject,
   prepareInboundReplyRecord,
+  shouldResolveReplySenderContact,
   resolveReplySyncScope,
   shouldSyncOutboundForReplies,
   shouldIngestReply,
@@ -120,6 +121,7 @@ describe("reply sync", () => {
       classification: "bounced",
       draftResponse: expect.stringContaining("No responder"),
     });
+    expect(shouldResolveReplySenderContact(bounceCandidate)).toBe(false);
   });
 
   it("prepares inbound reply records with explicit sender/campaign/contact ids", () => {

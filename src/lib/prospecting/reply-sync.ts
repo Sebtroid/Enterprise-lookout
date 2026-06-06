@@ -688,3 +688,7 @@ export function isBounceReply(candidate: GmailReplyCandidate) {
     body.includes("usuario desconocido")
   );
 }
+
+export function shouldResolveReplySenderContact(candidate: GmailReplyCandidate) {
+  return !isBounceReply(candidate);
+}

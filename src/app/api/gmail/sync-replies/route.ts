@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
+import { isAuthorizedAgentRequest } from "@/lib/agent/auth";
 import { sendAgentEvent } from "@/lib/agent/events";
 import { getAllowedUser } from "@/lib/auth/request";
 import { decryptToken, encryptToken } from "@/lib/gmail/token-crypto";
@@ -12,6 +13,7 @@ import {
   prepareInboundReplyRecord,
   REPLY_SYNC_OUTBOUND_STATUSES,
   resolveReplySyncScope,
+  shouldResolveReplySenderContact,
   shouldIngestReply,
   type GmailReplyCandidate,
   type GmailThreadReplyReviewState,
@@ -31,8 +33,9 @@ const syncBodySchema = z.object({
 export async function POST(req: NextRequest) {
   try {
     const user = await getAllowedUser({ allowDemoUser: true, request: req });
+    const agentAuthorized = isAuthorizedAgentRequest(req);
     const sql = getPostgresClient();
-    if (!user || !sql) {
+    if ((!user && !agentAuthorized) || !sql) {
       return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
     }
 
@@ -784,11 +787,13 @@ async function insertInboundReply({
   let resolvedMessage: SentMessageMatchInput = match.message;
 
   const result = await sql.begin(async (tx) => {
-    resolvedMessage = await resolveReplyContactForCandidate({
-      candidate,
-      sentMessage: match.message,
-      tx,
-    });
+    resolvedMessage = shouldResolveReplySenderContact(candidate)
+      ? await resolveReplyContactForCandidate({
+          candidate,
+          sentMessage: match.message,
+          tx,
+        })
+      : match.message;
     record = prepareInboundReplyRecord(candidate, resolvedMessage);
     const thread = await getOrCreateThread({ record, sentMessage: resolvedMessage, tx });
     const inserted = await tx`
@@ -815,7 +820,7 @@ async function insertInboundReply({
         ${record.contactId},
         ${record.senderId},
         'inbound_reply',
-        'needs_review',
+        ${record.classification === "bounced" ? "rejected" : "needs_review"},
         ${record.subject},
         ${record.body},
         ${record.draftResponse},
@@ -1108,7 +1113,7 @@ async function handleBouncedContact({
       confidence = least(confidence, 0.2),
       global_notes = concat_ws(E'\n', nullif(global_notes, ''), 'Rebotó email; buscar patrón alternativo.'),
       updated_at = now()
-    where id = ${record.contactId}
+    where id = ${sentMessage.contactId}
   `;
 
   await tx`
@@ -1123,7 +1128,7 @@ async function handleBouncedContact({
       updated_at = now()
     where campaign_id = ${record.campaignId}
       and company_id = ${record.companyId}
-      and (contact_id = ${record.contactId} or contact_id is null)
+      and (contact_id = ${sentMessage.contactId} or contact_id is null)
   `;
 
   await createAlternatePatternDraft({ record, sentMessage, tx });
@@ -1151,7 +1156,7 @@ async function createAlternatePatternDraft({
     from contacts ct
     join companies co on co.id = ct.company_id
     left join messages m on m.id = ${sentMessage.id}
-    where ct.id = ${record.contactId}
+    where ct.id = ${sentMessage.contactId}
     limit 1
   `;
   const current = rows[0];
