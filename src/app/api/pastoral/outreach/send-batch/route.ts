@@ -16,6 +16,7 @@ import {
   pastoralZone,
 } from "@/lib/pastoral/config";
 import { getPastoralBenefitAttachments } from "@/lib/pastoral/attachments";
+import { buildPastoralInitialOutreachBody } from "@/lib/pastoral/outreach-copy";
 import {
   fetchPastoralSheetContactsFromApi,
   getPastoralSheetsConfig,
@@ -1150,29 +1151,7 @@ function buildSubject() {
 }
 
 function buildInitialOutreachBody(candidate: Candidate) {
-  const companyReference =
-    candidate.reason?.trim() ||
-    `por su presencia en la zona centro-sur y potencial vínculo con comunidades como ${pastoralZone.locality}, ${pastoralZone.commune}`;
-
-  return [
-    `Estimado equipo de ${candidate.company}:`,
-    "",
-    "Junto con saludar, me presento. Mi nombre es Sebastián Witting y soy jefe de Finanzas de Trabajo País, proyecto de la Pastoral de la Pontificia Universidad Católica de Chile.",
-    "",
-    "Trabajo País es un voluntariado que desde 2006 convoca a jóvenes universitarios para trabajar junto a comunidades vulnerables de Chile, construyendo espacios de encuentro comunitario a partir de necesidades levantadas en terreno.",
-    "",
-    `Este invierno nuestra zona trabajará junto a la comunidad de ${pastoralZone.locality}, en ${pastoralZone.commune}, Región de ${pastoralZone.region}. Cada aporte permite financiar materiales, herramientas, transporte y recursos necesarios para ejecutar el trabajo directamente en terreno.`,
-    "",
-    `Les escribo porque creemos que ${candidate.company} podría ser un aliado valioso para esta comunidad, especialmente ${companyReference}. La colaboración puede ser mediante una donación, apoyo en materiales o algún aporte institucional.`,
-    "",
-    "Nos gustaría presentarles brevemente el proyecto y evaluar si existe una forma de colaboración que tenga sentido para ustedes. Contamos con información formal sobre beneficios tributarios, detallada en la carta adjunta.",
-    "",
-    "¿Podríamos coordinar una llamada breve esta semana o nos podrían derivar con la persona correcta?",
-    "",
-    "Saludos,",
-    "Sebastián Witting",
-    "Jefe de Finanzas - Trabajo País UC 2026",
-  ].join("\n");
+  return buildPastoralInitialOutreachBody(candidate);
 }
 
 function getCompanyDomain(candidate: Candidate) {
