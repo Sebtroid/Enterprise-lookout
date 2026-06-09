@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { buildPastoralInitialOutreachBody } from "@/lib/pastoral/outreach-copy";
+import {
+  buildPastoralInitialOutreachBody,
+  containsPastoralInternalMetadataLeak,
+} from "@/lib/pastoral/outreach-copy";
 
 describe("pastoral outreach copy", () => {
   it("does not leak internal research metadata into the email body", () => {
@@ -30,5 +33,18 @@ describe("pastoral outreach copy", () => {
     expect(foodBody).toContain("zona centro-sur");
     expect(foodBody).toContain("comunidad rural");
     expect(foodBody).toContain("Ninhue");
+  });
+
+  it("detects internal research metadata before Gmail send", () => {
+    expect(
+      containsPastoralInternalMetadataLeak(
+        "Contacto y cargo ejecutivo publicados en el mismo bloque de expositor del catálogo oficial EXPONOR 2024.",
+      ),
+    ).toBe(true);
+    expect(
+      containsPastoralInternalMetadataLeak(
+        "Por su experiencia industrial, creemos que podrían aportar de manera concreta al trabajo en terreno.",
+      ),
+    ).toBe(false);
   });
 });

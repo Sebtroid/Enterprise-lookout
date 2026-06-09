@@ -6,6 +6,10 @@ export type PastoralOutreachCopyCandidate = {
   region?: string;
 };
 
+export function containsPastoralInternalMetadataLeak(body: string) {
+  return PASTORAL_INTERNAL_METADATA_PATTERNS.some((pattern) => pattern.test(body));
+}
+
 export function buildPastoralInitialOutreachBody(
   candidate: PastoralOutreachCopyCandidate,
 ) {
@@ -91,3 +95,13 @@ function normalize(value: string | null | undefined) {
     .replace(/\p{Diacritic}/gu, "")
     .toLowerCase();
 }
+
+const PASTORAL_INTERNAL_METADATA_PATTERNS = [
+  /contacto y cargo ejecutivo/i,
+  /cat[aá]logo oficial/i,
+  /bloque de expositor/i,
+  /fuente:/i,
+  /publicados en el mismo bloque/i,
+  /contacto oficial de feria/i,
+  /pdf oficial/i,
+];

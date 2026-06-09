@@ -13,6 +13,7 @@ import {
 import { decryptToken, encryptToken } from "@/lib/gmail/token-crypto";
 import { PASTORAL_CAMPAIGN_SLUG } from "@/lib/pastoral/config";
 import { getPastoralBenefitAttachments } from "@/lib/pastoral/attachments";
+import { containsPastoralInternalMetadataLeak } from "@/lib/pastoral/outreach-copy";
 import {
   preparePastoralInitialSendGuard,
   type PastoralSendGuardMessage,
@@ -153,6 +154,20 @@ export async function POST(req: NextRequest) {
           { status: 409 },
         );
       }
+    }
+
+    if (
+      isPastoralInitialMail &&
+      containsPastoralInternalMetadataLeak(String(message.email_body))
+    ) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error:
+            "Bloqueado por calidad de copy Pastoral: el cuerpo contiene metadata interna de investigación.",
+        },
+        { status: 409 },
+      );
     }
 
     const tokenRows = await sql`
