@@ -16,4 +16,13 @@ describe("ContactsDirectory", () => {
     fireEvent.change(searchbox, { target: { value: "sin coincidencias" } });
     expect(screen.getByText("No encontramos contactos")).toBeVisible();
   });
+
+  it("keeps long contact emails available at narrow widths", () => {
+    const email = "a-very-long-unbroken-contact-address-that-must-wrap@enterprise-lookout.example.cl";
+    render(<ContactsDirectory contacts={[{ ...v2DemoSnapshot.contacts[0], email }]} />);
+
+    expect(screen.getByText(email)).toHaveClass("break-words");
+    expect(screen.getByText(email)).toHaveClass("[overflow-wrap:anywhere]");
+    expect(screen.getByText(email).closest("section")).not.toHaveClass("overflow-hidden");
+  });
 });

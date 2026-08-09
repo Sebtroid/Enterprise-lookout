@@ -14,4 +14,13 @@ describe("CompaniesDirectory", () => {
     expect(screen.getByText("La Preferida")).toBeVisible();
     expect(screen.queryByText("Soprole")).not.toBeInTheDocument();
   });
+
+  it("keeps long company fields available at narrow widths", () => {
+    const domain = "subdomain-with-a-very-long-unbroken-value.example.cl";
+    render(<CompaniesDirectory companies={[{ ...v2DemoSnapshot.companies[0], domain, nextAction: "Una siguiente acci\u00f3n muy larga que debe mantenerse disponible en pantallas angostas" }]} />);
+
+    expect(screen.getByText(domain)).toHaveClass("break-words");
+    expect(screen.getByText(domain)).toHaveClass("[overflow-wrap:anywhere]");
+    expect(screen.getByText(domain).closest("section")).not.toHaveClass("overflow-hidden");
+  });
 });
