@@ -131,6 +131,22 @@
   ::selection {
     background: color-mix(in oklch, var(--accent) 65%, transparent);
   }
+  .project-tab-strip {
+    scrollbar-color: var(--muted-foreground) var(--muted);
+    scrollbar-gutter: stable;
+    scrollbar-width: thin;
+  }
+  .project-tab-strip::-webkit-scrollbar {
+    height: 0.5rem;
+  }
+  .project-tab-strip::-webkit-scrollbar-thumb {
+    background: var(--muted-foreground);
+    border: 2px solid var(--muted);
+    border-radius: 999px;
+  }
+  .project-tab-strip::-webkit-scrollbar-track {
+    background: var(--muted);
+  }
   @media (prefers-reduced-motion: reduce) {
     *,
     ::before,

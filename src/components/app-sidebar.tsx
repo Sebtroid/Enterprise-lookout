@@ -21,7 +21,7 @@ export function AppSidebar() {
   return (
     <aside className="hidden min-h-screen w-64 shrink-0 border-r border-sidebar-border bg-sidebar px-4 py-5 lg:block">
       <div className="flex h-full flex-col">
-        <Link href="/today" className="flex items-center gap-3 rounded-lg px-2 py-1">
+        <Link href="/today" className="flex items-center gap-3 rounded-lg px-2 py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring">
           <div className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
             <Sparkles className="size-4" aria-hidden="true" />
           </div>
@@ -40,7 +40,7 @@ export function AppSidebar() {
                 href={href}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                  "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring",
                   active && "bg-sidebar-accent text-sidebar-accent-foreground ring-1 ring-sidebar-border",
                 )}
               >

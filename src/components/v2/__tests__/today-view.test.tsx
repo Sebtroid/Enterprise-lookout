@@ -22,4 +22,38 @@ describe("TodayView", () => {
 
     expect(screen.getByText("No hay pendientes en este filtro")).toBeVisible();
   });
+
+  it("keeps reserved attention scopes distinct from teammate names", () => {
+    const teammateAttention = {
+      ...v2DemoSnapshot.attention[0],
+      id: "reserved-mine-owner",
+      owner: "mine",
+      title: "Pendiente del compañero mine",
+    };
+    render(
+      <TodayView
+        snapshot={{
+          ...v2DemoSnapshot,
+          teammates: ["mine"],
+          attention: [...v2DemoSnapshot.attention, teammateAttention],
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "mine" }));
+
+    expect(screen.getByText("Pendiente del compañero mine")).toBeVisible();
+    expect(screen.queryByText("4 candidatos listos para aprobar")).not.toBeInTheDocument();
+  });
+
+  it("filters the built-in personal and shared scopes", () => {
+    render(<TodayView snapshot={v2DemoSnapshot} />);
+
+    expect(screen.getByText("4 candidatos listos para aprobar")).toBeVisible();
+    expect(screen.queryByText("Soprole respondió")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Compartidos" }));
+    expect(screen.getByText("3 primeros correos por revisar")).toBeVisible();
+    expect(screen.queryByText("Soprole respondió")).not.toBeInTheDocument();
+  });
 });

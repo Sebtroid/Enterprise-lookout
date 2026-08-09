@@ -11,6 +11,7 @@ import { buttonVariants } from "@/components/ui/button";
 import type { V2Project } from "@/lib/v2/types";
 
 const money = new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 });
+const teammateScopePrefix = "teammate:";
 
 export function ProjectsView({ projects, currentUser, teammates }: { projects: V2Project[]; currentUser: string; teammates: string[] }) {
   const [scope, setScope] = useState("all");
@@ -18,7 +19,7 @@ export function ProjectsView({ projects, currentUser, teammates }: { projects: V
     if (scope === "all") return true;
     if (scope === "mine") return project.ownerName === currentUser;
     if (scope === "shared") return project.accessMode === "shared";
-    return project.ownerName === scope;
+    return scope.startsWith(teammateScopePrefix) && project.ownerName === scope.slice(teammateScopePrefix.length);
   });
 
   return <div className="space-y-8">
@@ -30,7 +31,7 @@ export function ProjectsView({ projects, currentUser, teammates }: { projects: V
         { value: "all", label: "Todos" },
         { value: "mine", label: "Propios" },
         { value: "shared", label: "Compartidos" },
-        ...teammates.map((teammate) => ({ value: teammate, label: teammate })),
+        ...teammates.map((teammate) => ({ value: `${teammateScopePrefix}${teammate}`, label: teammate })),
       ]}
       onChange={setScope}
     />

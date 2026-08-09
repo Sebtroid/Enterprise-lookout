@@ -14,13 +14,14 @@ import type { V2AttentionItem, V2WorkspaceSnapshot } from "@/lib/v2/types";
 
 const itemIcons = { approval: MailCheck, reply: Inbox, research: FlaskConical, followup: Clock3, task: ListChecks };
 const kindLabels = { approval: "Aprobación", reply: "Respuesta", research: "Investigación", followup: "Follow-up", task: "Tarea" };
+const teammateScopePrefix = "teammate:";
 
 export function TodayView({ snapshot }: { snapshot: V2WorkspaceSnapshot }) {
   const [scope, setScope] = useState("mine");
   const attention = snapshot.attention.filter((item) => {
     if (scope === "mine") return item.owner === snapshot.currentUser;
     if (scope === "shared") return snapshot.projects.some((project) => project.name === item.project && project.accessMode === "shared");
-    return item.owner === scope;
+    return scope.startsWith(teammateScopePrefix) && item.owner === scope.slice(teammateScopePrefix.length);
   });
   const replyCount = attention.filter((item) => item.kind === "reply").length;
   const approvalCount = attention.filter((item) => item.kind === "approval").length;
@@ -59,7 +60,7 @@ export function TodayView({ snapshot }: { snapshot: V2WorkspaceSnapshot }) {
               options={[
                 { value: "mine", label: "Lo mío" },
                 { value: "shared", label: "Compartidos" },
-                ...snapshot.teammates.map((teammate) => ({ value: teammate, label: teammate })),
+                ...snapshot.teammates.map((teammate) => ({ value: `${teammateScopePrefix}${teammate}`, label: teammate })),
               ]}
               onChange={setScope}
             />
