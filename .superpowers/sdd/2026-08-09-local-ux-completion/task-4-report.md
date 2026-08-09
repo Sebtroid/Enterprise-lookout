@@ -144,3 +144,23 @@
 - Additive migration `20260809054000_draft_sender_assignment_rls.sql` replaces only the broad `project editors manage drafts` policy. It preserves project-editor access by creating equivalent INSERT, UPDATE, and DELETE policies; the existing SELECT policy is unchanged.
 - For INSERT and UPDATE, non-null `sender_identity_id` now requires an auth-UID-bound, fixed-search-path helper: identity and linked account must both be active and share the draft workspace, while the active current-user permission row must grant both draft and send. The helper is revoked from `public` and granted only to `authenticated`.
 - Null sender identities remain allowed for unassigned drafts. No Supabase credentials, remote deployment, service-role bypass, or unrelated application change was made; local validation remains the repository contract test because Supabase CLI and `psql` are unavailable.
+
+## Review round 6 — draft project/workspace RLS binding
+
+### RED
+
+- Added direct-RLS migration-contract regressions before the migration existed. All three failed: a cross-workspace project could be paired with a null sender, the same pairing could be combined with an assigned sender, and the UPDATE policy lacked a project/workspace condition in both `USING` and `WITH CHECK`.
+
+### GREEN
+
+- Focused route and migration-contract command: `C:\\Users\\user\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\node\\bin\\node.exe .\\node_modules\\vitest\\vitest.mjs run src/lib/v2/__tests__/schema-contract.test.ts src/app/api/v2/mail/drafts/[draftId]/__tests__/route.test.ts`
+- Result: 2 files passed, 14 tests passed.
+- Full relevant Vitest command: `C:\\Users\\user\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\node\\bin\\node.exe .\\node_modules\\vitest\\vitest.mjs run`
+- Result: 49 files passed, 188 tests passed.
+- Targeted ESLint and `git diff --check` completed without diagnostics or whitespace errors.
+
+### Authorization and migration self-review
+
+- Additive migration `20260809055000_draft_workspace_scope_rls.sql` replaces only the current draft INSERT/UPDATE policies. Both now require `projects.id = mail_drafts.project_id` and `projects.workspace_id = mail_drafts.workspace_id` as well as existing project write access.
+- UPDATE uses the same relation in `USING` for the existing row and in `WITH CHECK` for the proposed row. Thus a caller cannot change `workspace_id` (or pair a new project/workspace combination) unless the final project and workspace match.
+- The optional sender condition remains nested after the project/workspace proof: valid unassigned drafts remain supported, but a non-null sender still requires the prior active same-workspace draft-and-send authorization helper. No remote deployment, credentials, or unrelated changes were used.
