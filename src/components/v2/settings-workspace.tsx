@@ -129,7 +129,7 @@ export function SettingsWorkspace({ settings, budget, isDemo }: SettingsWorkspac
             <label htmlFor="minimax-monthly-budget" className="text-sm font-medium">Presupuesto mensual de MiniMax en USD</label>
             <Input id="minimax-monthly-budget" name="minimaxMonthlyBudget" type="number" min="0" step="0.01" value={budgetLimit} onChange={(event) => setBudgetLimit(event.target.value)} />
           </div>
-          <Progress value={percentage} aria-label="Uso del presupuesto mensual de MiniMax" />
+          <Progress value={percentage} aria-label="Uso del presupuesto mensual de MiniMax" aria-valuetext={`${Math.round(percentage)}%`} />
           <p className="text-sm text-muted-foreground">
             USD {budget.spentUsd.toFixed(2)} usados de USD {budget.limitUsd.toFixed(2)}. Se avisa al 80% y se detienen nuevos trabajos al 100%.
           </p>

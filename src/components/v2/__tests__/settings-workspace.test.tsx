@@ -31,6 +31,7 @@ describe("SettingsWorkspace", () => {
     expect(screen.getByRole("heading", { name: "Integraciones" })).toBeVisible();
     expect(screen.getByRole("heading", { name: "Caja fuerte" })).toBeVisible();
     expect(screen.getByLabelText("Presupuesto mensual de MiniMax en USD")).toHaveValue(5);
+    expect(screen.getByRole("progressbar", { name: "Uso del presupuesto mensual de MiniMax" })).toHaveAttribute("aria-valuetext", "36%");
   });
 
   it("does not pretend to persist settings in demo mode", () => {
