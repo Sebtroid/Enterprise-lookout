@@ -8,6 +8,8 @@ import type {
   V2Contact,
   V2InboxThread,
   V2Project,
+  V2SettingsResult,
+  V2SettingsSnapshot,
   V2WorkspaceSnapshot,
 } from "@/lib/v2/types";
 
@@ -300,24 +302,38 @@ export async function getV2WorkspaceSnapshot(): Promise<V2WorkspaceSnapshot> {
   }
 }
 
-export type V2SettingsSnapshot = {
-  team: Array<{ id: string; name: string; role: string; status: string }>;
-  gmailAccounts: Array<{ id: string; email: string; status: string; permissions: string[] }>;
+const demoSettingsSnapshot: V2SettingsSnapshot = {
+  team: [
+    { id: "demo-user", name: "Sebastián", role: "Propietario", status: "Activo" },
+    { id: "demo-teammate", name: "José Miguel", role: "Miembro", status: "Activo" },
+  ],
+  mailProviders: [
+    { id: "gmail", name: "Gmail", state: "not_configured", accounts: [] },
+    { id: "microsoft", name: "Microsoft 365", state: "action_required", accounts: [] },
+  ],
+  integrations: [
+    { id: "minimax", name: "MiniMax", detail: "Investigación y redacción asistida", state: "not_configured" },
+    { id: "hunter", name: "Hunter", detail: "Búsqueda y verificación de contactos", state: "not_configured" },
+  ],
+  vault: [
+    { id: "supabase-database", name: "Contraseña de base de datos Supabase", state: "unavailable", canReveal: false, canReplace: true },
+    { id: "gmail-oauth", name: "Secreto OAuth de Gmail", state: "not_configured", canReveal: false, canReplace: true },
+    { id: "microsoft-oauth", name: "Secreto OAuth de Microsoft", state: "not_configured", canReveal: false, canReplace: true },
+    { id: "minimax-api", name: "Clave API de MiniMax", state: "not_configured", canReveal: false, canReplace: true },
+    { id: "hunter-api", name: "Clave API de Hunter", state: "not_configured", canReveal: false, canReplace: true },
+  ],
 };
 
-export async function getV2SettingsSnapshot(): Promise<V2SettingsSnapshot> {
+export async function getV2SettingsSnapshot(): Promise<V2SettingsResult> {
   const demoEnabled = isDemoAccessEnabled({ appMode: process.env.NEXT_PUBLIC_APP_MODE, nodeEnv: process.env.NODE_ENV });
   const supabase = await getSupabaseServerClient();
   if (!supabase) {
-    if (demoEnabled) return {
-      team: [{ id: "demo-user", name: "Sebastián", role: "Propietario", status: "Activo" }, { id: "demo-teammate", name: "José Miguel", role: "Miembro", status: "Activo" }],
-      gmailAccounts: [],
-    };
+    if (demoEnabled) return { ...demoSettingsSnapshot, isDemo: true };
     throw new Error("Supabase no está configurado");
   }
   const { data: auth } = await supabase.auth.getUser();
   if (!auth.user) throw new Error("Se requiere una sesión válida");
-  const { data: membership } = await supabase.from("workspace_members").select("workspace_id").eq("user_id", auth.user.id).eq("status", "active").limit(1).maybeSingle();
+  const { data: membership } = await supabase.from("workspace_members").select("workspace_id,role").eq("user_id", auth.user.id).eq("status", "active").limit(1).maybeSingle();
   if (!membership) throw new Error("El usuario no pertenece a un workspace");
   const [teamResult, accountsResult, permissionsResult] = await Promise.all([
     supabase.from("workspace_members").select("user_id,role,status,profiles(display_name)").eq("workspace_id", membership.workspace_id),
@@ -326,20 +342,54 @@ export async function getV2SettingsSnapshot(): Promise<V2SettingsSnapshot> {
   ]);
   const error = teamResult.error ?? accountsResult.error ?? permissionsResult.error;
   if (error) {
-    if (demoEnabled) return { team: [], gmailAccounts: [] };
+    if (demoEnabled) return { ...demoSettingsSnapshot, isDemo: true };
     throw new Error(error.message);
   }
+  const isOwner = membership.role === "owner";
   const permissionMap = new Map(((permissionsResult.data ?? []) as Row[]).map((row) => [text(row.gmail_account_id), row]));
+  const gmailAccounts = ((accountsResult.data ?? []) as Row[]).map((row) => {
+    const permission = permissionMap.get(text(row.id));
+    const permissions = permission ? [permission.can_read && "leer", permission.can_draft && "redactar", permission.can_send && "enviar", permission.can_manage && "administrar"].filter(Boolean) as string[] : [];
+    return {
+      id: text(row.id),
+      email: text(row.email),
+      state: row.active && row.sync_status !== "disconnected" ? "connected" as const : "action_required" as const,
+      permissions,
+    };
+  });
+  const gmailState = gmailAccounts.some((account) => account.state === "connected")
+    ? "connected" as const
+    : process.env.GMAIL_CLIENT_ID && process.env.GMAIL_CLIENT_SECRET ? "action_required" as const : "not_configured" as const;
+  const minimaxState = process.env.MINIMAX_API_KEY && process.env.MINIMAX_MODEL ? "connected" as const : "not_configured" as const;
+  const hunterState = process.env.HUNTER_API_KEY ? "connected" as const : "not_configured" as const;
+  const vaultSecret = (id: string, name: string, configured: boolean, unavailable = false) => ({
+    id,
+    name,
+    state: unavailable ? "unavailable" as const : configured ? "connected" as const : "not_configured" as const,
+    canReveal: isOwner && configured && !unavailable,
+    canReplace: isOwner,
+  });
   return {
+    isDemo: false,
     team: ((teamResult.data ?? []) as Row[]).map((row) => ({
       id: text(row.user_id), name: text(relation(row.profiles)?.display_name, "Usuario"),
       role: row.role === "owner" ? "Propietario" : "Miembro", status: row.status === "active" ? "Activo" : "Invitado",
     })),
-    gmailAccounts: ((accountsResult.data ?? []) as Row[]).map((row) => {
-      const permission = permissionMap.get(text(row.id));
-      const permissions = permission ? [permission.can_read && "leer", permission.can_draft && "redactar", permission.can_send && "enviar", permission.can_manage && "administrar"].filter(Boolean) as string[] : [];
-      return { id: text(row.id), email: text(row.email), status: row.active && row.sync_status !== "disconnected" ? "Conectada" : "Desconectada", permissions };
-    }),
+    mailProviders: [
+      { id: "gmail", name: "Gmail", state: gmailState, accounts: gmailAccounts },
+      { id: "microsoft", name: "Microsoft 365", state: "unavailable", accounts: [] },
+    ],
+    integrations: [
+      { id: "minimax", name: "MiniMax", detail: "Investigación y redacción asistida", state: minimaxState },
+      { id: "hunter", name: "Hunter", detail: "Búsqueda y verificación de contactos", state: hunterState },
+    ],
+    vault: [
+      vaultSecret("supabase-database", "Contraseña de base de datos Supabase", Boolean(process.env.SUPABASE_DB_PASSWORD), !process.env.SUPABASE_DB_PASSWORD),
+      vaultSecret("gmail-oauth", "Secreto OAuth de Gmail", Boolean(process.env.GMAIL_CLIENT_SECRET)),
+      vaultSecret("microsoft-oauth", "Secreto OAuth de Microsoft", Boolean(process.env.MICROSOFT_CLIENT_SECRET)),
+      vaultSecret("minimax-api", "Clave API de MiniMax", Boolean(process.env.MINIMAX_API_KEY)),
+      vaultSecret("hunter-api", "Clave API de Hunter", Boolean(process.env.HUNTER_API_KEY)),
+    ],
   };
 }
 

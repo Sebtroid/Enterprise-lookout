@@ -89,3 +89,42 @@ export type V2WorkspaceSnapshot = {
   attention: V2AttentionItem[];
   aiBudget: { spentUsd: number; limitUsd: number };
 };
+
+export type V2ProviderState = "connected" | "not_configured" | "action_required" | "unavailable";
+
+export type V2SettingsSnapshot = {
+  team: Array<{
+    id: string;
+    name: string;
+    role: string;
+    status: string;
+  }>;
+  mailProviders: Array<{
+    id: "gmail" | "microsoft";
+    name: string;
+    state: V2ProviderState;
+    accounts: Array<{
+      id: string;
+      email: string;
+      state: V2ProviderState;
+      permissions: string[];
+    }>;
+  }>;
+  integrations: Array<{
+    id: "minimax" | "hunter";
+    name: string;
+    detail: string;
+    state: V2ProviderState;
+  }>;
+  vault: Array<{
+    id: string;
+    name: string;
+    state: V2ProviderState;
+    canReveal: boolean;
+    canReplace: boolean;
+  }>;
+};
+
+export type V2SettingsResult = V2SettingsSnapshot & {
+  isDemo: boolean;
+};
