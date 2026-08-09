@@ -90,6 +90,28 @@ describe("MailWorkspace", () => {
     expect(screen.getByRole("status")).toHaveTextContent("No se pudo cambiar el remitente.");
   });
 
+  it("lets a persisted unassigned draft choose from explicit eligible senders", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ id: "draft-pf", status: "needs_review" }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const thread = {
+      ...v2DemoSnapshot.threads[1],
+      draftId: "draft-pf",
+      eligibleSenders: [
+        { senderIdentityId: "11111111-1111-4111-8111-111111111111", email: "colaboraciones@uc.cl", provider: "gmail" as const },
+        { senderIdentityId: "22222222-2222-4222-8222-222222222222", email: "alianzas@uc.cl", provider: "gmail" as const },
+      ],
+    };
+
+    render(<MailWorkspace threads={[thread]} />);
+
+    const sender = screen.getByRole("combobox", { name: "Remitente" });
+    expect(sender).toHaveValue("");
+    fireEvent.change(sender, { target: { value: "22222222-2222-4222-8222-222222222222" } });
+
+    await screen.findByRole("button", { name: "Aprobar borrador" });
+    expect(sender).toHaveValue("22222222-2222-4222-8222-222222222222");
+  });
+
   it("keeps the active thread unchanged while an approval request is pending", async () => {
     let resolveSave: (response: Response) => void;
     const savePending = new Promise<Response>((resolve) => { resolveSave = resolve; });

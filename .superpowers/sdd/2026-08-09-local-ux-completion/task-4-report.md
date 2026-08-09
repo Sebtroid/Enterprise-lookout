@@ -81,3 +81,24 @@
 - The existing authenticated PATCH route now validates and writes `sender_identity_id`, resets approval fields, and returns the sanitized `sender_not_authorized` response for both database errors and RLS-filtered zero-row updates.
 - Server eligibility is limited to active Gmail identities whose account is active and either belongs to the current user or grants that user both draft and send permission. The existing RLS `WITH CHECK` remains the final authorization enforcement for draft mutation; no schema migration or client-side persistence was introduced.
 - Demo/no-`draftId` and single-identity cases remain read-only, preserving the earlier no-fake-send guarantee and busy-state navigation lock.
+
+## Review round 3 — explicit PATCH authorization and unassigned persisted drafts
+
+### RED
+
+- Added API regressions before the route change. The prior PATCH accepted cross-workspace identities, inactive accounts, and accounts with draft-only permission, returning HTTP 200 in all three cases; its final update lacked a `workspace_id` predicate.
+- Added the persisted unassigned-draft component regression before the UI change. A draft with two explicit eligible identities and no current `senderIdentityId` rendered no `Remitente` control.
+
+### GREEN
+
+- Focused component and API command: `C:\\Users\\user\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\node\\bin\\node.exe .\\node_modules\\vitest\\vitest.mjs run src/components/v2/__tests__/mail-workspace.test.tsx src/app/api/v2/mail/drafts/[draftId]/__tests__/route.test.ts`
+- Result: 2 files passed, 14 tests passed.
+- Full relevant Vitest command: `C:\\Users\\user\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\node\\bin\\node.exe .\\node_modules\\vitest\\vitest.mjs run`
+- Result: 49 files passed, 182 tests passed.
+- Targeted ESLint for the component, API route, repository adapter, and their tests completed without diagnostics. `git diff --check` completed without whitespace errors.
+
+### Authorization and self-review
+
+- The user-scoped server client first reads the target draft and workspace, then verifies the selected identity belongs to that same workspace, the identity and Gmail account are active, and the current user has an active `gmail_account_permissions` row granting both `can_draft` and `can_send`. Every failure returns only `sender_not_authorized`; no service-role or admin bypass is used.
+- The final draft mutation remains under RLS and is constrained by both the draft ID and resolved workspace ID.
+- A persisted draft with no sender identity now renders a controlled empty `Selecciona un remitente` placeholder when it has two or more explicit eligible senders. The selected sender and approval/sent state change only after the PATCH succeeds; demo drafts remain read-only.

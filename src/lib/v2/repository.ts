@@ -125,8 +125,7 @@ async function loadLiveSnapshot(
   const eligibleSenders = senderIdentityRows.flatMap((identity) => {
     const account = relation(identity.gmail_accounts);
     const permission = permissionsByAccount.get(text(identity.gmail_account_id));
-    const isOwner = text(account?.owner_user_id) === user.id;
-    if (!account || account.active !== true || !text(account.email) || (!isOwner && !(permission?.can_draft && permission.can_send))) return [];
+    if (!account || account.active !== true || !text(account.email) || !(permission?.can_draft && permission.can_send)) return [];
     return [{ senderIdentityId: text(identity.id), email: text(account.email), provider: "gmail" as const }];
   });
 
