@@ -138,6 +138,7 @@ export const v2DemoSnapshot: V2WorkspaceSnapshot = {
     {
       id: "thread-soprole",
       account: "sebastian@uc.cl",
+      provider: "microsoft",
       company: "Soprole",
       contact: "Martín Silva",
       subject: "Colaboración Pastoral Invierno 2026",
@@ -168,7 +169,8 @@ export const v2DemoSnapshot: V2WorkspaceSnapshot = {
     },
     {
       id: "thread-pf",
-      account: "sebastian@uc.cl",
+      account: "colaboraciones@uc.cl",
+      provider: "gmail",
       company: "PF Alimentos",
       contact: "Carolina Muñoz",
       subject: "Asado universitario · 18 de septiembre",
@@ -179,6 +181,7 @@ export const v2DemoSnapshot: V2WorkspaceSnapshot = {
       messages: [],
       advice: ["El contacto está verificado, pero todavía no ha respondido."],
       suggestedReply: "Hola Carolina, soy Sebastián y estoy organizando un asado universitario para el 18 de septiembre. Esperamos cerca de 100 estudiantes y estamos buscando una marca de alimentos que quiera participar con productos. A cambio podemos ofrecer presencia visible durante la actividad y difusión en nuestros canales. ¿Te parece si te envío una propuesta breve con cantidades y alternativas de colaboración?",
+      draftStatus: "draft",
     },
   ],
   attention: [

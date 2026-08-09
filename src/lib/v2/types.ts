@@ -44,6 +44,7 @@ export type V2Contact = {
 export type V2InboxThread = {
   id: string;
   account: string;
+  provider: "gmail" | "microsoft";
   company: string;
   contact: string;
   subject: string;

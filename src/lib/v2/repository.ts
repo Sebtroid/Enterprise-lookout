@@ -187,7 +187,7 @@ async function loadLiveSnapshot(
       };
     });
     return {
-      id: text(row.id), account, company, contact,
+      id: text(row.id), account, provider: "gmail", company, contact,
       subject: text(row.subject, "Sin asunto"),
       snippet: text(row.snippet),
       receivedAt: dateLabel(row.last_message_at),
@@ -208,6 +208,7 @@ async function loadLiveSnapshot(
     threads.push({
       id: `draft-${text(draft.id)}`,
       account: text(gmail?.email, text(identity?.display_name, "Remitente por seleccionar")),
+      provider: "gmail",
       company: text(relation(draft.companies)?.canonical_name, "Sin empresa vinculada"),
       contact: text(relation(draft.contacts)?.full_name, text(draft.to_email, "Contacto por identificar")),
       subject: text(draft.subject, "Sin asunto"), snippet: text(draft.body).slice(0, 160), receivedAt: dateLabel(draft.created_at), unread: false,
