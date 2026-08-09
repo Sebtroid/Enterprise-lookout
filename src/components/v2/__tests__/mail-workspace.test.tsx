@@ -47,6 +47,49 @@ describe("MailWorkspace", () => {
     expect(screen.queryByRole("combobox", { name: "Remitente" })).not.toBeInTheDocument();
   });
 
+  it("persists an explicitly eligible sender selection and resets approval", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ id: "draft-pf", status: "needs_review" }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const thread = {
+      ...v2DemoSnapshot.threads[1],
+      draftId: "draft-pf",
+      draftStatus: "approved" as const,
+      senderIdentityId: "11111111-1111-4111-8111-111111111111",
+      eligibleSenders: [
+        { senderIdentityId: "11111111-1111-4111-8111-111111111111", email: "colaboraciones@uc.cl", provider: "gmail" as const },
+        { senderIdentityId: "22222222-2222-4222-8222-222222222222", email: "alianzas@uc.cl", provider: "gmail" as const },
+      ],
+    };
+
+    render(<MailWorkspace threads={[thread]} />);
+    fireEvent.change(screen.getByRole("combobox", { name: "Remitente" }), { target: { value: "22222222-2222-4222-8222-222222222222" } });
+
+    await screen.findByRole("button", { name: "Aprobar borrador" });
+    expect(fetchMock).toHaveBeenCalledWith("/api/v2/mail/drafts/draft-pf", expect.objectContaining({ method: "PATCH", body: JSON.stringify({ senderIdentityId: "22222222-2222-4222-8222-222222222222" }) }));
+    expect(screen.getByRole("combobox", { name: "Remitente" })).toHaveValue("22222222-2222-4222-8222-222222222222");
+  });
+
+  it("keeps the previous sender when an authorized selection fails", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: "sender_not_authorized" }), { status: 403 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const thread = {
+      ...v2DemoSnapshot.threads[1],
+      draftId: "draft-pf",
+      senderIdentityId: "11111111-1111-4111-8111-111111111111",
+      eligibleSenders: [
+        { senderIdentityId: "11111111-1111-4111-8111-111111111111", email: "colaboraciones@uc.cl", provider: "gmail" as const },
+        { senderIdentityId: "22222222-2222-4222-8222-222222222222", email: "alianzas@uc.cl", provider: "gmail" as const },
+      ],
+    };
+
+    render(<MailWorkspace threads={[thread]} />);
+    fireEvent.change(screen.getByRole("combobox", { name: "Remitente" }), { target: { value: "22222222-2222-4222-8222-222222222222" } });
+
+    await screen.findByRole("status");
+    expect(screen.getByRole("combobox", { name: "Remitente" })).toHaveValue("11111111-1111-4111-8111-111111111111");
+    expect(screen.getByRole("status")).toHaveTextContent("No se pudo cambiar el remitente.");
+  });
+
   it("keeps the active thread unchanged while an approval request is pending", async () => {
     let resolveSave: (response: Response) => void;
     const savePending = new Promise<Response>((resolve) => { resolveSave = resolve; });

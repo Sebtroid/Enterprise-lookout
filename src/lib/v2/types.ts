@@ -41,6 +41,12 @@ export type V2Contact = {
   lastInteraction: string;
 };
 
+export type V2EligibleSender = {
+  senderIdentityId: string;
+  email: string;
+  provider: "gmail" | "microsoft";
+};
+
 export type V2InboxThread = {
   id: string;
   account: string;
@@ -56,6 +62,8 @@ export type V2InboxThread = {
   advice: string[];
   suggestedReply: string;
   draftId?: string;
+  senderIdentityId?: string;
+  eligibleSenders?: V2EligibleSender[];
   draftStatus?: "draft" | "needs_review" | "approved" | "sending" | "sent" | "failed";
 };
 

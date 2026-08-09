@@ -3,7 +3,11 @@ import { z } from "zod";
 import { getAllowedUser } from "@/lib/auth/request";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 
-const schema = z.object({ subject: z.string().max(998).optional(), body: z.string().min(1).max(100_000) });
+const schema = z.object({
+  subject: z.string().max(998).optional(),
+  body: z.string().min(1).max(100_000).optional(),
+  senderIdentityId: z.string().uuid().optional(),
+}).refine((value) => value.subject !== undefined || value.body !== undefined || value.senderIdentityId !== undefined);
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ draftId: string }> }) {
   const user = await getAllowedUser();
@@ -13,8 +17,18 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ dr
   const supabase = await getSupabaseServerClient();
   if (!supabase) return Response.json({ error: "auth_unavailable" }, { status: 503 });
   const { draftId } = await params;
-  const { data, error } = await supabase.from("mail_drafts").update({ ...parsed.data, status: "needs_review", approved_by: null, approved_at: null, send_error: null, updated_at: new Date().toISOString() }).eq("id", draftId).in("status", ["draft", "needs_review", "approved", "failed"]).select("id,status").maybeSingle();
-  if (error) return Response.json({ error: error.message }, { status: 403 });
-  if (!data) return Response.json({ error: "draft_not_editable" }, { status: 409 });
+  const updates = {
+    ...(parsed.data.subject !== undefined ? { subject: parsed.data.subject } : {}),
+    ...(parsed.data.body !== undefined ? { body: parsed.data.body } : {}),
+    ...(parsed.data.senderIdentityId !== undefined ? { sender_identity_id: parsed.data.senderIdentityId } : {}),
+    status: "needs_review",
+    approved_by: null,
+    approved_at: null,
+    send_error: null,
+    updated_at: new Date().toISOString(),
+  };
+  const { data, error } = await supabase.from("mail_drafts").update(updates).eq("id", draftId).in("status", ["draft", "needs_review", "approved", "failed"]).select("id,status,sender_identity_id").maybeSingle();
+  if (error) return Response.json({ error: parsed.data.senderIdentityId ? "sender_not_authorized" : "draft_update_failed" }, { status: 403 });
+  if (!data) return Response.json({ error: parsed.data.senderIdentityId ? "sender_not_authorized" : "draft_not_editable" }, { status: parsed.data.senderIdentityId ? 403 : 409 });
   return Response.json(data);
 }

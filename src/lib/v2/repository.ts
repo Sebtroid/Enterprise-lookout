@@ -82,6 +82,8 @@ async function loadLiveSnapshot(
     messagesResult,
     threadsResult,
     draftsResult,
+    senderIdentitiesResult,
+    senderPermissionsResult,
     tasksResult,
     jobsResult,
     usageResult,
@@ -95,13 +97,15 @@ async function loadLiveSnapshot(
     supabase.from("contributions").select("project_id,kind,status,committed_value,received_value").eq("workspace_id", workspaceId),
     supabase.from("mail_messages").select("thread_id,sender,body_text,snippet,sent_at,received_at").eq("workspace_id", workspaceId).eq("is_crm_linked", true).order("created_at", { ascending: true }),
     supabase.from("mail_threads").select("id,subject,snippet,last_message_at,labels,gmail_accounts(email),projects(name),companies(canonical_name),contacts(full_name)").eq("workspace_id", workspaceId).order("last_message_at", { ascending: false }).limit(100),
-    supabase.from("mail_drafts").select("id,thread_id,kind,subject,body,status,to_email,created_at,sender_identities(display_name,gmail_accounts(email)),projects(name),companies(canonical_name),contacts(full_name)").eq("workspace_id", workspaceId).in("status", ["draft", "needs_review", "approved", "failed"]).order("updated_at", { ascending: false }).limit(100),
+    supabase.from("mail_drafts").select("id,thread_id,kind,subject,body,status,to_email,created_at,sender_identity_id,sender_identities(id,gmail_account_id,display_name,gmail_accounts(email)),projects(name),companies(canonical_name),contacts(full_name)").eq("workspace_id", workspaceId).in("status", ["draft", "needs_review", "approved", "failed"]).order("updated_at", { ascending: false }).limit(100),
+    supabase.from("sender_identities").select("id,gmail_account_id,gmail_accounts(email,owner_user_id,active)").eq("workspace_id", workspaceId).eq("active", true),
+    supabase.from("gmail_account_permissions").select("gmail_account_id,can_draft,can_send").eq("user_id", user.id).eq("active", true),
     supabase.from("project_tasks").select("id,project_id,title,due_at,source,assigned_to,projects(name),profiles!project_tasks_assigned_to_fkey(display_name)").eq("workspace_id", workspaceId).in("status", ["pending", "in_progress"]).order("due_at", { ascending: true }).limit(30),
     supabase.from("ai_jobs").select("id,job_type,status,approved_by,projects(name)").eq("workspace_id", workspaceId).in("status", ["approved", "completed", "reviewing", "failed"]).order("updated_at", { ascending: false }).limit(30),
     supabase.from("ai_usage_ledger").select("cost_usd").eq("workspace_id", workspaceId).gte("created_at", new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()),
   ]);
 
-  const results = [profilesResult, projectsResult, companiesResult, contactsResult, projectCompaniesResult, goalsResult, contributionsResult, messagesResult, threadsResult, draftsResult, tasksResult, jobsResult, usageResult];
+  const results = [profilesResult, projectsResult, companiesResult, contactsResult, projectCompaniesResult, goalsResult, contributionsResult, messagesResult, threadsResult, draftsResult, senderIdentitiesResult, senderPermissionsResult, tasksResult, jobsResult, usageResult];
   const failed = results.find((result) => result.error);
   if (failed?.error) throw new Error(`No se pudo cargar Enterprise Lookout V2: ${failed.error.message}`);
 
@@ -114,6 +118,17 @@ async function loadLiveSnapshot(
   const contributionRows = (contributionsResult.data ?? []) as Row[];
   const messageRows = (messagesResult.data ?? []) as Row[];
   const draftRows = (draftsResult.data ?? []) as Row[];
+  const senderIdentityRows = (senderIdentitiesResult.data ?? []) as Row[];
+  const senderPermissionRows = (senderPermissionsResult.data ?? []) as Row[];
+
+  const permissionsByAccount = new Map(senderPermissionRows.map((row) => [text(row.gmail_account_id), row]));
+  const eligibleSenders = senderIdentityRows.flatMap((identity) => {
+    const account = relation(identity.gmail_accounts);
+    const permission = permissionsByAccount.get(text(identity.gmail_account_id));
+    const isOwner = text(account?.owner_user_id) === user.id;
+    if (!account || account.active !== true || !text(account.email) || (!isOwner && !(permission?.can_draft && permission.can_send))) return [];
+    return [{ senderIdentityId: text(identity.id), email: text(account.email), provider: "gmail" as const }];
+  });
 
   const contactsById = new Map(contactRows.map((row) => [text(row.id), row]));
   const companiesById = new Map(companyRows.map((row) => [text(row.id), row]));
@@ -197,6 +212,8 @@ async function loadLiveSnapshot(
       advice: ["Revisa el contexto del proyecto y confirma los datos antes de responder."],
       suggestedReply: text(draft?.body),
       draftId: draft ? text(draft.id) : undefined,
+      senderIdentityId: draft ? text(draft.sender_identity_id) : undefined,
+      eligibleSenders: draft ? eligibleSenders : undefined,
       draftStatus: draft ? text(draft.status) as V2InboxThread["draftStatus"] : undefined,
     };
   });
@@ -214,7 +231,7 @@ async function loadLiveSnapshot(
       subject: text(draft.subject, "Sin asunto"), snippet: text(draft.body).slice(0, 160), receivedAt: dateLabel(draft.created_at), unread: false,
       project: text(relation(draft.projects)?.name, "Sin proyecto"), messages: [],
       advice: [draft.kind === "first_contact" ? "Primer correo: requiere aprobación explícita antes del envío." : "Revisa el contexto antes de aprobar."],
-      suggestedReply: text(draft.body), draftId: text(draft.id), draftStatus: text(draft.status) as V2InboxThread["draftStatus"],
+      suggestedReply: text(draft.body), draftId: text(draft.id), senderIdentityId: text(draft.sender_identity_id), eligibleSenders, draftStatus: text(draft.status) as V2InboxThread["draftStatus"],
     });
   }
 
