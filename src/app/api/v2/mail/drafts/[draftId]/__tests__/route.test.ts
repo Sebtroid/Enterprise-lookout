@@ -27,7 +27,7 @@ function query(result: { data: unknown; error?: unknown }) {
 
 function routeClient({
   draft = { id: "draft-id", workspace_id: "workspace-a" },
-  identity = { id: senderIdentityId, workspace_id: "workspace-a", gmail_account_id: "account-id", active: true, gmail_accounts: { id: "account-id", active: true } },
+  identity = { id: senderIdentityId, workspace_id: "workspace-a", gmail_account_id: "account-id", active: true, gmail_accounts: { id: "account-id", workspace_id: "workspace-a", active: true } },
   permission = { gmail_account_id: "account-id", can_draft: true, can_send: true },
   update = { id: "draft-id", status: "needs_review", sender_identity_id: senderIdentityId },
 }: {
@@ -77,6 +77,17 @@ describe("PATCH /api/v2/mail/drafts/[draftId]", () => {
 
   it("rejects a sender identity from another workspace", async () => {
     const { client, updateDraft } = routeClient({ identity: { id: senderIdentityId, workspace_id: "workspace-b", gmail_account_id: "account-id", active: true, gmail_accounts: { id: "account-id", active: true } } });
+    getSupabaseServerClient.mockResolvedValue(client);
+
+    const response = await patchSender();
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({ error: "sender_not_authorized" });
+    expect(updateDraft).not.toHaveBeenCalled();
+  });
+
+  it("rejects a same-workspace identity linked to an account in another workspace", async () => {
+    const { client, updateDraft } = routeClient({ identity: { id: senderIdentityId, workspace_id: "workspace-a", gmail_account_id: "account-id", active: true, gmail_accounts: { id: "account-id", workspace_id: "workspace-b", active: true } } });
     getSupabaseServerClient.mockResolvedValue(client);
 
     const response = await patchSender();

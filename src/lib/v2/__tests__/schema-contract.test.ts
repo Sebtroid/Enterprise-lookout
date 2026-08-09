@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -16,6 +16,10 @@ const hardening = readFileSync(
   join(process.cwd(), "supabase", "migrations", "20260809052000_rls_hardening.sql"),
   "utf8",
 ).toLowerCase();
+const senderIdentityScopePath = join(process.cwd(), "supabase", "migrations", "20260809053000_sender_identity_account_scope.sql");
+const senderIdentityScope = existsSync(senderIdentityScopePath)
+  ? readFileSync(senderIdentityScopePath, "utf8").toLowerCase()
+  : "";
 
 describe("Enterprise Lookout V2 schema", () => {
   it("defines the workspace, project, evidence, mail, AI and finance domains", () => {
@@ -57,5 +61,15 @@ describe("Enterprise Lookout V2 schema", () => {
     expect(hardening).toContain("revoke insert, update, delete on public.activity_events");
     expect(hardening).toContain("revoke update, delete on public.evidence_sources, public.fact_revisions");
     expect(hardening).toContain("owners create invitations");
+  });
+
+  it("keeps sender identities bound to active managed Gmail accounts in their workspace", () => {
+    expect(senderIdentityScope).toContain("create or replace function app_private.can_link_sender_identity");
+    expect(senderIdentityScope).toContain("account.workspace_id = target_workspace_id");
+    expect(senderIdentityScope).toContain("and account.active");
+    expect(senderIdentityScope).toContain("app_private.can_use_gmail_account(account.id, 'manage')");
+    expect(senderIdentityScope).toContain("create policy \"users create own identities\"");
+    expect(senderIdentityScope).toContain("create policy \"users manage own identities\"");
+    expect(senderIdentityScope).toContain("app_private.can_link_sender_identity(workspace_id, gmail_account_id)");
   });
 });

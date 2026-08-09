@@ -102,3 +102,24 @@
 - The user-scoped server client first reads the target draft and workspace, then verifies the selected identity belongs to that same workspace, the identity and Gmail account are active, and the current user has an active `gmail_account_permissions` row granting both `can_draft` and `can_send`. Every failure returns only `sender_not_authorized`; no service-role or admin bypass is used.
 - The final draft mutation remains under RLS and is constrained by both the draft ID and resolved workspace ID.
 - A persisted draft with no sender identity now renders a controlled empty `Selecciona un remitente` placeholder when it has two or more explicit eligible senders. The selected sender and approval/sent state change only after the PATCH succeeds; demo drafts remain read-only.
+
+## Review round 4 — sender identity account workspace invariant
+
+### RED
+
+- Added the route regression before implementation: a sender identity in the draft workspace but linked to an active Gmail account in another workspace received HTTP 200. The expected safe response is HTTP 403 with only `sender_not_authorized`.
+- Added a migration-contract test before the migration existed. It failed because the schema had no helper or replacement sender-identity policies binding a referenced Gmail account to the same workspace, active state, and caller authority.
+
+### GREEN
+
+- Focused API and migration-contract command: `C:\\Users\\user\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\node\\bin\\node.exe .\\node_modules\\vitest\\vitest.mjs run src/app/api/v2/mail/drafts/[draftId]/__tests__/route.test.ts src/lib/v2/__tests__/schema-contract.test.ts`
+- Result: 2 files passed, 10 tests passed.
+- Full relevant Vitest command: `C:\\Users\\user\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\node\\bin\\node.exe .\\node_modules\\vitest\\vitest.mjs run`
+- Result: 49 files passed, 184 tests passed.
+- Targeted ESLint and `git diff --check` completed without diagnostics or whitespace errors.
+
+### Authorization and migration self-review
+
+- The PATCH relation now selects `gmail_accounts.workspace_id` and rejects a linked account unless it is both active and in the resolved draft workspace, before querying permissions or mutating the draft.
+- New additive migration `20260809053000_sender_identity_account_scope.sql` creates a narrowly granted `app_private.can_link_sender_identity` helper and replaces only sender-identity INSERT/UPDATE policies. A non-null referenced account must be active, in the same workspace, and manageable by the authenticated caller; the existing self/owner and workspace-membership requirements remain. Null account links remain supported by the existing nullable schema.
+- No Supabase credentials, remote deployment, service-role grant, or service/internal bypass was used. The local environment has no Supabase CLI or `psql`, so SQL validation is the repository migration-contract regression rather than a database apply.

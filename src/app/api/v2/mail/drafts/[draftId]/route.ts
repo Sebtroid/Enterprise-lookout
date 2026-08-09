@@ -22,11 +22,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ dr
   if (!draft || !workspaceId) return Response.json({ error: parsed.data.senderIdentityId ? "sender_not_authorized" : "draft_not_editable" }, { status: parsed.data.senderIdentityId ? 403 : 409 });
 
   if (parsed.data.senderIdentityId) {
-    const { data: identity } = await supabase.from("sender_identities").select("id,workspace_id,gmail_account_id,active,gmail_accounts(id,active)").eq("id", parsed.data.senderIdentityId).maybeSingle();
-    const identityRecord = identity as { workspace_id?: unknown; gmail_account_id?: unknown; active?: unknown; gmail_accounts?: { active?: unknown } | Array<{ active?: unknown }> | null } | null;
+    const { data: identity } = await supabase.from("sender_identities").select("id,workspace_id,gmail_account_id,active,gmail_accounts(id,workspace_id,active)").eq("id", parsed.data.senderIdentityId).maybeSingle();
+    const identityRecord = identity as { workspace_id?: unknown; gmail_account_id?: unknown; active?: unknown; gmail_accounts?: { workspace_id?: unknown; active?: unknown } | Array<{ workspace_id?: unknown; active?: unknown }> | null } | null;
     const account = Array.isArray(identityRecord?.gmail_accounts) ? identityRecord.gmail_accounts[0] : identityRecord?.gmail_accounts;
     const accountId = typeof identityRecord?.gmail_account_id === "string" ? identityRecord.gmail_account_id : "";
-    if (!identityRecord || identityRecord.workspace_id !== workspaceId || identityRecord.active !== true || account?.active !== true || !accountId) return Response.json({ error: "sender_not_authorized" }, { status: 403 });
+    if (!identityRecord || identityRecord.workspace_id !== workspaceId || identityRecord.active !== true || account?.workspace_id !== workspaceId || account?.active !== true || !accountId) return Response.json({ error: "sender_not_authorized" }, { status: 403 });
 
     const { data: permission } = await supabase.from("gmail_account_permissions").select("can_draft,can_send").eq("gmail_account_id", accountId).eq("user_id", user.id).eq("active", true).maybeSingle();
     if (!permission?.can_draft || !permission.can_send) return Response.json({ error: "sender_not_authorized" }, { status: 403 });
