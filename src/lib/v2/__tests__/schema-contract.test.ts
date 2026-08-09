@@ -20,6 +20,10 @@ const senderIdentityScopePath = join(process.cwd(), "supabase", "migrations", "2
 const senderIdentityScope = existsSync(senderIdentityScopePath)
   ? readFileSync(senderIdentityScopePath, "utf8").toLowerCase()
   : "";
+const draftSenderAssignmentPath = join(process.cwd(), "supabase", "migrations", "20260809054000_draft_sender_assignment_rls.sql");
+const draftSenderAssignment = existsSync(draftSenderAssignmentPath)
+  ? readFileSync(draftSenderAssignmentPath, "utf8").toLowerCase()
+  : "";
 
 describe("Enterprise Lookout V2 schema", () => {
   it("defines the workspace, project, evidence, mail, AI and finance domains", () => {
@@ -71,5 +75,23 @@ describe("Enterprise Lookout V2 schema", () => {
     expect(senderIdentityScope).toContain("create policy \"users create own identities\"");
     expect(senderIdentityScope).toContain("create policy \"users manage own identities\"");
     expect(senderIdentityScope).toContain("app_private.can_link_sender_identity(workspace_id, gmail_account_id)");
+  });
+
+  it("requires a direct draft sender assignment to be active, same-workspace, and draft-plus-send permitted", () => {
+    expect(draftSenderAssignment).toContain("create or replace function app_private.can_assign_draft_sender");
+    expect(draftSenderAssignment).toContain("identity.workspace_id = target_workspace_id");
+    expect(draftSenderAssignment).toContain("account.workspace_id = target_workspace_id");
+    expect(draftSenderAssignment).toContain("and identity.active");
+    expect(draftSenderAssignment).toContain("and account.active");
+    expect(draftSenderAssignment).toContain("permission.user_id = (select auth.uid())");
+    expect(draftSenderAssignment).toContain("and permission.active");
+    expect(draftSenderAssignment).toContain("and permission.can_draft");
+    expect(draftSenderAssignment).toContain("and permission.can_send");
+    expect(draftSenderAssignment).toContain("create policy \"project editors insert drafts\"");
+    expect(draftSenderAssignment).toContain("create policy \"project editors update drafts\"");
+    expect(draftSenderAssignment).toContain("sender_identity_id is null");
+    expect(draftSenderAssignment).toContain("app_private.can_assign_draft_sender(workspace_id, sender_identity_id)");
+    expect(draftSenderAssignment).toContain("revoke all on function app_private.can_assign_draft_sender(uuid, uuid) from public");
+    expect(draftSenderAssignment).toContain("grant execute on function app_private.can_assign_draft_sender(uuid, uuid) to authenticated");
   });
 });

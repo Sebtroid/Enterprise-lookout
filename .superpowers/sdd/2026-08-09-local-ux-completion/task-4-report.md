@@ -123,3 +123,24 @@
 - The PATCH relation now selects `gmail_accounts.workspace_id` and rejects a linked account unless it is both active and in the resolved draft workspace, before querying permissions or mutating the draft.
 - New additive migration `20260809053000_sender_identity_account_scope.sql` creates a narrowly granted `app_private.can_link_sender_identity` helper and replaces only sender-identity INSERT/UPDATE policies. A non-null referenced account must be active, in the same workspace, and manageable by the authenticated caller; the existing self/owner and workspace-membership requirements remain. Null account links remain supported by the existing nullable schema.
 - No Supabase credentials, remote deployment, service-role grant, or service/internal bypass was used. The local environment has no Supabase CLI or `psql`, so SQL validation is the repository migration-contract regression rather than a database apply.
+
+## Review round 5 — direct draft sender assignment RLS
+
+### RED
+
+- Added the migration-contract regression before the migration existed. It failed because the direct `mail_drafts` mutation policy accepted an assigned identity using only draft permission, without requiring same-workspace active identity/account state or send permission.
+- The focused route and schema command then reported the expected missing draft-assignment helper assertion while existing route tests remained green, isolating the bypass to direct PostgREST policy enforcement rather than the route.
+
+### GREEN
+
+- Focused route and migration-contract command: `C:\\Users\\user\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\node\\bin\\node.exe .\\node_modules\\vitest\\vitest.mjs run src/lib/v2/__tests__/schema-contract.test.ts src/app/api/v2/mail/drafts/[draftId]/__tests__/route.test.ts`
+- Result: 2 files passed, 11 tests passed.
+- Full relevant Vitest command: `C:\\Users\\user\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\node\\bin\\node.exe .\\node_modules\\vitest\\vitest.mjs run`
+- Result: 49 files passed, 185 tests passed.
+- Targeted ESLint and `git diff --check` completed without diagnostics or whitespace errors.
+
+### Authorization and migration self-review
+
+- Additive migration `20260809054000_draft_sender_assignment_rls.sql` replaces only the broad `project editors manage drafts` policy. It preserves project-editor access by creating equivalent INSERT, UPDATE, and DELETE policies; the existing SELECT policy is unchanged.
+- For INSERT and UPDATE, non-null `sender_identity_id` now requires an auth-UID-bound, fixed-search-path helper: identity and linked account must both be active and share the draft workspace, while the active current-user permission row must grant both draft and send. The helper is revoked from `public` and granted only to `authenticated`.
+- Null sender identities remain allowed for unassigned drafts. No Supabase credentials, remote deployment, service-role bypass, or unrelated application change was made; local validation remains the repository contract test because Supabase CLI and `psql` are unavailable.
