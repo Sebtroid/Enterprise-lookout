@@ -1,6 +1,11 @@
+"use client";
+
 import Link from "next/link";
 import { ArrowRight, CheckCircle2, Clock3, FlaskConical, Inbox, ListChecks, MailCheck, Users } from "lucide-react";
+import { useState } from "react";
 
+import { EmptyState } from "@/components/v2/empty-state";
+import { SegmentedControl } from "@/components/v2/segmented-control";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
@@ -11,9 +16,15 @@ const itemIcons = { approval: MailCheck, reply: Inbox, research: FlaskConical, f
 const kindLabels = { approval: "Aprobación", reply: "Respuesta", research: "Investigación", followup: "Follow-up", task: "Tarea" };
 
 export function TodayView({ snapshot }: { snapshot: V2WorkspaceSnapshot }) {
-  const replyCount = snapshot.attention.filter((item) => item.kind === "reply").length;
-  const approvalCount = snapshot.attention.filter((item) => item.kind === "approval").length;
-  const researchCount = snapshot.attention.filter((item) => item.kind === "research").length;
+  const [scope, setScope] = useState("mine");
+  const attention = snapshot.attention.filter((item) => {
+    if (scope === "mine") return item.owner === snapshot.currentUser;
+    if (scope === "shared") return snapshot.projects.some((project) => project.name === item.project && project.accessMode === "shared");
+    return item.owner === scope;
+  });
+  const replyCount = attention.filter((item) => item.kind === "reply").length;
+  const approvalCount = attention.filter((item) => item.kind === "approval").length;
+  const researchCount = attention.filter((item) => item.kind === "research").length;
   const today = new Intl.DateTimeFormat("es-CL", {
     dateStyle: "full",
     timeZone: "America/Santiago",
@@ -42,14 +53,19 @@ export function TodayView({ snapshot }: { snapshot: V2WorkspaceSnapshot }) {
               <h2 className="text-lg font-semibold">Lo que requiere atención</h2>
               <p className="mt-1 text-sm text-muted-foreground">Ordenado por urgencia y contexto disponible.</p>
             </div>
-            <div className="flex gap-1 rounded-lg border border-border bg-muted/50 p-1 text-xs">
-              <button className="rounded-md bg-background px-3 py-1.5 font-medium shadow-sm">Lo mío</button>
-              <button className="rounded-md px-3 py-1.5 text-muted-foreground hover:text-foreground">Compartidos</button>
-              <button className="rounded-md px-3 py-1.5 text-muted-foreground hover:text-foreground">José Miguel</button>
-            </div>
+            <SegmentedControl
+              label="Filtrar atención"
+              value={scope}
+              options={[
+                { value: "mine", label: "Lo mío" },
+                { value: "shared", label: "Compartidos" },
+                ...snapshot.teammates.map((teammate) => ({ value: teammate, label: teammate })),
+              ]}
+              onChange={setScope}
+            />
           </div>
           <div className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card">
-            {snapshot.attention.map((item) => <AttentionRow key={item.id} item={item} />)}
+            {attention.length > 0 ? attention.map((item) => <AttentionRow key={item.id} item={item} />) : <EmptyState title="No hay pendientes en este filtro" description="Cambia de vista para revisar la atención del resto del equipo." />}
           </div>
         </section>
 
