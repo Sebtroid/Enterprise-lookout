@@ -1,6 +1,7 @@
 import { isDemoAccessEnabled } from "@/lib/auth/route-policy";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { v2DemoSnapshot } from "@/lib/v2/demo-data";
+import { aggregateGmailProviderState, getGmailAccountState } from "@/lib/v2/settings";
 import type {
   FactStatus,
   V2AttentionItem,
@@ -308,7 +309,7 @@ const demoSettingsSnapshot: V2SettingsSnapshot = {
     { id: "demo-teammate", name: "José Miguel", role: "Miembro", status: "Activo" },
   ],
   mailProviders: [
-    { id: "gmail", name: "Gmail", state: "not_configured", accounts: [] },
+    { id: "gmail", name: "Gmail", state: "not_configured", actionHref: "/api/gmail?action=connect", accounts: [] },
     { id: "microsoft", name: "Microsoft 365", state: "action_required", accounts: [] },
   ],
   integrations: [
@@ -353,13 +354,14 @@ export async function getV2SettingsSnapshot(): Promise<V2SettingsResult> {
     return {
       id: text(row.id),
       email: text(row.email),
-      state: row.active && row.sync_status !== "disconnected" ? "connected" as const : "action_required" as const,
+      state: getGmailAccountState({ active: row.active === true, syncStatus: text(row.sync_status) }),
       permissions,
     };
   });
-  const gmailState = gmailAccounts.some((account) => account.state === "connected")
-    ? "connected" as const
-    : process.env.GMAIL_CLIENT_ID && process.env.GMAIL_CLIENT_SECRET ? "action_required" as const : "not_configured" as const;
+  const gmailState = aggregateGmailProviderState(
+    gmailAccounts.map((account) => account.state),
+    Boolean(process.env.GMAIL_CLIENT_ID && process.env.GMAIL_CLIENT_SECRET),
+  );
   const minimaxState = process.env.MINIMAX_API_KEY && process.env.MINIMAX_MODEL ? "connected" as const : "not_configured" as const;
   const hunterState = process.env.HUNTER_API_KEY ? "connected" as const : "not_configured" as const;
   const vaultSecret = (id: string, name: string, configured: boolean, unavailable = false) => ({
@@ -376,7 +378,7 @@ export async function getV2SettingsSnapshot(): Promise<V2SettingsResult> {
       role: row.role === "owner" ? "Propietario" : "Miembro", status: row.status === "active" ? "Activo" : "Invitado",
     })),
     mailProviders: [
-      { id: "gmail", name: "Gmail", state: gmailState, accounts: gmailAccounts },
+      { id: "gmail", name: "Gmail", state: gmailState, actionHref: "/api/gmail?action=connect", accounts: gmailAccounts },
       { id: "microsoft", name: "Microsoft 365", state: "unavailable", accounts: [] },
     ],
     integrations: [

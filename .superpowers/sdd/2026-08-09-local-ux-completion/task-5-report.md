@@ -36,3 +36,29 @@
 - Secret editors begin blank, use `autocomplete="new-password"`, clear on close, and never claim persistence. Demo submissions show exactly `Conecta Supabase para guardar este cambio.`
 - Budget has an accessible numeric input, labelled progress indicator, current spend, and explicit 80% warning / 100% stop guidance. Its demo submit uses the same honest non-persistence message.
 - No Supabase credentials, remote database writes, deployment, or production dependency additions were used.
+
+## Review fix round 1 — provider health, Gmail OAuth and modal focus
+
+### RED evidence
+
+- Added a focused Gmail state suite before the adapter existed. It failed on the missing `settings` state module. The cases cover `ready`, `pending`, `syncing`, `error`, `disconnected`, inactive accounts, unknown statuses, no-account OAuth configuration, mixed-account order and provider aggregation.
+- Added live/demo Gmail action regressions before restoring the contract. The live case failed because `Conectar Gmail` remained an inert button instead of the existing `/api/gmail?action=connect` link; the demo case preserved the exact honest non-persistence message.
+- Added the secret-dialog focus lifecycle regression before replacing the custom modal. It failed because focus remained on the trigger instead of entering the secret input. The regression also covers the modal accessibility boundary, Escape close and trigger focus restoration.
+- Tightened the aggregate expectation during self-review. Its RED run proved that the first implementation let one ready account mask an unavailable or action-required account.
+
+### GREEN evidence
+
+- Focused command: `C:\Users\user\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe .\node_modules\vitest\vitest.mjs run src/lib/v2/__tests__/settings.test.ts src/components/v2/__tests__/settings-workspace.test.tsx`
+- Focused result: 2 files passed, 15 tests passed.
+- Full command: `C:\Users\user\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe .\node_modules\vitest\vitest.mjs run`
+- Full result: 51 files passed, 203 tests passed.
+- Targeted ESLint and `git diff --check` completed without diagnostics or whitespace errors.
+- Repository-wide `tsc --noEmit` still reports only the same 12 unrelated legacy test-fixture errors and no Task 5 file.
+
+### Fixes and self-review
+
+- Gmail accounts are connected only when active with `sync_status = 'ready'`. Active `pending`/`syncing` and unknown states are unavailable; `error`/`disconnected` require action; inactive accounts are unavailable.
+- Provider aggregation is order-independent and severity-aware: action required outranks unavailable, unavailable outranks connected, and connected requires all represented accounts to be ready. With no accounts, configured OAuth requires connection action and absent OAuth is not configured.
+- `actionHref` is an explicit server-provided mail-provider contract. Live Gmail renders the existing OAuth URL; demo Gmail renders a button and reports exactly `Conecta Supabase para guardar este cambio.` without navigating or claiming persistence. Microsoft remains explicitly unavailable live until its backend exists.
+- Replaced the plain `aria-modal` div with the repository's Base UI dialog primitive. It provides modal background isolation and focus trapping; the secret field receives initial focus, Escape closes, focus returns to the originating replacement trigger, and close clears the controlled secret value.
+- No real secrets, Supabase writes, remote database access or deployments were used.

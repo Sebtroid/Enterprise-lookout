@@ -2,10 +2,11 @@
 
 import { Bot, KeyRound, Mail, ShieldCheck, Users, WalletCards } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import type { V2ProviderState, V2SettingsSnapshot } from "@/lib/v2/types";
@@ -38,6 +39,7 @@ export function SettingsWorkspace({ settings, budget, isDemo }: SettingsWorkspac
   const [message, setMessage] = useState("");
   const [secretEditor, setSecretEditor] = useState<{ id: string; name: string } | null>(null);
   const [secretValue, setSecretValue] = useState("");
+  const secretInputRef = useRef<HTMLInputElement>(null);
   const percentage = budget.limitUsd > 0 ? Math.min((budget.spentUsd / budget.limitUsd) * 100, 100) : 0;
 
   function reportUnavailableSave() {
@@ -55,7 +57,8 @@ export function SettingsWorkspace({ settings, budget, isDemo }: SettingsWorkspac
   }
 
   return (
-    <div className="space-y-6">
+    <Dialog onOpenChange={(open) => { if (!open) closeSecretEditor(); }}>
+      <div className="space-y-6">
       <SettingsSection icon={Users} title="Equipo">
         {settings.team.length > 0 ? settings.team.map((member) => (
           <SettingsRow key={member.id} title={member.name} detail={member.role} stateLabel={member.status} />
@@ -74,7 +77,9 @@ export function SettingsWorkspace({ settings, budget, isDemo }: SettingsWorkspac
               ? provider.accounts.map((account) => account.email).join(" · ")
               : provider.id === "gmail" ? "Sin cuentas Gmail conectadas" : "Sin cuentas Microsoft 365 conectadas"}
             state={provider.state}
-            actions={<Button type="button" variant="outline" size="sm" onClick={reportUnavailableSave}>Conectar {provider.name}</Button>}
+            actions={!isDemo && provider.actionHref
+              ? <a href={provider.actionHref} className={buttonVariants({ variant: "outline", size: "sm" })}>Conectar {provider.name}</a>
+              : <Button type="button" variant="outline" size="sm" onClick={reportUnavailableSave}>Conectar {provider.name}</Button>}
           />
         ))}
       </SettingsSection>
@@ -107,7 +112,11 @@ export function SettingsWorkspace({ settings, budget, isDemo }: SettingsWorkspac
             actions={(
               <>
                 {secret.canReveal ? <Button type="button" variant="ghost" size="sm" className="w-full whitespace-normal sm:w-auto" onClick={reportUnavailableSave}>Revelar {secret.name}</Button> : null}
-                {secret.canReplace ? <Button type="button" variant="outline" size="sm" className="w-full whitespace-normal sm:w-auto" onClick={() => openSecretEditor(secret)}>Reemplazar {secret.name}</Button> : null}
+                {secret.canReplace ? (
+                  <DialogTrigger render={<Button type="button" variant="outline" size="sm" className="w-full whitespace-normal sm:w-auto" onClick={() => openSecretEditor(secret)} />}>
+                    Reemplazar {secret.name}
+                  </DialogTrigger>
+                ) : null}
               </>
             )}
           />
@@ -128,16 +137,23 @@ export function SettingsWorkspace({ settings, budget, isDemo }: SettingsWorkspac
         </form>
       </SettingsSection>
 
+        {message ? <p role="status" className="rounded-lg border border-border bg-muted/50 px-4 py-3 text-sm">{message}</p> : null}
+      </div>
+
       {secretEditor ? (
-        <div role="dialog" aria-modal="true" aria-labelledby="secret-editor-title" className="rounded-lg border border-primary/30 bg-card p-4 shadow-lg sm:p-5">
-          <div className="flex items-center gap-2">
-            <KeyRound className="size-4 text-primary" aria-hidden="true" />
-            <h2 id="secret-editor-title" className="font-semibold">Reemplazar secreto</h2>
-          </div>
-          <form className="mt-4 space-y-4" onSubmit={(event) => { event.preventDefault(); reportUnavailableSave(); closeSecretEditor(); }}>
+        <DialogContent initialFocus={secretInputRef} showCloseButton={false}>
+          <DialogHeader>
+            <div className="flex items-center gap-2">
+              <KeyRound className="size-4 text-primary" aria-hidden="true" />
+              <DialogTitle>Reemplazar secreto</DialogTitle>
+            </div>
+            <DialogDescription>Reemplaza {secretEditor.name}. El valor nunca se incluye en la vista de configuración.</DialogDescription>
+          </DialogHeader>
+          <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); reportUnavailableSave(); }}>
             <div className="space-y-2">
               <label htmlFor={`secret-${secretEditor.id}`} className="text-sm font-medium">Nuevo valor para {secretEditor.name}</label>
               <Input
+                ref={secretInputRef}
                 id={`secret-${secretEditor.id}`}
                 type="password"
                 autoComplete="new-password"
@@ -145,18 +161,16 @@ export function SettingsWorkspace({ settings, budget, isDemo }: SettingsWorkspac
                 value={secretValue}
                 onChange={(event) => setSecretValue(event.target.value)}
               />
-              <p className="text-xs text-muted-foreground">El valor queda en blanco al cerrar y nunca se incluye en la vista de configuración.</p>
+              <p className="text-xs text-muted-foreground">El valor queda en blanco al cerrar.</p>
             </div>
-            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-              <Button type="button" variant="outline" onClick={closeSecretEditor}>Cancelar reemplazo</Button>
-              <Button type="submit">Guardar secreto</Button>
-            </div>
+            <DialogFooter>
+              <DialogClose render={<Button type="button" variant="outline" />}>Cancelar reemplazo</DialogClose>
+              <DialogClose render={<Button type="submit" />}>Guardar secreto</DialogClose>
+            </DialogFooter>
           </form>
-        </div>
+        </DialogContent>
       ) : null}
-
-      {message ? <p role="status" className="rounded-lg border border-border bg-muted/50 px-4 py-3 text-sm">{message}</p> : null}
-    </div>
+    </Dialog>
   );
 }
 

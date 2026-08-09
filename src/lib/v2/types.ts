@@ -103,6 +103,7 @@ export type V2SettingsSnapshot = {
     id: "gmail" | "microsoft";
     name: string;
     state: V2ProviderState;
+    actionHref?: string;
     accounts: Array<{
       id: string;
       email: string;
