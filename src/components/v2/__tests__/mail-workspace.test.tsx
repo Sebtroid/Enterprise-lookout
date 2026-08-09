@@ -1,11 +1,12 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { MailWorkspace } from "../mail-workspace";
 import { v2DemoSnapshot } from "@/lib/v2/demo-data";
 
 describe("MailWorkspace", () => {
+  afterEach(() => vi.unstubAllGlobals());
   it("filters unread conversations and identifies Microsoft accounts", () => {
     render(<MailWorkspace threads={v2DemoSnapshot.threads} />);
 
@@ -39,13 +40,41 @@ describe("MailWorkspace", () => {
     expect(screen.queryByRole("button", { name: /Soprole/ })).not.toBeInTheDocument();
   });
 
-  it("shows a sender selector only when multiple accounts are eligible", () => {
-    const [first] = v2DemoSnapshot.threads;
+  it("shows the active sender as non-editable information", () => {
+    render(<MailWorkspace threads={v2DemoSnapshot.threads} />);
 
-    const { rerender } = render(<MailWorkspace threads={[first]} />);
+    expect(screen.getByText("Desde")).toBeVisible();
     expect(screen.queryByRole("combobox", { name: "Remitente" })).not.toBeInTheDocument();
+  });
 
-    rerender(<MailWorkspace threads={v2DemoSnapshot.threads} />);
-    expect(screen.getByRole("combobox", { name: "Remitente" })).toBeVisible();
+  it("keeps the active thread unchanged while an approval request is pending", async () => {
+    let resolveSave: (response: Response) => void;
+    const savePending = new Promise<Response>((resolve) => { resolveSave = resolve; });
+    const fetchMock = vi.fn().mockImplementationOnce(() => savePending).mockResolvedValueOnce(new Response(null, { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const threads = v2DemoSnapshot.threads.map((thread) => thread.id === "thread-pf" ? { ...thread, draftId: "draft-pf" } : thread);
+
+    render(<MailWorkspace threads={threads} initialThreadId="thread-pf" />);
+    fireEvent.click(screen.getByRole("button", { name: "Aprobar borrador" }));
+    fireEvent.click(screen.getByRole("button", { name: /Soprole/ }));
+
+    expect(screen.getByRole("heading", { name: /Asado universitario/ })).toBeVisible();
+
+    await act(async () => { resolveSave!(new Response(null, { status: 200 })); });
+  });
+
+  it("does not offer a real send for a demo draft without persistence", () => {
+    render(<MailWorkspace threads={v2DemoSnapshot.threads} initialThreadId="thread-pf" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Aprobar borrador" }));
+
+    expect(screen.getByRole("button", { name: "Enviar ahora" })).toBeDisabled();
+    expect(screen.getByText("Borrador de demostración: no se enviará desde esta pantalla.")).toBeVisible();
+  });
+
+  it("wraps draft actions on narrow screens", () => {
+    render(<MailWorkspace threads={v2DemoSnapshot.threads} />);
+
+    expect(screen.getByLabelText("Acciones del borrador")).toHaveClass("flex-wrap");
   });
 });

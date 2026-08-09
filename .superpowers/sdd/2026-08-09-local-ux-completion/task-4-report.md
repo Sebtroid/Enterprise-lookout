@@ -36,3 +36,24 @@
 ## Known non-Task-4 check
 
 - Repository-wide `tsc --noEmit` remains non-zero due to pre-existing type errors in legacy component/prospecting test fixtures (missing `description`, verification fields, and outdated message properties). Task 4 introduced no TypeScript errors; the two initial provider-mapping errors were resolved in `src/lib/v2/repository.ts`.
+
+## Review round 1 — RED/GREEN evidence
+
+### RED
+
+- Added regressions before changing production code. The focused mail suite failed in four expected ways: the sender was still an editable `Remitente` select; clicking Soprole during a deferred approval request switched the active thread; a demo draft exposed an enabled send button; and the action container had no labelled wrapping layout.
+
+### GREEN
+
+- Focused mail command: `C:\\Users\\user\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\node\\bin\\node.exe .\\node_modules\\vitest\\vitest.mjs run src/components/v2/__tests__/mail-workspace.test.tsx`
+- Result: 1 file passed, 7 tests passed.
+- Full relevant Vitest command: `C:\\Users\\user\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\node\\bin\\node.exe .\\node_modules\\vitest\\vitest.mjs run`
+- Result: 48 files passed, 175 tests passed.
+- Targeted ESLint for the mail component and its test completed without diagnostics; `git diff --check` completed without whitespace errors.
+
+### Review fixes
+
+- While an approval, send, or AI revision is pending, conversation selection, inbox filters, account filtering, the mobile selector, and draft edits are disabled, preventing a response from applying to a different active thread.
+- Replaced the unsupported mutable sender select with a non-editable active-sender display. Account filtering remains independent and is still derived from displayed conversations.
+- Demo drafts without a persisted `draftId` now show an explicit no-send status and keep the send button disabled; they never claim that mail was sent or registered.
+- The draft action group has an accessible label and uses responsive flex wrapping to avoid narrow-screen overflow.
