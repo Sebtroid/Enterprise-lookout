@@ -11,11 +11,16 @@
     "gmail:reply-queries": "node scripts/gmail-replies.mjs queries",
     "gmail:reply-ingest": "node scripts/gmail-replies.mjs ingest",
     "supabase:apply": "node scripts/apply-supabase.mjs",
+    "v2:backup": "node scripts/v2-preflight-backup.mjs",
+    "v2:backup:decrypt": "node scripts/v2-decrypt-backup.mjs",
+    "v2:migrate:dry-run": "node scripts/migrate-v2-legacy.mjs",
+    "v2:migrate": "node scripts/migrate-v2-legacy.mjs --apply",
     "test": "vitest run",
     "test:watch": "vitest"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.105.1",
     "class-variance-authority": "^0.7.1",

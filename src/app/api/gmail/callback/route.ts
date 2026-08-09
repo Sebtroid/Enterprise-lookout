@@ -1,149 +1,47 @@
 import { NextRequest, NextResponse } from "next/server";
-import {
-  getGmailConnectionDecision,
-  getSafeOAuthRedirectPath,
-} from "@/lib/gmail/connection-policy";
+
+import { getAllowedUser } from "@/lib/auth/request";
+import { getSafeOAuthRedirectPath } from "@/lib/gmail/connection-policy";
+import { verifyOAuthState } from "@/lib/gmail/oauth-state";
 import { fetchConnectedGmailEmail } from "@/lib/gmail/profile";
 import { encryptToken } from "@/lib/gmail/token-crypto";
-import { verifyOAuthState } from "@/lib/gmail/oauth-state";
-import { getPostgresClient } from "@/lib/supabase/postgres";
+import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 
-const GMAIL_CLIENT_ID = process.env.GMAIL_CLIENT_ID;
-const GMAIL_CLIENT_SECRET = process.env.GMAIL_CLIENT_SECRET;
 const REDIRECT_URI = `${process.env.NEXT_PUBLIC_APP_URL || "https://enterprise-lookout.vercel.app"}/api/gmail/callback`;
-const DEFAULT_REDIRECT = "/campaigns/all/settings/gmail";
+const DEFAULT_REDIRECT = "/settings";
 
 export async function GET(req: NextRequest) {
-  const sql = getPostgresClient();
-  if (!sql) {
-    return redirectWithStatus(req, DEFAULT_REDIRECT, {
-      gmail_error: "missing_database_config",
-    });
-  }
-
-  const { searchParams } = new URL(req.url);
-  const code = searchParams.get("code");
-  const error = searchParams.get("error");
-  const state = searchParams.get("state");
-
-  if (error) {
-    return redirectWithStatus(req, DEFAULT_REDIRECT, { gmail_error: error });
-  }
-
-  if (!code) {
-    return redirectWithStatus(req, DEFAULT_REDIRECT, { gmail_error: "no_code" });
-  }
-
+  const user = await getAllowedUser();
+  if (!user) return redirectWithStatus(req, DEFAULT_REDIRECT, { gmail_error: "unauthorized" });
+  const admin = getSupabaseAdminClient();
+  if (!admin) return redirectWithStatus(req, DEFAULT_REDIRECT, { gmail_error: "missing_database_config" });
+  const code = req.nextUrl.searchParams.get("code");
+  const oauthError = req.nextUrl.searchParams.get("error");
+  const state = req.nextUrl.searchParams.get("state");
+  if (oauthError) return redirectWithStatus(req, DEFAULT_REDIRECT, { gmail_error: oauthError });
   const verifiedState = state ? verifyOAuthState(state) : null;
-  if (!verifiedState) {
-    return redirectWithStatus(req, DEFAULT_REDIRECT, {
-      gmail_error: "invalid_state",
-    });
-  }
+  if (!code || !verifiedState) return redirectWithStatus(req, DEFAULT_REDIRECT, { gmail_error: !code ? "no_code" : "invalid_state" });
   const redirectPath = getSafeOAuthRedirectPath(verifiedState.redirect);
-
-  if (!GMAIL_CLIENT_ID || !GMAIL_CLIENT_SECRET) {
-    return redirectWithStatus(req, redirectPath, {
-      gmail_error: "missing_gmail_config",
-    });
-  }
+  if (!process.env.GMAIL_CLIENT_ID || !process.env.GMAIL_CLIENT_SECRET || !process.env.GMAIL_TOKEN_ENCRYPTION_KEY) return redirectWithStatus(req, redirectPath, { gmail_error: "missing_gmail_config" });
 
   try {
-    // Exchange code for tokens
-    const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        code,
-        client_id: GMAIL_CLIENT_ID,
-        client_secret: GMAIL_CLIENT_SECRET,
-        redirect_uri: REDIRECT_URI,
-        grant_type: "authorization_code",
-      }),
-    });
-
-    const tokens = await tokenResponse.json();
-
-    if (tokens.error) {
-      return redirectWithStatus(req, redirectPath, {
-        gmail_error: String(tokens.error),
-      });
-    }
-
+    const { data: membership } = await admin.from("workspace_members").select("workspace_id").eq("user_id", user.id).eq("status", "active").limit(1).maybeSingle();
+    if (!membership) return redirectWithStatus(req, redirectPath, { gmail_error: "workspace_access_denied" });
+    const tokenResponse = await fetch("https://oauth2.googleapis.com/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ code, client_id: process.env.GMAIL_CLIENT_ID, client_secret: process.env.GMAIL_CLIENT_SECRET, redirect_uri: REDIRECT_URI, grant_type: "authorization_code" }) });
+    const tokens = await tokenResponse.json() as { access_token?: string; refresh_token?: string; expires_in?: number; error?: string };
+    if (!tokenResponse.ok || !tokens.access_token) return redirectWithStatus(req, redirectPath, { gmail_error: tokens.error ?? "token_exchange_failed" });
     const connectedEmail = await fetchConnectedGmailEmail(tokens.access_token);
-
-    if (!connectedEmail) {
-      return redirectWithStatus(req, redirectPath, {
-        gmail_error: "email_lookup_failed",
-      });
-    }
-
-    const senderRows = await sql`
-      select id
-      from sender_accounts
-      where lower(email::text) = ${connectedEmail}
-        and account_type = 'gmail'
-        and status = 'active'
-      limit 1
-    `;
-
-    const connectionDecision = getGmailConnectionDecision({
-      connectedEmail,
-      hasConfiguredSender: Boolean(senderRows[0]),
-    });
-
-    if (connectionDecision !== "allowed") {
-      return redirectWithStatus(req, redirectPath, {
-        gmail_email: connectedEmail,
-        gmail_error: connectionDecision,
-      });
-    }
-
-    // Store tokens in DB
-    const expiresAt = new Date(Date.now() + tokens.expires_in * 1000);
-    const encryptedAccessToken = encryptToken(tokens.access_token);
-    const encryptedRefreshToken = tokens.refresh_token
-      ? encryptToken(tokens.refresh_token)
-      : null;
-
-    await sql`
-      insert into gmail_tokens (
-        user_email,
-        access_token,
-        refresh_token,
-        expires_at
-      ) values (
-        ${connectedEmail},
-        ${encryptedAccessToken},
-        ${encryptedRefreshToken},
-        ${expiresAt}
-      )
-      on conflict (user_email) do update set
-        access_token = excluded.access_token,
-        refresh_token = coalesce(nullif(excluded.refresh_token, ''), gmail_tokens.refresh_token),
-        expires_at = excluded.expires_at,
-        updated_at = now()
-    `;
-
-    return redirectWithStatus(req, redirectPath, {
-      gmail_connected: connectedEmail,
-    });
-  } catch (err) {
-    console.error("Gmail callback error:", err);
-    return redirectWithStatus(req, DEFAULT_REDIRECT, {
-      gmail_error: "server_error",
-    });
-  }
+    if (!connectedEmail) return redirectWithStatus(req, redirectPath, { gmail_error: "email_lookup_failed" });
+    const { data: existing } = await admin.from("gmail_accounts").select("id,encrypted_refresh_token").eq("workspace_id", membership.workspace_id).eq("email", connectedEmail).maybeSingle();
+    const encryptedRefreshToken = tokens.refresh_token ? encryptToken(tokens.refresh_token) : existing?.encrypted_refresh_token;
+    if (!encryptedRefreshToken) return redirectWithStatus(req, redirectPath, { gmail_error: "missing_refresh_token" });
+    const expiresAt = new Date(Date.now() + (tokens.expires_in ?? 3600) * 1000).toISOString();
+    const { data: account, error: accountError } = await admin.from("gmail_accounts").upsert({ workspace_id: membership.workspace_id, owner_user_id: user.id, email: connectedEmail, encrypted_access_token: encryptToken(tokens.access_token), encrypted_refresh_token: encryptedRefreshToken, expires_at: expiresAt, sync_status: "pending", active: true }, { onConflict: "workspace_id,email" }).select("id").single();
+    if (accountError) throw accountError;
+    const { error: permissionError } = await admin.from("gmail_account_permissions").upsert({ gmail_account_id: account.id, user_id: user.id, can_read: true, can_draft: true, can_send: true, can_manage: true }, { onConflict: "gmail_account_id,user_id" });
+    if (permissionError) throw permissionError;
+    return redirectWithStatus(req, redirectPath, { gmail_connected: connectedEmail });
+  } catch (error) { console.error("Gmail V2 callback error", error); return redirectWithStatus(req, redirectPath, { gmail_error: "server_error" }); }
 }
 
-function redirectWithStatus(
-  req: NextRequest,
-  redirectPath: string,
-  params: Record<string, string>,
-) {
-  const url = new URL(getSafeOAuthRedirectPath(redirectPath), req.url);
-  for (const [key, value] of Object.entries(params)) {
-    url.searchParams.set(key, value);
-  }
-  return NextResponse.redirect(url);
-}
+function redirectWithStatus(req: NextRequest, redirectPath: string, params: Record<string, string>) { const url = new URL(getSafeOAuthRedirectPath(redirectPath), req.url); for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value); return NextResponse.redirect(url); }

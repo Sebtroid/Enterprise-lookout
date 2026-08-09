@@ -13,13 +13,13 @@ export default function LoginPage() {
           <div>
             <h1 className="text-lg font-semibold">Acceso privado</h1>
             <p className="text-sm text-muted-foreground">
-              Prospección de auspicios
+              Enterprise Lookout
             </p>
           </div>
         </div>
         <LoginForm />
-        <p className="mt-4 text-xs text-muted-foreground">
-          En modo demo, entra directo desde `/campaigns`.
+        <p className="mt-4 text-xs leading-5 text-muted-foreground">
+          Solo pueden entrar personas invitadas al workspace.
         </p>
       </section>
     </main>

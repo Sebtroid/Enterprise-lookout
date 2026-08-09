@@ -5,81 +5,27 @@ import { describe, expect, it, vi } from "vitest";
 import { AppSidebar } from "@/components/app-sidebar";
 import { MobileNav } from "@/components/mobile-nav";
 
-vi.mock("next/navigation", () => ({
-  usePathname: () => "/campaigns/all/pipeline",
-}));
-
+vi.mock("next/navigation", () => ({ usePathname: () => "/mail" }));
 vi.mock("next/link", () => ({
-  default: ({
-    href,
-    prefetch,
-    children,
-    ...props
-  }: AnchorHTMLAttributes<HTMLAnchorElement> & {
-    href: string;
-    prefetch?: boolean | null;
-    children: ReactNode;
-  }) => (
-    <a
-      href={href}
-      data-next-prefetch={
-        prefetch === undefined || prefetch === null ? "auto" : String(prefetch)
-      }
-      {...props}
-    >
-      {children}
-    </a>
-  ),
+  default: ({ href, children, ...props }: AnchorHTMLAttributes<HTMLAnchorElement> & { href: string; children: ReactNode }) => <a href={href} {...props}>{children}</a>,
 }));
 
-describe("AppSidebar", () => {
-  it("links directly to the project picker", () => {
+describe("V2 navigation", () => {
+  it("exposes the six stable workspace destinations", () => {
     render(<AppSidebar />);
-
-    const changeProject = screen.getByRole("link", {
-      name: "Cambiar proyecto",
-    });
-
-    expect(changeProject.getAttribute("href")).toBe("/campaigns");
-  });
-
-  it("disables prefetching for dynamic dashboard routes", () => {
-    render(<AppSidebar />);
-
-    const dashboardLinks = screen
-      .getAllByRole("link")
-      .filter((link) =>
-        link.getAttribute("href")?.startsWith("/campaigns/all"),
-      );
-
-    expect(dashboardLinks.length).toBeGreaterThan(0);
-    for (const link of dashboardLinks) {
-      expect(link.getAttribute("data-next-prefetch")).toBe("false");
+    for (const [name, href] of [["Hoy", "/today"], ["Proyectos", "/projects"], ["Empresas", "/companies"], ["Contactos", "/contacts"], ["Correo", "/mail"], ["Configuración", "/settings"]]) {
+      expect(screen.getByRole("link", { name }).getAttribute("href")).toBe(href);
     }
   });
 
-  it("includes the company overview route for the active project scope", () => {
+  it("marks the active section", () => {
     render(<AppSidebar />);
-
-    expect(
-      screen.getByRole("link", { name: "Overview" }).getAttribute("href"),
-    ).toBe("/campaigns/all/overview");
+    expect(screen.getByRole("link", { name: "Correo" }).getAttribute("aria-current")).toBe("page");
   });
-});
 
-describe("MobileNav", () => {
-  it("disables prefetching for dynamic dashboard routes", () => {
+  it("keeps all destinations reachable on mobile", () => {
     render(<MobileNav />);
-
-    const dashboardLinks = screen
-      .getAllByRole("link")
-      .filter((link) =>
-        link.getAttribute("href")?.startsWith("/campaigns/all"),
-      );
-
-    expect(dashboardLinks.length).toBeGreaterThan(0);
-    for (const link of dashboardLinks) {
-      expect(link.getAttribute("data-next-prefetch")).toBe("false");
-    }
+    expect(screen.getByRole("link", { name: "Proyectos" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Correo" })).toBeTruthy();
   });
 });

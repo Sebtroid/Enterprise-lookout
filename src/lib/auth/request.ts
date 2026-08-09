@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 
 import { isAllowedEmail } from "@/lib/auth/allowed-emails";
+import { isDemoAccessEnabled } from "@/lib/auth/route-policy";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 
 export type AllowedUser = {
@@ -35,17 +36,16 @@ export async function getAllowedUser({
 
 function getDemoAllowedUser({
   allowDemoUser,
-  request,
 }: {
   allowDemoUser: boolean;
   request?: NextRequest;
 }): AllowedUser | null {
-  const demoMode = process.env.NEXT_PUBLIC_APP_MODE !== "production";
-  const sameOriginDashboardRequest = request
-    ? isSameOriginDashboardRequest(request)
-    : false;
+  const demoMode = isDemoAccessEnabled({
+    appMode: process.env.NEXT_PUBLIC_APP_MODE,
+    nodeEnv: process.env.NODE_ENV,
+  });
 
-  if (!allowDemoUser || (!demoMode && !sameOriginDashboardRequest)) return null;
+  if (!allowDemoUser || !demoMode) return null;
 
   const email = process.env.APP_ALLOWED_EMAILS?.split(",")[0]?.trim().toLowerCase();
   if (!email || !isAllowedEmail(email)) return null;
@@ -54,21 +54,4 @@ function getDemoAllowedUser({
     email,
     id: "demo-user",
   };
-}
-
-function isSameOriginDashboardRequest(request: NextRequest) {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL;
-  if (!appUrl) return false;
-
-  try {
-    const appHost = new URL(appUrl).host;
-    const origin = request.headers.get("origin");
-    const referer = request.headers.get("referer");
-    const originHost = origin ? new URL(origin).host : null;
-    const refererHost = referer ? new URL(referer).host : null;
-
-    return originHost === appHost || refererHost === appHost;
-  } catch {
-    return false;
-  }
 }

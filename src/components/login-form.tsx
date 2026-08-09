@@ -15,33 +15,71 @@ export function LoginForm() {
     const supabase = getSupabaseBrowserClient();
 
     if (!supabase) {
-      setStatus("Modo demo activo. Abre /campaigns.");
+      setStatus("El acceso privado todavía no está configurado.");
       return;
     }
 
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
-        emailRedirectTo: `${window.location.origin}/campaigns`,
+        emailRedirectTo: `${window.location.origin}/auth/callback?next=/today`,
       },
     });
 
-    setStatus(error ? error.message : "Link enviado.");
+    setStatus(error ? error.message : "Enlace enviado. Revisa tu correo.");
+  }
+
+  async function continueWithGoogle() {
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) {
+      setStatus("El acceso privado todavía no está configurado.");
+      return;
+    }
+
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback?next=/today`,
+      },
+    });
+    if (error) setStatus(error.message);
   }
 
   return (
-    <form className="space-y-4" onSubmit={submit}>
-      <Input
-        type="email"
-        placeholder="correo autorizado"
-        value={email}
-        onChange={(event) => setEmail(event.target.value)}
-        required
-      />
-      <Button className="w-full" type="submit">
-        Enviar link
+    <div className="space-y-4">
+      <Button
+        className="w-full"
+        type="button"
+        variant="outline"
+        onClick={continueWithGoogle}
+      >
+        Continuar con Google
       </Button>
-      {status ? <p className="text-xs text-muted-foreground">{status}</p> : null}
-    </form>
+      <div className="flex items-center gap-3 text-xs text-muted-foreground">
+        <span className="h-px flex-1 bg-border" />
+        o usa tu correo
+        <span className="h-px flex-1 bg-border" />
+      </div>
+      <form className="space-y-3" onSubmit={submit}>
+        <label className="grid gap-1.5 text-sm font-medium">
+          Correo autorizado
+          <Input
+            type="email"
+            placeholder="nombre@universidad.cl"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            required
+          />
+        </label>
+        <Button className="w-full" type="submit">
+          Enviar enlace de acceso
+        </Button>
+      </form>
+      {status ? (
+        <p className="text-xs text-muted-foreground" role="status">
+          {status}
+        </p>
+      ) : null}
+    </div>
   );
 }

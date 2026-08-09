@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSafeOAuthRedirectPath } from "@/lib/gmail/connection-policy";
 import { signOAuthState } from "@/lib/gmail/oauth-state";
+import { getAllowedUser } from "@/lib/auth/request";
 
 /**
  * Google OAuth2 Flow
@@ -26,6 +27,8 @@ const GMAIL_CLIENT_SECRET = process.env.GMAIL_CLIENT_SECRET;
 const REDIRECT_URI = `${process.env.NEXT_PUBLIC_APP_URL || "https://enterprise-lookout.vercel.app"}/api/gmail/callback`;
 
 export async function GET(req: NextRequest) {
+  const user = await getAllowedUser();
+  if (!user) return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   if (!GMAIL_CLIENT_ID || !GMAIL_CLIENT_SECRET) {
     return NextResponse.json(
       { ok: false, error: "Missing Gmail OAuth configuration" },
@@ -36,7 +39,7 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const action = searchParams.get("action");
 
-  if (action === "url") {
+  if (action === "url" || action === "connect") {
     const redirect = getSafeOAuthRedirectPath(getRefererPath(req));
     const state = signOAuthState({
       redirect,
@@ -45,7 +48,6 @@ export async function GET(req: NextRequest) {
     const scopes = [
       "https://www.googleapis.com/auth/gmail.send",
       "https://www.googleapis.com/auth/gmail.readonly",
-      "https://www.googleapis.com/auth/spreadsheets",
     ].join(" ");
 
     const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
@@ -55,8 +57,10 @@ export async function GET(req: NextRequest) {
     authUrl.searchParams.set("scope", scopes);
     authUrl.searchParams.set("access_type", "offline");
     authUrl.searchParams.set("prompt", "consent");
+    authUrl.searchParams.set("include_granted_scopes", "true");
     authUrl.searchParams.set("state", state);
 
+    if (action === "connect") return NextResponse.redirect(authUrl);
     return NextResponse.json({ url: authUrl.toString() });
   }
 

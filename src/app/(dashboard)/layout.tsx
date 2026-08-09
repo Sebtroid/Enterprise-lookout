@@ -1,11 +1,16 @@
+import { redirect } from "next/navigation";
+
 import { AppSidebar } from "@/components/app-sidebar";
 import { MobileNav } from "@/components/mobile-nav";
+import { getAllowedUser } from "@/lib/auth/request";
 
-export default function DashboardLayout({
+export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const user = await getAllowedUser({ allowDemoUser: true });
+  if (!user) redirect("/login");
   return (
     <div className="min-h-screen bg-background text-foreground">
       <div className="flex min-h-screen">

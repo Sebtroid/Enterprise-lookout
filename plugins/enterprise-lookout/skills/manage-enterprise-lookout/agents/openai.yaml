@@ -1,0 +1,4 @@
+interface:
+  display_name: "Gestionar Enterprise Lookout"
+  short_description: "Investiga y mantiene el CRM bajo aprobación."
+  default_prompt: "Usa Enterprise Lookout para revisar proyectos, investigar candidatos aprobados y guardar resultados con fuentes."

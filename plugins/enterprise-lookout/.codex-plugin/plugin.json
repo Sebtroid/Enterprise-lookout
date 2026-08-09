@@ -1,0 +1,23 @@
+{
+  "name": "enterprise-lookout",
+  "version": "0.1.0",
+  "description": "Workspace privado para investigación, CRM y borradores bajo aprobación.",
+  "author": {
+    "name": "Ceptroid"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Enterprise Lookout",
+    "shortDescription": "Investiga y mantiene el CRM bajo aprobación.",
+    "longDescription": "Conecta ChatGPT y Codex al conocimiento compartido, los proyectos, las investigaciones aprobadas y los borradores de Enterprise Lookout.",
+    "developerName": "Ceptroid",
+    "category": "Productivity",
+    "capabilities": ["Research", "Write"],
+    "defaultPrompt": [
+      "Revisa mis investigaciones aprobadas.",
+      "Prepara una respuesta con el contexto del CRM.",
+      "Resume las prioridades de mis proyectos."
+    ]
+  },
+  "mcpServers": "./.mcp.json"
+}
