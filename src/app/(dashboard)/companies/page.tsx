@@ -1,9 +1,10 @@
-import { ExternalLink, Search } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
+import { CompaniesDirectory } from "@/components/v2/companies-directory";
 import { getV2WorkspaceSnapshot } from "@/lib/v2/repository";
 
 export const dynamic = "force-dynamic";
-export default async function CompaniesPage() { const { companies } = await getV2WorkspaceSnapshot(); return <div className="space-y-8"><PageHeader eyebrow="Conocimiento maestro" title="Empresas" /><div className="relative max-w-xl"><Search className="absolute left-3 top-2.5 size-4 text-muted-foreground" /><Input className="pl-9" placeholder="Buscar por empresa, dominio o industria" /></div><section className="overflow-hidden rounded-lg border border-border bg-card"><div className="hidden grid-cols-[1.2fr_.8fr_.6fr_.8fr_1fr_auto] gap-4 border-b border-border bg-muted/50 px-4 py-3 text-xs font-medium text-muted-foreground md:grid"><span>Empresa</span><span>Contacto clave</span><span>Calidad</span><span>Proyectos</span><span>Siguiente acción</span><span>Fit</span></div>{companies.map((company) => <Link href={`/companies/${company.id}`} key={company.id} className="grid gap-3 border-b border-border px-4 py-4 transition-colors last:border-b-0 hover:bg-muted/50 md:grid-cols-[1.2fr_.8fr_.6fr_.8fr_1fr_auto] md:items-center md:gap-4"><div className="min-w-0"><strong className="text-sm">{company.name}</strong><p className="mt-1 flex items-center gap-1 truncate text-xs text-muted-foreground">{company.domain}<ExternalLink className="size-3" /></p></div><div className="text-sm"><span className="md:hidden text-muted-foreground">Contacto: </span>{company.contactName ?? "Sin contacto"}</div><Badge variant="outline" className="w-fit">{company.contactQuality}</Badge><div className="text-xs text-muted-foreground">{company.projectNames.join(" · ")}</div><div className="text-sm">{company.nextAction}</div><Badge variant="outline" className="w-fit border-primary/30 text-primary">{company.fitScore}</Badge></Link>)}</section></div>; }
-import Link from "next/link";
+
+export default async function CompaniesPage() {
+  const { companies } = await getV2WorkspaceSnapshot();
+  return <div className="space-y-8"><PageHeader eyebrow="Conocimiento maestro" title="Empresas" /><CompaniesDirectory companies={companies} /></div>;
+}
