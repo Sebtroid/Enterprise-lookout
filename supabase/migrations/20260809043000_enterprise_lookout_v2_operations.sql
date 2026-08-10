@@ -184,8 +184,8 @@ create index meetings_context_idx on public.meetings (workspace_id, project_id, 
 create index project_links_project_idx on public.project_links (workspace_id, project_id);
 create index mail_drafts_review_idx on public.mail_drafts (workspace_id, status, created_at desc);
 create index ai_feedback_rules_context_idx on public.ai_feedback_rules (workspace_id, project_id, active);
-create index suppression_email_idx on public.suppression_entries (workspace_id, email) where email is not null;
-create index suppression_domain_idx on public.suppression_entries (workspace_id, domain) where domain is not null;
+create index suppression_entries_email_idx on public.suppression_entries (workspace_id, email) where email is not null;
+create index suppression_entries_domain_idx on public.suppression_entries (workspace_id, domain) where domain is not null;
 create index legacy_quarantine_review_idx on public.legacy_quarantine (workspace_id, reviewed_at) where reviewed_at is null;
 create index followup_enrollments_due_idx on public.followup_enrollments (status, due_at) where status = 'pending';
 

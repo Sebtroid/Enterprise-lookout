@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -39,6 +39,35 @@ const workspaceIntegrity = existsSync(workspaceIntegrityPath)
   : "";
 
 describe("Enterprise Lookout V2 schema", () => {
+  it("keeps literal index names unique across the baseline and migration chain", () => {
+    const migrationDirectory = join(process.cwd(), "supabase", "migrations");
+    const sqlSources = [
+      join(process.cwd(), "supabase", "schema.sql"),
+      ...readdirSync(migrationDirectory)
+        .filter((file) => file.endsWith(".sql"))
+        .map((file) => join(migrationDirectory, file)),
+    ];
+    const indexOwners = new Map<string, string[]>();
+    const literalIndexPattern =
+      /create\s+(?:unique\s+)?index\s+(?:if\s+not\s+exists\s+)?(?!if\b)(?:"([^"]+)"|([a-z_][a-z0-9_$]*))/gi;
+
+    for (const source of sqlSources) {
+      const sql = readFileSync(source, "utf8");
+      for (const match of sql.matchAll(literalIndexPattern)) {
+        const indexName = (match[1] ?? match[2]).toLowerCase();
+        const owners = indexOwners.get(indexName) ?? [];
+        owners.push(source.replace(`${process.cwd()}\\`, ""));
+        indexOwners.set(indexName, owners);
+      }
+    }
+
+    const duplicates = [...indexOwners.entries()]
+      .filter(([, owners]) => owners.length > 1)
+      .map(([indexName, owners]) => ({ indexName, owners }));
+
+    expect(duplicates).toEqual([]);
+  });
+
   it("defines the workspace, project, evidence, mail, AI and finance domains", () => {
     for (const table of [
       "profiles",
