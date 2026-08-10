@@ -28,6 +28,15 @@ const draftWorkspaceScopePath = join(process.cwd(), "supabase", "migrations", "2
 const draftWorkspaceScope = existsSync(draftWorkspaceScopePath)
   ? readFileSync(draftWorkspaceScopePath, "utf8").toLowerCase()
   : "";
+const workspaceIntegrityPath = join(
+  process.cwd(),
+  "supabase",
+  "migrations",
+  "20260809056000_workspace_project_integrity.sql",
+);
+const workspaceIntegrity = existsSync(workspaceIntegrityPath)
+  ? readFileSync(workspaceIntegrityPath, "utf8").toLowerCase()
+  : "";
 
 describe("Enterprise Lookout V2 schema", () => {
   it("defines the workspace, project, evidence, mail, AI and finance domains", () => {
@@ -56,6 +65,32 @@ describe("Enterprise Lookout V2 schema", () => {
       'drop policy if exists "authenticated workspace access"',
     );
     expect(migration).not.toContain("auth.role()");
+  });
+
+  it("attributes Codex mutations without collapsing them into the generic system actor", () => {
+    expect(migration).toMatch(
+      /create type public\.actor_origin as enum \([\s\S]*?'codex'[\s\S]*?\)/,
+    );
+  });
+
+  it("admits workspace members only through explicit long-lived invitations", () => {
+    expect(migration).toMatch(
+      /'sebawitting@gmail\.com',[\s\S]*?'owner',[\s\S]*?'josemigueloaguado@estudiante\.uc\.cl',[\s\S]*?'member'/,
+    );
+    expect(migration).not.toContain("member_count");
+    expect(migration).not.toContain("if member_count = 0");
+  });
+
+  it("defines a private owner authorization helper for owner-only policies", () => {
+    expect(migration).toMatch(
+      /create or replace function app_private\.is_workspace_owner\(target_workspace_id uuid\)[\s\S]*?security definer[\s\S]*?set search_path = ''[\s\S]*?membership\.user_id = \(select auth\.uid\(\)\)[\s\S]*?membership\.role = 'owner'[\s\S]*?membership\.status = 'active'/,
+    );
+    expect(migration).toContain(
+      "revoke all on function app_private.is_workspace_owner(uuid) from public",
+    );
+    expect(migration).toContain(
+      "grant execute on function app_private.is_workspace_owner(uuid) to authenticated",
+    );
   });
 
   it("enforces the approved follow-up and CRM mail constraints", () => {
@@ -115,5 +150,37 @@ describe("Enterprise Lookout V2 schema", () => {
 
   it("applies the project/workspace pairing to both update visibility and the updated row", () => {
     expect(draftWorkspaceScope).toMatch(/create policy "project editors update drafts"[\s\S]*?using \([\s\S]*?project\.workspace_id = mail_drafts\.workspace_id[\s\S]*?\)[\s\S]*?with check \([\s\S]*?project\.workspace_id = mail_drafts\.workspace_id/);
+  });
+
+  it("enforces every direct V2 workspace/project pair at the database boundary", () => {
+    expect(workspaceIntegrity).toContain("unique (workspace_id, id)");
+
+    for (const table of [
+      "project_companies",
+      "evidence_sources",
+      "fact_revisions",
+      "activity_events",
+      "research_briefs",
+      "research_candidates",
+      "research_reports",
+      "ai_jobs",
+      "mail_threads",
+      "finance_goals",
+      "contributions",
+      "expenses",
+      "followup_sequences",
+      "project_tasks",
+      "meetings",
+      "project_links",
+      "mail_drafts",
+      "ai_feedback_rules",
+      "followup_enrollments",
+    ]) {
+      expect(workspaceIntegrity).toMatch(
+        new RegExp(
+          `alter table public\\.${table}[\\s\\S]*?foreign key \\(workspace_id, project_id\\)[\\s\\S]*?references public\\.projects \\(workspace_id, id\\)`,
+        ),
+      );
+    }
   });
 });

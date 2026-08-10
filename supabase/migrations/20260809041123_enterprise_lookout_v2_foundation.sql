@@ -24,7 +24,7 @@ end $$;
 
 do $$ begin
   create type public.actor_origin as enum (
-    'user', 'chatgpt', 'minimax', 'gmail', 'system', 'migration'
+    'user', 'chatgpt', 'codex', 'minimax', 'gmail', 'system', 'migration'
   );
 exception when duplicate_object then null;
 end $$;
@@ -102,13 +102,22 @@ create table public.workspace_invitations (
 );
 
 insert into public.workspace_invitations (workspace_id, email, role, expires_at)
-values (
-  '00000000-0000-4000-8000-000000000001',
-  'josemigueloaguado@estudiante.uc.cl',
-  'member',
-  now() + interval '365 days'
-)
-on conflict (workspace_id, email) do nothing;
+values
+  (
+    '00000000-0000-4000-8000-000000000001',
+    'sebawitting@gmail.com',
+    'owner',
+    now() + interval '10 years'
+  ),
+  (
+    '00000000-0000-4000-8000-000000000001',
+    'josemigueloaguado@estudiante.uc.cl',
+    'member',
+    now() + interval '10 years'
+  )
+on conflict (workspace_id, email) do update set
+  role = excluded.role,
+  expires_at = greatest(public.workspace_invitations.expires_at, excluded.expires_at);
 
 create or replace function app_private.handle_new_user()
 returns trigger
@@ -118,8 +127,6 @@ set search_path = ''
 as $$
 declare
   invitation public.workspace_invitations%rowtype;
-  target_workspace uuid := '00000000-0000-4000-8000-000000000001';
-  member_count integer;
 begin
   insert into public.profiles (id, email, display_name, avatar_url)
   values (
@@ -147,13 +154,6 @@ begin
     values (invitation.workspace_id, new.id, invitation.role, 'active', now())
     on conflict (workspace_id, user_id) do update set status = 'active', joined_at = coalesce(public.workspace_members.joined_at, now());
     update public.workspace_invitations set accepted_at = now() where id = invitation.id;
-  else
-    select count(*) into member_count from public.workspace_members where workspace_id = target_workspace and status = 'active';
-    if member_count = 0 then
-      insert into public.workspace_members (workspace_id, user_id, role, status, joined_at)
-      values (target_workspace, new.id, 'owner', 'active', now())
-      on conflict (workspace_id, user_id) do nothing;
-    end if;
   end if;
   return new;
 end;
@@ -572,6 +572,23 @@ as $$
   );
 $$;
 
+create or replace function app_private.is_workspace_owner(target_workspace_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select (select auth.uid()) is not null and exists (
+    select 1
+    from public.workspace_members membership
+    where membership.workspace_id = target_workspace_id
+      and membership.user_id = (select auth.uid())
+      and membership.role = 'owner'
+      and membership.status = 'active'
+  );
+$$;
+
 create or replace function app_private.can_write_project(target_project_id uuid)
 returns boolean
 language sql
@@ -629,9 +646,11 @@ as $$
 $$;
 
 revoke all on function app_private.is_workspace_member(uuid) from public;
+revoke all on function app_private.is_workspace_owner(uuid) from public;
 revoke all on function app_private.can_write_project(uuid) from public;
 revoke all on function app_private.can_use_gmail_account(uuid, text) from public;
 grant execute on function app_private.is_workspace_member(uuid) to authenticated;
+grant execute on function app_private.is_workspace_owner(uuid) to authenticated;
 grant execute on function app_private.can_write_project(uuid) to authenticated;
 grant execute on function app_private.can_use_gmail_account(uuid, text) to authenticated;
 
