@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ENTERPRISE_TOOL_DEFINITIONS, assertToolAuthorization } from "@/lib/v2/tool-service";
+import { ENTERPRISE_TOOL_DEFINITIONS, assertToolAuthorization, mapToolProviderToActorOrigin } from "@/lib/v2/tool-service";
 
 describe("Enterprise Lookout tool surface", () => {
   it("exposes focused research, context and drafting operations", () => {
@@ -24,5 +24,11 @@ describe("Enterprise Lookout tool surface", () => {
     expect(() => assertToolAuthorization(actor, "list_projects", {})).not.toThrow();
     expect(() => assertToolAuthorization(actor, "save_research_report", { idempotencyKey: "same" })).toThrow("scope");
     expect(() => assertToolAuthorization({ ...actor, scopes: ["workspace:read", "research:write"] }, "save_research_report", {})).toThrow("idempotencyKey");
+  });
+
+  it("maps automation connections to the system actor while preserving Codex attribution", () => {
+    expect(mapToolProviderToActorOrigin("automation")).toBe("system");
+    expect(mapToolProviderToActorOrigin("codex")).toBe("codex");
+    expect(mapToolProviderToActorOrigin("chatgpt")).toBe("chatgpt");
   });
 });

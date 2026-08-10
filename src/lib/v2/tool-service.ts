@@ -4,11 +4,17 @@ import { z } from "zod";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 
 export type ToolActor = {
-  origin: "chatgpt" | "codex" | "automation";
+  origin: "chatgpt" | "codex" | "system";
   scopes: string[];
   userId: string;
   workspaceId: string;
 };
+
+export function mapToolProviderToActorOrigin(provider: string): ToolActor["origin"] {
+  if (provider === "automation") return "system";
+  if (provider === "chatgpt" || provider === "codex") return provider;
+  throw new Error("Proveedor de herramienta no compatible");
+}
 
 const idempotencyKey = z.string().min(8).max(160);
 const sourceSchema = z.object({ title: z.string().min(1), url: z.string().url(), capturedAt: z.string().datetime().optional() });
@@ -51,7 +57,7 @@ export async function authenticateToolRequest(request: Request): Promise<ToolAct
       const { data: membership } = await admin.from("workspace_members").select("status").eq("workspace_id", data.workspace_id).eq("user_id", data.user_id).eq("status", "active").maybeSingle();
       if (!membership) return null;
       await admin.from("tool_connections").update({ last_used_at: new Date().toISOString() }).eq("token_hash", tokenHash);
-      return { origin: data.provider as ToolActor["origin"], scopes: data.scopes, userId: data.user_id, workspaceId: data.workspace_id };
+      return { origin: mapToolProviderToActorOrigin(data.provider), scopes: data.scopes, userId: data.user_id, workspaceId: data.workspace_id };
     }
   }
 

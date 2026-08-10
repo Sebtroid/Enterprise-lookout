@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { SettingsWorkspace } from "../settings-workspace";
 import type { V2SettingsSnapshot } from "@/lib/v2/types";
@@ -18,11 +18,15 @@ const demoSettingsSnapshot: V2SettingsSnapshot = {
     { id: "hunter", name: "Hunter", detail: "Verificación de contactos", state: "not_configured" as const },
   ],
   vault: [
-    { id: "supabase-database", name: "Contraseña de base de datos Supabase", state: "unavailable" as const, canReveal: false, canReplace: true },
+    { id: "supabase-db-password", name: "Contraseña de base de datos Supabase", state: "unavailable" as const, canReveal: false, canReplace: true },
   ],
 };
 
 describe("SettingsWorkspace", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it("shows Gmail, Microsoft 365, integrations, Vault and budget", () => {
     render(<SettingsWorkspace settings={demoSettingsSnapshot} budget={{ spentUsd: 1.82, limitUsd: 5 }} isDemo />);
 
@@ -97,5 +101,71 @@ describe("SettingsWorkspace", () => {
     const replaceButton = screen.getByRole("button", { name: "Reemplazar Contraseña de base de datos Supabase" });
     expect(replaceButton).toHaveClass("w-full", "whitespace-normal", "sm:w-auto");
     expect(replaceButton.parentElement).toHaveClass("w-full", "min-w-0", "sm:w-auto");
+  });
+
+  it("persists a live budget and reports success", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({ limitUsd: 8 }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<SettingsWorkspace settings={demoSettingsSnapshot} budget={{ spentUsd: 1.82, limitUsd: 5 }} isDemo={false} />);
+
+    fireEvent.change(screen.getByLabelText("Presupuesto mensual de MiniMax en USD"), { target: { value: "8" } });
+    fireEvent.click(screen.getByRole("button", { name: "Guardar presupuesto" }));
+
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Presupuesto guardado"));
+    expect(fetchMock).toHaveBeenCalledWith("/api/v2/settings/budget", expect.objectContaining({
+      method: "PATCH",
+      body: JSON.stringify({ limitUsd: 8 }),
+    }));
+    expect(screen.getByText(/USD 1\.82 usados de USD 8\.00/)).toBeVisible();
+  });
+
+  it("replaces a live secret without keeping its value in the client dialog", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({ key: "supabase-db-password", configured: true }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<SettingsWorkspace settings={demoSettingsSnapshot} budget={{ spentUsd: 0, limitUsd: 5 }} isDemo={false} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Reemplazar Contraseña de base de datos Supabase" }));
+    const input = screen.getByLabelText("Nuevo valor para Contraseña de base de datos Supabase");
+    fireEvent.change(input, { target: { value: "test-only-secret" } });
+    fireEvent.click(screen.getByRole("button", { name: "Guardar secreto" }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Reemplazar secreto" })).not.toBeInTheDocument());
+    expect(fetchMock).toHaveBeenCalledWith("/api/v2/settings/vault/replace", expect.objectContaining({
+      method: "POST",
+      body: JSON.stringify({ key: "supabase-db-password", value: "test-only-secret" }),
+    }));
+    expect(screen.getByRole("status")).toHaveTextContent("Secreto guardado");
+
+    fireEvent.click(screen.getByRole("button", { name: "Reemplazar Contraseña de base de datos Supabase" }));
+    expect(screen.getByLabelText("Nuevo valor para Contraseña de base de datos Supabase")).toHaveValue("");
+  });
+
+  it("reveals a configured live secret on demand and clears it when closed", async () => {
+    const liveSettings: V2SettingsSnapshot = {
+      ...demoSettingsSnapshot,
+      vault: demoSettingsSnapshot.vault.map((secret) => ({ ...secret, state: "connected", canReveal: true })),
+    };
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({ key: "supabase-db-password", value: "revealed-test-value" }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<SettingsWorkspace settings={liveSettings} budget={{ spentUsd: 0, limitUsd: 5 }} isDemo={false} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Revelar Contraseña de base de datos Supabase" }));
+    await waitFor(() => expect(screen.getByDisplayValue("revealed-test-value")).toBeVisible());
+    expect(fetchMock).toHaveBeenCalledWith("/api/v2/settings/vault/reveal", expect.objectContaining({
+      method: "POST",
+      body: JSON.stringify({ key: "supabase-db-password" }),
+    }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar secreto revelado" }));
+    await waitFor(() => expect(screen.queryByDisplayValue("revealed-test-value")).not.toBeInTheDocument());
   });
 });

@@ -90,6 +90,7 @@ async function loadLiveSnapshot(
     tasksResult,
     jobsResult,
     usageResult,
+    aiSettingsResult,
   ] = await Promise.all([
     supabase.from("workspace_members").select("user_id, profiles(display_name)").eq("workspace_id", workspaceId).eq("status", "active"),
     supabase.from("projects").select("id,name,status,access_mode,ends_on,brief,owner:profiles!projects_owner_user_id_fkey(display_name),institution:institutions(name)").eq("workspace_id", workspaceId).neq("status", "archived").order("updated_at", { ascending: false }),
@@ -106,9 +107,10 @@ async function loadLiveSnapshot(
     supabase.from("project_tasks").select("id,project_id,title,due_at,source,assigned_to,projects(name),profiles!project_tasks_assigned_to_fkey(display_name)").eq("workspace_id", workspaceId).in("status", ["pending", "in_progress"]).order("due_at", { ascending: true }).limit(30),
     supabase.from("ai_jobs").select("id,job_type,status,approved_by,projects(name)").eq("workspace_id", workspaceId).in("status", ["approved", "completed", "reviewing", "failed"]).order("updated_at", { ascending: false }).limit(30),
     supabase.from("ai_usage_ledger").select("cost_usd").eq("workspace_id", workspaceId).gte("created_at", new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()),
+    supabase.from("workspace_ai_settings").select("minimax_monthly_budget_usd").eq("workspace_id", workspaceId).maybeSingle(),
   ]);
 
-  const results = [profilesResult, projectsResult, companiesResult, contactsResult, projectCompaniesResult, goalsResult, contributionsResult, messagesResult, threadsResult, draftsResult, senderIdentitiesResult, senderPermissionsResult, tasksResult, jobsResult, usageResult];
+  const results = [profilesResult, projectsResult, companiesResult, contactsResult, projectCompaniesResult, goalsResult, contributionsResult, messagesResult, threadsResult, draftsResult, senderIdentitiesResult, senderPermissionsResult, tasksResult, jobsResult, usageResult, aiSettingsResult];
   const failed = results.find((result) => result.error);
   if (failed?.error) throw new Error(`No se pudo cargar Enterprise Lookout V2: ${failed.error.message}`);
 
@@ -259,7 +261,7 @@ async function loadLiveSnapshot(
     attention: [...taskAttention, ...jobAttention],
     aiBudget: {
       spentUsd: ((usageResult.data ?? []) as Row[]).reduce((sum, row) => sum + number(row.cost_usd), 0),
-      limitUsd: number(process.env.MINIMAX_MONTHLY_BUDGET_USD || 5),
+      limitUsd: number((aiSettingsResult.data as Row | null)?.minimax_monthly_budget_usd ?? 5),
     },
   };
 }
@@ -317,11 +319,17 @@ const demoSettingsSnapshot: V2SettingsSnapshot = {
     { id: "hunter", name: "Hunter", detail: "Búsqueda y verificación de contactos", state: "not_configured" },
   ],
   vault: [
-    { id: "supabase-database", name: "Contraseña de base de datos Supabase", state: "unavailable", canReveal: false, canReplace: true },
-    { id: "gmail-oauth", name: "Secreto OAuth de Gmail", state: "not_configured", canReveal: false, canReplace: true },
-    { id: "microsoft-oauth", name: "Secreto OAuth de Microsoft", state: "not_configured", canReveal: false, canReplace: true },
-    { id: "minimax-api", name: "Clave API de MiniMax", state: "not_configured", canReveal: false, canReplace: true },
-    { id: "hunter-api", name: "Clave API de Hunter", state: "not_configured", canReveal: false, canReplace: true },
+    { id: "supabase-db-password", name: "Contraseña de base de datos Supabase", state: "not_configured", canReveal: false, canReplace: true },
+    { id: "gmail-client-id", name: "Client ID de Gmail", state: "not_configured", canReveal: false, canReplace: true },
+    { id: "gmail-client-secret", name: "Client secret de Gmail", state: "not_configured", canReveal: false, canReplace: true },
+    { id: "gmail-token-encryption-key", name: "Clave de cifrado de tokens Gmail", state: "not_configured", canReveal: false, canReplace: true },
+    { id: "microsoft-client-id", name: "Client ID de Microsoft", state: "not_configured", canReveal: false, canReplace: true },
+    { id: "microsoft-client-secret", name: "Client secret de Microsoft", state: "not_configured", canReveal: false, canReplace: true },
+    { id: "microsoft-tenant-id", name: "Tenant ID de Microsoft", state: "not_configured", canReveal: false, canReplace: true },
+    { id: "minimax-api-key", name: "Clave API de MiniMax", state: "not_configured", canReveal: false, canReplace: true },
+    { id: "minimax-model", name: "Modelo de MiniMax", state: "not_configured", canReveal: false, canReplace: true },
+    { id: "hunter-api-key", name: "Clave API de Hunter", state: "not_configured", canReveal: false, canReplace: true },
+    { id: "cron-secret", name: "Secreto de workers programados", state: "not_configured", canReveal: false, canReplace: true },
   ],
 };
 
@@ -336,17 +344,25 @@ export async function getV2SettingsSnapshot(): Promise<V2SettingsResult> {
   if (!auth.user) throw new Error("Se requiere una sesión válida");
   const { data: membership } = await supabase.from("workspace_members").select("workspace_id,role").eq("user_id", auth.user.id).eq("status", "active").limit(1).maybeSingle();
   if (!membership) throw new Error("El usuario no pertenece a un workspace");
-  const [teamResult, accountsResult, permissionsResult] = await Promise.all([
+  const isOwner = membership.role === "owner";
+  const [teamResult, accountsResult, permissionsResult, vaultStatusResult] = await Promise.all([
     supabase.from("workspace_members").select("user_id,role,status,profiles(display_name)").eq("workspace_id", membership.workspace_id),
     supabase.from("gmail_accounts").select("id,email,sync_status,active").eq("workspace_id", membership.workspace_id).order("email"),
     supabase.from("gmail_account_permissions").select("gmail_account_id,can_read,can_draft,can_send,can_manage").eq("user_id", auth.user.id),
+    isOwner
+      ? supabase.rpc("workspace_secret_status", { target_workspace_id: membership.workspace_id })
+      : Promise.resolve({ data: [], error: null }),
   ]);
-  const error = teamResult.error ?? accountsResult.error ?? permissionsResult.error;
+  const error = teamResult.error ?? accountsResult.error ?? permissionsResult.error ?? vaultStatusResult.error;
   if (error) {
     if (demoEnabled) return { ...demoSettingsSnapshot, isDemo: true };
     throw new Error(error.message);
   }
-  const isOwner = membership.role === "owner";
+  const configuredSecrets = new Set(
+    ((vaultStatusResult.data ?? []) as Row[])
+      .filter((row) => row.is_configured === true)
+      .map((row) => text(row.secret_key)),
+  );
   const permissionMap = new Map(((permissionsResult.data ?? []) as Row[]).map((row) => [text(row.gmail_account_id), row]));
   const gmailAccounts = ((accountsResult.data ?? []) as Row[]).map((row) => {
     const permission = permissionMap.get(text(row.id));
@@ -360,17 +376,21 @@ export async function getV2SettingsSnapshot(): Promise<V2SettingsResult> {
   });
   const gmailState = aggregateGmailProviderState(
     gmailAccounts.map((account) => account.state),
-    Boolean(process.env.GMAIL_CLIENT_ID && process.env.GMAIL_CLIENT_SECRET),
+    configuredSecrets.has("gmail-client-id") && configuredSecrets.has("gmail-client-secret"),
   );
-  const minimaxState = process.env.MINIMAX_API_KEY && process.env.MINIMAX_MODEL ? "connected" as const : "not_configured" as const;
-  const hunterState = process.env.HUNTER_API_KEY ? "connected" as const : "not_configured" as const;
-  const vaultSecret = (id: string, name: string, configured: boolean, unavailable = false) => ({
+  const minimaxState = configuredSecrets.has("minimax-api-key") && configuredSecrets.has("minimax-model") ? "connected" as const : "not_configured" as const;
+  const hunterState = configuredSecrets.has("hunter-api-key") ? "connected" as const : "not_configured" as const;
+  const microsoftConfigured = ["microsoft-client-id", "microsoft-client-secret", "microsoft-tenant-id"].every((key) => configuredSecrets.has(key));
+  const vaultSecret = (id: string, name: string) => {
+    const configured = configuredSecrets.has(id);
+    return {
     id,
     name,
-    state: unavailable ? "unavailable" as const : configured ? "connected" as const : "not_configured" as const,
-    canReveal: isOwner && configured && !unavailable,
+    state: configured ? "connected" as const : "not_configured" as const,
+    canReveal: isOwner && configured,
     canReplace: isOwner,
-  });
+    };
+  };
   return {
     isDemo: false,
     team: ((teamResult.data ?? []) as Row[]).map((row) => ({
@@ -379,18 +399,24 @@ export async function getV2SettingsSnapshot(): Promise<V2SettingsResult> {
     })),
     mailProviders: [
       { id: "gmail", name: "Gmail", state: gmailState, actionHref: "/api/gmail?action=connect", accounts: gmailAccounts },
-      { id: "microsoft", name: "Microsoft 365", state: "unavailable", accounts: [] },
+      { id: "microsoft", name: "Microsoft 365", state: microsoftConfigured ? "action_required" : "not_configured", accounts: [] },
     ],
     integrations: [
       { id: "minimax", name: "MiniMax", detail: "Investigación y redacción asistida", state: minimaxState },
       { id: "hunter", name: "Hunter", detail: "Búsqueda y verificación de contactos", state: hunterState },
     ],
     vault: [
-      vaultSecret("supabase-database", "Contraseña de base de datos Supabase", Boolean(process.env.SUPABASE_DB_PASSWORD), !process.env.SUPABASE_DB_PASSWORD),
-      vaultSecret("gmail-oauth", "Secreto OAuth de Gmail", Boolean(process.env.GMAIL_CLIENT_SECRET)),
-      vaultSecret("microsoft-oauth", "Secreto OAuth de Microsoft", Boolean(process.env.MICROSOFT_CLIENT_SECRET)),
-      vaultSecret("minimax-api", "Clave API de MiniMax", Boolean(process.env.MINIMAX_API_KEY)),
-      vaultSecret("hunter-api", "Clave API de Hunter", Boolean(process.env.HUNTER_API_KEY)),
+      vaultSecret("supabase-db-password", "Contraseña de base de datos Supabase"),
+      vaultSecret("gmail-client-id", "Client ID de Gmail"),
+      vaultSecret("gmail-client-secret", "Client secret de Gmail"),
+      vaultSecret("gmail-token-encryption-key", "Clave de cifrado de tokens Gmail"),
+      vaultSecret("microsoft-client-id", "Client ID de Microsoft"),
+      vaultSecret("microsoft-client-secret", "Client secret de Microsoft"),
+      vaultSecret("microsoft-tenant-id", "Tenant ID de Microsoft"),
+      vaultSecret("minimax-api-key", "Clave API de MiniMax"),
+      vaultSecret("minimax-model", "Modelo de MiniMax"),
+      vaultSecret("hunter-api-key", "Clave API de Hunter"),
+      vaultSecret("cron-secret", "Secreto de workers programados"),
     ],
   };
 }
