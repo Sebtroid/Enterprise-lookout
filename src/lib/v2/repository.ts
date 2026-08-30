@@ -290,6 +290,8 @@ export async function getV2WorkspaceSnapshot(): Promise<V2WorkspaceSnapshot> {
     .select("workspace_id, workspaces(name)")
     .eq("user_id", authData.user.id)
     .eq("status", "active")
+    .order("joined_at", { ascending: true })
+    .order("workspace_id", { ascending: true })
     .limit(1)
     .maybeSingle();
 
@@ -343,7 +345,7 @@ export async function getV2SettingsSnapshot(): Promise<V2SettingsResult> {
   }
   const { data: auth } = await supabase.auth.getUser();
   if (!auth.user) throw new Error("Se requiere una sesión válida");
-  const { data: membership } = await supabase.from("workspace_members").select("workspace_id,role").eq("user_id", auth.user.id).eq("status", "active").limit(1).maybeSingle();
+  const { data: membership } = await supabase.from("workspace_members").select("workspace_id,role").eq("user_id", auth.user.id).eq("status", "active").order("joined_at", { ascending: true }).order("workspace_id", { ascending: true }).limit(1).maybeSingle();
   if (!membership) throw new Error("El usuario no pertenece a un workspace");
   const isOwner = membership.role === "owner";
   const admin = getSupabaseAdminClient();

@@ -35,9 +35,24 @@ describe("workspace runtime config", () => {
     await expect(getWorkspaceRuntimeConfig("workspace", ["minimax-api-key"]))
       .rejects.not.toThrow("sensitive database detail");
   });
+  it("fails closed when the workspace budget query fails", async () => {
+    const client = adminClient({}, 5);
+    client.from().maybeSingle.mockResolvedValue({ data: null, error: { message: "database detail" } });
+    getSupabaseAdminClient.mockReturnValue(client);
+    await expect(getWorkspaceRuntimeConfig("workspace", [])).rejects.toThrow("No se pudo leer el presupuesto de IA");
+  });
+  it.each([Number.NaN, -1, Number.POSITIVE_INFINITY])("rejects invalid budgets: %s", async (budget) => {
+    getSupabaseAdminClient.mockReturnValue(adminClient({}, budget));
+    await expect(getWorkspaceRuntimeConfig("workspace", [])).rejects.toThrow("Presupuesto de IA inválido");
+  });
   it("authorizes bearer tokens against each workspace Vault secret", async () => {
     getSupabaseAdminClient.mockReturnValue(adminClient({ "cron-secret": "vault-cron-secret-123" }));
     await expect(authorizeWorkspaceCronRequest("Bearer vault-cron-secret-123", ["workspace-a"])).resolves.toEqual(["workspace-a"]);
     await expect(authorizeWorkspaceCronRequest("Bearer wrong", ["workspace-a"])).resolves.toEqual([]);
+  });
+  it("never authorizes cron from a global environment fallback", async () => {
+    getSupabaseAdminClient.mockReturnValue(adminClient({}));
+    vi.stubEnv("CRON_SECRET", "global-cron-secret-123");
+    await expect(authorizeWorkspaceCronRequest("Bearer global-cron-secret-123", ["workspace-a"])).resolves.toEqual([]);
   });
 });

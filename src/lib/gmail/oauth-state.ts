@@ -1,4 +1,4 @@
-import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
+import { createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 
 type OAuthStatePayload = {
   redirect: string;
@@ -6,7 +6,10 @@ type OAuthStatePayload = {
   nonce?: string;
   issuedAt?: number;
   workspaceId?: string;
+  userId?: string;
 };
+
+export const GMAIL_OAUTH_NONCE_COOKIE = "gmail_oauth_nonce";
 
 const MAX_STATE_AGE_MS = 10 * 60 * 1000;
 
@@ -63,6 +66,12 @@ function safeEqual(left: string, right: string) {
     leftBuffer.length === rightBuffer.length &&
     timingSafeEqual(leftBuffer, rightBuffer)
   );
+}
+
+export function createOAuthNonce() { return randomBytes(32).toString("base64url"); }
+export function hashOAuthNonce(nonce: string, secret: string) { return sign(nonce, getSecret(secret)); }
+export function verifyOAuthNonce(nonce: string, expectedHash: string | undefined, secret: string) {
+  return Boolean(expectedHash) && safeEqual(hashOAuthNonce(nonce, secret), expectedHash!);
 }
 
 function getSecret(secret: string | undefined) {

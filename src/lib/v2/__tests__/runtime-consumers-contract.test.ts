@@ -11,6 +11,38 @@ describe("runtime Vault consumers", () => {
     expect(minimax).not.toContain("process.env.MINIMAX_API_KEY");
     expect(minimax).not.toContain("process.env.MINIMAX_MODEL");
   });
+
+  it("returns worker unavailable when runtime configuration cannot be loaded", () => {
+    for (const name of ["minimax", "followups"]) {
+      const route = source("src", "app", "api", "v2", "workers", name, "route.ts");
+      expect(route).toContain('status: 503');
+      expect(route).toContain('worker_unavailable');
+    }
+  });
+
+  it("selects the same deterministic workspace for settings and Gmail OAuth", () => {
+    for (const path of [
+      ["src", "lib", "v2", "settings-api.ts"],
+      ["src", "app", "api", "gmail", "route.ts"],
+      ["src", "app", "api", "gmail", "callback", "route.ts"],
+    ]) {
+      const file = source(...path);
+      expect(file).toContain('.order("joined_at", { ascending: true })');
+      expect(file).toContain('.order("workspace_id", { ascending: true })');
+    }
+  });
+
+  it("stores and consumes the Gmail OAuth nonce in a hardened short-lived cookie", () => {
+    const connect = source("src", "app", "api", "gmail", "route.ts");
+    const callback = source("src", "app", "api", "gmail", "callback", "route.ts");
+    expect(connect).toContain("httpOnly: true");
+    expect(connect).toContain("secure: true");
+    expect(connect).toContain('sameSite: "lax"');
+    expect(connect).toContain("maxAge: 600");
+    expect(callback).toContain("verifiedState.userId === user.id");
+    expect(callback).toContain("verifyOAuthNonce");
+    expect(callback).toContain("response.cookies.delete");
+  });
   it("authorizes both workers by workspace Vault cron secrets", () => {
     for (const name of ["minimax", "followups"]) {
       const route = source("src", "app", "api", "v2", "workers", name, "route.ts");

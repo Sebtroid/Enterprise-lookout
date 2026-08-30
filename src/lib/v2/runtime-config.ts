@@ -28,18 +28,20 @@ export async function getWorkspaceRuntimeConfig(workspaceId: string, keys: Works
     }
     return [key, vaultValue ?? process.env[ENV_KEYS[key]] ?? null] as const;
   }));
-  let budgetValue: unknown = null;
-  if (admin) {
-    const { data } = await admin.from("workspace_ai_settings").select("minimax_monthly_budget_usd").eq("workspace_id", workspaceId).maybeSingle();
-    budgetValue = data?.minimax_monthly_budget_usd ?? null;
-  }
+  if (!admin) throw new Error("No se pudo leer el presupuesto de IA");
+  const { data: budgetData, error: budgetError } = await admin.from("workspace_ai_settings").select("minimax_monthly_budget_usd").eq("workspace_id", workspaceId).maybeSingle();
+  if (budgetError) throw new Error("No se pudo leer el presupuesto de IA");
+  const budgetValue: unknown = budgetData?.minimax_monthly_budget_usd ?? null;
   const envBudget = Number(process.env.MINIMAX_MONTHLY_BUDGET_USD ?? 5);
-  return { secrets: Object.fromEntries(entries) as Partial<Record<WorkspaceSecretKey, string | null>>, budgetUsd: budgetValue === null ? envBudget : Number(budgetValue) };
+  const budgetUsd = budgetValue === null ? envBudget : Number(budgetValue);
+  if (!Number.isFinite(budgetUsd) || budgetUsd < 0) throw new Error("Presupuesto de IA inválido");
+  return { secrets: Object.fromEntries(entries) as Partial<Record<WorkspaceSecretKey, string | null>>, budgetUsd };
 }
 
 export async function listWorkspaceIds() {
-  const admin = getSupabaseAdminClient(); if (!admin) return [];
-  const { data } = await admin.from("workspaces").select("id");
+  const admin = getSupabaseAdminClient(); if (!admin) throw new Error("Configuración de servidor no disponible");
+  const { data, error } = await admin.from("workspaces").select("id");
+  if (error) throw new Error("No se pudieron listar los workspaces");
   return (data ?? []).map((row) => String(row.id));
 }
 
@@ -47,9 +49,12 @@ export async function authorizeWorkspaceCronRequest(header: string | null, works
   const token = header?.startsWith("Bearer ") ? header.slice(7) : "";
   if (!token) return [];
   const authorized: string[] = [];
+  const admin = getSupabaseAdminClient();
+  if (!admin) throw new Error("Configuración de servidor no disponible");
   for (const workspaceId of workspaceIds) {
-    const { secrets } = await getWorkspaceRuntimeConfig(workspaceId, ["cron-secret"]);
-    if (safeSecretEqual(token, secrets["cron-secret"])) authorized.push(workspaceId);
+    const { data, error } = await admin.rpc("get_workspace_runtime_secret", { target_workspace_id: workspaceId, target_secret_key: "cron-secret" });
+    if (error) throw new Error("No se pudo leer la configuración segura del workspace");
+    if (safeSecretEqual(token, typeof data === "string" ? data : null)) authorized.push(workspaceId);
   }
   return authorized;
 }

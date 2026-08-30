@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getAllowedUser } from "@/lib/auth/request";
 import { getSafeOAuthRedirectPath } from "@/lib/gmail/connection-policy";
-import { verifyOAuthState } from "@/lib/gmail/oauth-state";
+import { GMAIL_OAUTH_NONCE_COOKIE, verifyOAuthNonce, verifyOAuthState } from "@/lib/gmail/oauth-state";
 import { fetchConnectedGmailEmail } from "@/lib/gmail/profile";
 import { encryptToken } from "@/lib/gmail/token-crypto";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
@@ -21,13 +21,15 @@ export async function GET(req: NextRequest) {
   const state = req.nextUrl.searchParams.get("state");
   if (oauthError) return redirectWithStatus(req, DEFAULT_REDIRECT, { gmail_error: oauthError });
   try {
-    const { data: membership } = await admin.from("workspace_members").select("workspace_id").eq("user_id", user.id).eq("status", "active").limit(1).maybeSingle();
+    const { data: membership } = await admin.from("workspace_members").select("workspace_id").eq("user_id", user.id).eq("status", "active").order("joined_at", { ascending: true }).order("workspace_id", { ascending: true }).limit(1).maybeSingle();
     if (!membership) return redirectWithStatus(req, DEFAULT_REDIRECT, { gmail_error: "workspace_access_denied" });
     const runtime = await getWorkspaceRuntimeConfig(membership.workspace_id, ["gmail-client-id", "gmail-client-secret", "gmail-token-encryption-key"]);
     const clientId = runtime.secrets["gmail-client-id"], clientSecret = runtime.secrets["gmail-client-secret"], encryptionKey = runtime.secrets["gmail-token-encryption-key"];
     if (!clientId || !clientSecret || !encryptionKey) return redirectWithStatus(req, DEFAULT_REDIRECT, { gmail_error: "missing_gmail_config" });
     const verifiedState = state ? verifyOAuthState(state, encryptionKey) : null;
-    if (!code || !verifiedState || verifiedState.workspaceId !== membership.workspace_id) return redirectWithStatus(req, DEFAULT_REDIRECT, { gmail_error: !code ? "no_code" : "invalid_state" });
+    const nonceHash = req.cookies.get(GMAIL_OAUTH_NONCE_COOKIE)?.value;
+    const validState = verifiedState && verifiedState.userId === user.id && verifiedState.workspaceId === membership.workspace_id && Boolean(verifiedState.nonce) && verifyOAuthNonce(verifiedState.nonce!, nonceHash, encryptionKey);
+    if (!code || !validState) return redirectWithStatus(req, DEFAULT_REDIRECT, { gmail_error: !code ? "no_code" : "invalid_state" });
     const redirectPath = getSafeOAuthRedirectPath(verifiedState.redirect);
     const tokenResponse = await fetch("https://oauth2.googleapis.com/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ code, client_id: clientId, client_secret: clientSecret, redirect_uri: REDIRECT_URI, grant_type: "authorization_code" }) });
     const tokens = await tokenResponse.json() as { access_token?: string; refresh_token?: string; expires_in?: number; error?: string };
@@ -46,4 +48,4 @@ export async function GET(req: NextRequest) {
   } catch { return redirectWithStatus(req, DEFAULT_REDIRECT, { gmail_error: "server_error" }); }
 }
 
-function redirectWithStatus(req: NextRequest, redirectPath: string, params: Record<string, string>) { const url = new URL(getSafeOAuthRedirectPath(redirectPath), req.url); for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value); return NextResponse.redirect(url); }
+function redirectWithStatus(req: NextRequest, redirectPath: string, params: Record<string, string>) { const url = new URL(getSafeOAuthRedirectPath(redirectPath), req.url); for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value); const response = NextResponse.redirect(url); response.cookies.delete({ name: GMAIL_OAUTH_NONCE_COOKIE, path: "/api/gmail/callback" }); return response; }

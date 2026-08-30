@@ -41,6 +41,8 @@ export async function getSettingsOwnerContext(): Promise<OwnerContext | { ok: fa
     .select("workspace_id,role")
     .eq("user_id", user.id)
     .eq("status", "active")
+    .order("joined_at", { ascending: true })
+    .order("workspace_id", { ascending: true })
     .limit(1)
     .maybeSingle();
 

@@ -6,7 +6,7 @@ import {
   isEncryptedToken,
 } from "../token-crypto";
 import { buildGmailSendBody, buildMimeMessage, encodeRawMessage } from "../mime";
-import { signOAuthState, verifyOAuthState } from "../oauth-state";
+import { createOAuthNonce, hashOAuthNonce, signOAuthState, verifyOAuthNonce, verifyOAuthState } from "../oauth-state";
 import { isAllowedEmail } from "../../auth/allowed-emails";
 import {
   getGmailConnectionDecision,
@@ -40,6 +40,15 @@ describe("Gmail security helpers", () => {
       redirect: "/campaigns",
     });
     expect(verifyOAuthState(`${state}x`, secret)).toBeNull();
+  });
+
+  it("binds OAuth state to a user/workspace and verifies its one-time nonce", () => {
+    const nonce = createOAuthNonce();
+    const state = signOAuthState({ redirect: "/settings", userId: "user-1", workspaceId: "workspace-1", nonce }, secret);
+    expect(verifyOAuthState(state, secret)).toMatchObject({ userId: "user-1", workspaceId: "workspace-1", nonce });
+    const nonceHash = hashOAuthNonce(nonce, secret);
+    expect(verifyOAuthNonce(nonce, nonceHash, secret)).toBe(true);
+    expect(verifyOAuthNonce("replayed-or-wrong", nonceHash, secret)).toBe(false);
   });
 
   it("encodes MIME messages as Gmail base64url and keeps header injection out", () => {

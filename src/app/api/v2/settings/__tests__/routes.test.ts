@@ -20,6 +20,7 @@ function ownerQuery(role: "owner" | "member" = "owner") {
   const chain = {
     select: vi.fn(),
     eq: vi.fn(),
+    order: vi.fn(),
     limit: vi.fn(),
     maybeSingle: vi.fn().mockResolvedValue({
       data: { workspace_id: workspaceId, role },
@@ -28,6 +29,7 @@ function ownerQuery(role: "owner" | "member" = "owner") {
   };
   chain.select.mockReturnValue(chain);
   chain.eq.mockReturnValue(chain);
+  chain.order.mockReturnValue(chain);
   chain.limit.mockReturnValue(chain);
   return chain;
 }
