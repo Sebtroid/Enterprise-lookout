@@ -1,12 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { getAllowedUser, getSupabaseServerClient } = vi.hoisted(() => ({
+const { getAllowedUser, getSupabaseServerClient, getSupabaseAdminClient } = vi.hoisted(() => ({
   getAllowedUser: vi.fn(),
   getSupabaseServerClient: vi.fn(),
+  getSupabaseAdminClient: vi.fn(),
 }));
 
 vi.mock("@/lib/auth/request", () => ({ getAllowedUser }));
 vi.mock("@/lib/supabase/server", () => ({ getSupabaseServerClient }));
+vi.mock("@/lib/supabase/admin", () => ({ getSupabaseAdminClient }));
 
 import { PATCH as updateBudget } from "../budget/route";
 import { POST as replaceSecret } from "../vault/replace/route";
@@ -64,6 +66,7 @@ describe("workspace settings API", () => {
   beforeEach(() => {
     getAllowedUser.mockReset().mockResolvedValue({ id: "user-id" });
     getSupabaseServerClient.mockReset();
+    getSupabaseAdminClient.mockReset().mockReturnValue({ rpc: vi.fn() });
   });
 
   it("requires an authenticated user before updating the budget", async () => {
@@ -129,6 +132,7 @@ describe("workspace settings API", () => {
   it("replaces an allowlisted secret without echoing its value", async () => {
     const { client, rpc } = vaultClient();
     getSupabaseServerClient.mockResolvedValue(client);
+    getSupabaseAdminClient.mockReturnValue({ rpc });
     const secret = "test-only-secret-value";
 
     const response = await replaceSecret(new Request("http://localhost", {
@@ -148,6 +152,7 @@ describe("workspace settings API", () => {
   it("reveals only an allowlisted secret for an owner and prevents caching", async () => {
     const { client, rpc } = vaultClient({ rpcData: "revealed-test-value" });
     getSupabaseServerClient.mockResolvedValue(client);
+    getSupabaseAdminClient.mockReturnValue({ rpc });
 
     const response = await revealSecret(new Request("http://localhost", {
       method: "POST",
@@ -166,6 +171,7 @@ describe("workspace settings API", () => {
   it("rejects unsupported secret keys and sanitizes RPC errors", async () => {
     const { client } = vaultClient({ rpcError: { message: "vault internals must stay private" } });
     getSupabaseServerClient.mockResolvedValue(client);
+    getSupabaseAdminClient.mockReturnValue({ rpc: client.rpc });
 
     const unsupported = await revealSecret(new Request("http://localhost", {
       method: "POST",

@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { evaluateAiBudget } from "@/lib/v2/domain";
+import { getWorkspaceRuntimeConfig } from "@/lib/v2/runtime-config";
 
 const librarianResultSchema = z.object({
   summary: z.string(),
@@ -15,12 +16,13 @@ const librarianResultSchema = z.object({
 export type LibrarianResult = z.infer<typeof librarianResultSchema>;
 
 export async function runMinimaxLibrarian(input: { workspaceId: string; jobId?: string; task: string; context: unknown }): Promise<LibrarianResult> {
-  const apiKey = process.env.MINIMAX_API_KEY;
-  const model = process.env.MINIMAX_MODEL;
+  const runtime = await getWorkspaceRuntimeConfig(input.workspaceId, ["minimax-api-key", "minimax-model"]);
+  const apiKey = runtime.secrets["minimax-api-key"];
+  const model = runtime.secrets["minimax-model"];
   const baseUrl = (process.env.MINIMAX_API_URL ?? "https://api.minimax.io/v1").replace(/\/$/, "");
   if (!apiKey || !model) throw new Error("MiniMax no está configurado");
   const spent = await getMonthlyMinimaxSpend(input.workspaceId);
-  const budget = evaluateAiBudget(spent, Number(process.env.MINIMAX_MONTHLY_BUDGET_USD ?? 5));
+  const budget = evaluateAiBudget(spent, runtime.budgetUsd);
   if (budget.state === "paused") throw new Error("Presupuesto mensual de IA agotado; el job permanece pendiente");
 
   const startedAt = Date.now();

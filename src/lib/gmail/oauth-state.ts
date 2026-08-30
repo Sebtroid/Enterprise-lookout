@@ -5,6 +5,7 @@ type OAuthStatePayload = {
   userEmail?: string;
   nonce?: string;
   issuedAt?: number;
+  workspaceId?: string;
 };
 
 const MAX_STATE_AGE_MS = 10 * 60 * 1000;

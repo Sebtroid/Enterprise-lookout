@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { getAllowedUser } from "@/lib/auth/request";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 
 export const workspaceSecretKeySchema = z.enum([
   "supabase-db-password",
@@ -24,6 +25,7 @@ type OwnerContext = {
   supabase: NonNullable<Awaited<ReturnType<typeof getSupabaseServerClient>>>;
   userId: string;
   workspaceId: string;
+  admin: NonNullable<ReturnType<typeof getSupabaseAdminClient>>;
 };
 
 export async function getSettingsOwnerContext(): Promise<OwnerContext | { ok: false; response: Response }> {
@@ -31,7 +33,8 @@ export async function getSettingsOwnerContext(): Promise<OwnerContext | { ok: fa
   if (!user) return { ok: false, response: Response.json({ error: "unauthorized" }, { status: 401 }) };
 
   const supabase = await getSupabaseServerClient();
-  if (!supabase) return { ok: false, response: Response.json({ error: "settings_unavailable" }, { status: 503 }) };
+  const admin = getSupabaseAdminClient();
+  if (!supabase || !admin) return { ok: false, response: Response.json({ error: "settings_unavailable" }, { status: 503 }) };
 
   const { data: membership, error } = await supabase
     .from("workspace_members")
@@ -49,6 +52,7 @@ export async function getSettingsOwnerContext(): Promise<OwnerContext | { ok: fa
     supabase,
     userId: user.id,
     workspaceId: membership.workspace_id,
+    admin,
   };
 }
 

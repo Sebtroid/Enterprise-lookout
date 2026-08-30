@@ -1,5 +1,6 @@
 import { isDemoAccessEnabled } from "@/lib/auth/route-policy";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { v2DemoSnapshot } from "@/lib/v2/demo-data";
 import { aggregateGmailProviderState, getGmailAccountState } from "@/lib/v2/settings";
 import type {
@@ -345,12 +346,13 @@ export async function getV2SettingsSnapshot(): Promise<V2SettingsResult> {
   const { data: membership } = await supabase.from("workspace_members").select("workspace_id,role").eq("user_id", auth.user.id).eq("status", "active").limit(1).maybeSingle();
   if (!membership) throw new Error("El usuario no pertenece a un workspace");
   const isOwner = membership.role === "owner";
+  const admin = getSupabaseAdminClient();
   const [teamResult, accountsResult, permissionsResult, vaultStatusResult] = await Promise.all([
     supabase.from("workspace_members").select("user_id,role,status,profiles(display_name)").eq("workspace_id", membership.workspace_id),
     supabase.from("gmail_accounts").select("id,email,sync_status,active").eq("workspace_id", membership.workspace_id).order("email"),
     supabase.from("gmail_account_permissions").select("gmail_account_id,can_read,can_draft,can_send,can_manage").eq("user_id", auth.user.id),
-    isOwner
-      ? supabase.rpc("workspace_secret_status", { target_workspace_id: membership.workspace_id })
+    isOwner && admin
+      ? admin.rpc("workspace_secret_status", { target_workspace_id: membership.workspace_id })
       : Promise.resolve({ data: [], error: null }),
   ]);
   const error = teamResult.error ?? accountsResult.error ?? permissionsResult.error ?? vaultStatusResult.error;
@@ -376,7 +378,7 @@ export async function getV2SettingsSnapshot(): Promise<V2SettingsResult> {
   });
   const gmailState = aggregateGmailProviderState(
     gmailAccounts.map((account) => account.state),
-    configuredSecrets.has("gmail-client-id") && configuredSecrets.has("gmail-client-secret"),
+    configuredSecrets.has("gmail-client-id") && configuredSecrets.has("gmail-client-secret") && configuredSecrets.has("gmail-token-encryption-key"),
   );
   const minimaxState = configuredSecrets.has("minimax-api-key") && configuredSecrets.has("minimax-model") ? "connected" as const : "not_configured" as const;
   const hunterState = configuredSecrets.has("hunter-api-key") ? "connected" as const : "not_configured" as const;

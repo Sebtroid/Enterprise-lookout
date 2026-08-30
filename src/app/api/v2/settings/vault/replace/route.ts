@@ -14,7 +14,7 @@ export async function POST(request: Request) {
   const parsed = replaceSchema.safeParse(await safeRequestJson(request));
   if (!parsed.success) return Response.json({ error: "invalid_body" }, { status: 400 });
 
-  const { error } = await context.supabase.rpc("replace_workspace_secret", {
+  const { error } = await context.admin.rpc("replace_workspace_secret", {
     target_workspace_id: context.workspaceId,
     target_secret_key: parsed.data.key,
     target_secret_value: parsed.data.value,

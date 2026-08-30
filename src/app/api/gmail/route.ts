@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSafeOAuthRedirectPath } from "@/lib/gmail/connection-policy";
 import { signOAuthState } from "@/lib/gmail/oauth-state";
 import { getAllowedUser } from "@/lib/auth/request";
+import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { getWorkspaceRuntimeConfig } from "@/lib/v2/runtime-config";
 
 /**
  * Google OAuth2 Flow
@@ -22,14 +24,17 @@ import { getAllowedUser } from "@/lib/auth/request";
  * - Redirect URI: https://enterprise-lookout.vercel.app/api/gmail/callback
  */
 
-const GMAIL_CLIENT_ID = process.env.GMAIL_CLIENT_ID;
-const GMAIL_CLIENT_SECRET = process.env.GMAIL_CLIENT_SECRET;
 const REDIRECT_URI = `${process.env.NEXT_PUBLIC_APP_URL || "https://enterprise-lookout.vercel.app"}/api/gmail/callback`;
 
 export async function GET(req: NextRequest) {
   const user = await getAllowedUser();
   if (!user) return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
-  if (!GMAIL_CLIENT_ID || !GMAIL_CLIENT_SECRET) {
+  const admin = getSupabaseAdminClient();
+  const { data: membership } = admin ? await admin.from("workspace_members").select("workspace_id").eq("user_id", user.id).eq("status", "active").limit(1).maybeSingle() : { data: null };
+  if (!membership) return NextResponse.json({ ok: false, error: "Workspace unavailable" }, { status: 403 });
+  const runtime = await getWorkspaceRuntimeConfig(membership.workspace_id, ["gmail-client-id", "gmail-client-secret", "gmail-token-encryption-key"]);
+  const clientId = runtime.secrets["gmail-client-id"];
+  if (!clientId || !runtime.secrets["gmail-client-secret"] || !runtime.secrets["gmail-token-encryption-key"]) {
     return NextResponse.json(
       { ok: false, error: "Missing Gmail OAuth configuration" },
       { status: 500 },
@@ -43,7 +48,8 @@ export async function GET(req: NextRequest) {
     const redirect = getSafeOAuthRedirectPath(getRefererPath(req));
     const state = signOAuthState({
       redirect,
-    });
+      workspaceId: membership.workspace_id,
+    }, runtime.secrets["gmail-token-encryption-key"]);
 
     const scopes = [
       "https://www.googleapis.com/auth/gmail.send",
@@ -51,7 +57,7 @@ export async function GET(req: NextRequest) {
     ].join(" ");
 
     const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
-    authUrl.searchParams.set("client_id", GMAIL_CLIENT_ID);
+    authUrl.searchParams.set("client_id", clientId);
     authUrl.searchParams.set("redirect_uri", REDIRECT_URI);
     authUrl.searchParams.set("response_type", "code");
     authUrl.searchParams.set("scope", scopes);

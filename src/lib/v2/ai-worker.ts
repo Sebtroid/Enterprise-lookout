@@ -1,10 +1,12 @@
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { runMinimaxLibrarian } from "@/lib/v2/minimax";
 
-export async function processMinimaxQueue(limit = 5) {
+export async function processMinimaxQueue(limit = 5, workspaceIds?: string[]) {
   const admin = getSupabaseAdminClient();
   if (!admin) throw new Error("Worker sin service role configurada");
-  const { data: jobs, error } = await admin.from("ai_jobs").select("id,workspace_id,job_type,input,attempts").eq("status", "approved").like("job_type", "minimax_%").order("priority", { ascending: false }).order("created_at", { ascending: true }).limit(limit);
+  let query = admin.from("ai_jobs").select("id,workspace_id,job_type,input,attempts").eq("status", "approved").like("job_type", "minimax_%").order("priority", { ascending: false }).order("created_at", { ascending: true }).limit(limit);
+  if (workspaceIds) query = query.in("workspace_id", workspaceIds);
+  const { data: jobs, error } = await query;
   if (error) throw error;
   const results: Array<{ id: string; status: string }> = [];
   for (const job of jobs ?? []) {

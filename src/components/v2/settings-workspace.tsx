@@ -44,7 +44,7 @@ export function SettingsWorkspace({ settings, budget, isDemo }: SettingsWorkspac
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [configuredSecrets, setConfiguredSecrets] = useState(() => new Set(settings.vault.filter((secret) => secret.state === "connected").map((secret) => secret.id)));
   const secretInputRef = useRef<HTMLInputElement>(null);
-  const percentage = savedBudgetLimit > 0 ? Math.min((budget.spentUsd / savedBudgetLimit) * 100, 100) : 0;
+  const percentage = savedBudgetLimit > 0 ? Math.min((budget.spentUsd / savedBudgetLimit) * 100, 100) : budget.spentUsd > 0 ? 100 : 0;
 
   function reportUnavailableSave() {
     setMessage(isDemo ? demoSaveMessage : unavailableSaveMessage);

@@ -13,9 +13,11 @@ export async function activateFollowupSequence(sequenceId: string, userId: strin
   return { sequenceId, status: "active" };
 }
 
-export async function processDueFollowups(limit = 10) {
+export async function processDueFollowups(limit = 10, workspaceIds?: string[]) {
   const admin = getSupabaseAdminClient(); if (!admin) throw new Error("Supabase no está configurado");
-  const { data: enrollments, error } = await admin.from("followup_enrollments").select("*").eq("status", "pending").lte("due_at", new Date().toISOString()).order("due_at").limit(limit); if (error) throw error;
+  let query = admin.from("followup_enrollments").select("*").eq("status", "pending").lte("due_at", new Date().toISOString()).order("due_at").limit(limit);
+  if (workspaceIds) query = query.in("workspace_id", workspaceIds);
+  const { data: enrollments, error } = await query; if (error) throw error;
   const results: Array<{ id: string; status: string }> = [];
   for (const enrollment of enrollments ?? []) {
     const { data: sequence } = await admin.from("followup_sequences").select("*").eq("id", enrollment.sequence_id).single();

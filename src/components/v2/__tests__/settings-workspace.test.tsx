@@ -122,6 +122,11 @@ describe("SettingsWorkspace", () => {
     expect(screen.getByText(/USD 1\.82 usados de USD 8\.00/)).toBeVisible();
   });
 
+  it("shows an exhausted budget when the limit is zero and spend exists", () => {
+    render(<SettingsWorkspace settings={demoSettingsSnapshot} budget={{ spentUsd: 0.5, limitUsd: 0 }} isDemo />);
+    expect(screen.getByRole("progressbar", { name: "Uso del presupuesto mensual de MiniMax" })).toHaveAttribute("aria-valuetext", "100%");
+  });
+
   it("replaces a live secret without keeping its value in the client dialog", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,

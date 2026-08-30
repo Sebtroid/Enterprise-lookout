@@ -11,7 +11,7 @@ export async function POST(request: Request) {
   const parsed = revealSchema.safeParse(await safeRequestJson(request));
   if (!parsed.success) return Response.json({ error: "invalid_body" }, { status: 400 });
 
-  const { data, error } = await context.supabase.rpc("reveal_workspace_secret", {
+  const { data, error } = await context.admin.rpc("reveal_workspace_secret", {
     target_workspace_id: context.workspaceId,
     target_secret_key: parsed.data.key,
   });
