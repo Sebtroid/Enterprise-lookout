@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { evaluateAiBudget } from "@/lib/v2/domain";
-import { getWorkspaceRuntimeConfig } from "@/lib/v2/runtime-config";
+import { getWorkspaceRuntimeConfig, parseNonNegativeNumber } from "@/lib/v2/runtime-config";
 
 const librarianResultSchema = z.object({
   summary: z.string(),
@@ -45,5 +45,5 @@ export async function runMinimaxLibrarian(input: { workspaceId: string; jobId?: 
 }
 
 function cleanJson(value: string) { return value.replace(/<think>[\s\S]*?<\/think>/gi, "").replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim(); }
-export async function getMonthlyMinimaxSpend(workspaceId: string) { const admin = getSupabaseAdminClient(); if (!admin) throw new Error("Ledger de IA no disponible"); const start = new Date(); start.setUTCDate(1); start.setUTCHours(0, 0, 0, 0); const { data, error } = await admin.from("ai_usage_ledger").select("cost_usd").eq("workspace_id", workspaceId).eq("provider", "minimax").gte("created_at", start.toISOString()); if (error) throw new Error("No se pudo leer el consumo mensual de IA"); return (data ?? []).reduce((sum, row) => { const cost = Number(row.cost_usd); if (!Number.isFinite(cost) || cost < 0) throw new Error("Consumo mensual de IA inválido"); return sum + cost; }, 0); }
+export async function getMonthlyMinimaxSpend(workspaceId: string) { const admin = getSupabaseAdminClient(); if (!admin) throw new Error("Ledger de IA no disponible"); const start = new Date(); start.setUTCDate(1); start.setUTCHours(0, 0, 0, 0); const { data, error } = await admin.from("ai_usage_ledger").select("cost_usd").eq("workspace_id", workspaceId).eq("provider", "minimax").gte("created_at", start.toISOString()); if (error) throw new Error("No se pudo leer el consumo mensual de IA"); return (data ?? []).reduce((sum, row) => sum + parseNonNegativeNumber(row.cost_usd, "Consumo mensual de IA inválido"), 0); }
 async function recordUsage(input: { workspaceId: string; jobId?: string; model: string; inputTokens: number; outputTokens: number; durationMs: number }) { const admin = getSupabaseAdminClient(); if (!admin) return; const inputRate = Number(process.env.MINIMAX_INPUT_USD_PER_MILLION ?? 0); const outputRate = Number(process.env.MINIMAX_OUTPUT_USD_PER_MILLION ?? 0); const costUsd = (input.inputTokens * inputRate + input.outputTokens * outputRate) / 1_000_000; await admin.from("ai_usage_ledger").insert({ workspace_id: input.workspaceId, job_id: input.jobId ?? null, provider: "minimax", model: input.model, input_tokens: input.inputTokens, output_tokens: input.outputTokens, cost_usd: costUsd, duration_ms: input.durationMs }); }

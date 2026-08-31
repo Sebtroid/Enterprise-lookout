@@ -32,9 +32,7 @@ export async function getWorkspaceRuntimeConfig(workspaceId: string, keys: Works
   const { data: budgetData, error: budgetError } = await admin.from("workspace_ai_settings").select("minimax_monthly_budget_usd").eq("workspace_id", workspaceId).maybeSingle();
   if (budgetError) throw new Error("No se pudo leer el presupuesto de IA");
   const budgetValue: unknown = budgetData?.minimax_monthly_budget_usd ?? null;
-  const envBudget = Number(process.env.MINIMAX_MONTHLY_BUDGET_USD ?? 5);
-  const budgetUsd = budgetValue === null ? envBudget : Number(budgetValue);
-  if (!Number.isFinite(budgetUsd) || budgetUsd < 0) throw new Error("Presupuesto de IA inválido");
+  const budgetUsd = parseNonNegativeNumber(budgetValue, "Presupuesto de IA inválido");
   return { secrets: Object.fromEntries(entries) as Partial<Record<WorkspaceSecretKey, string | null>>, budgetUsd };
 }
 
@@ -63,4 +61,13 @@ function safeSecretEqual(left: string, right: string | null | undefined) {
   if (!right) return false;
   const leftBytes = Buffer.from(left); const rightBytes = Buffer.from(right);
   return leftBytes.length === rightBytes.length && timingSafeEqual(leftBytes, rightBytes);
+}
+
+export function parseNonNegativeNumber(value: unknown, errorMessage: string) {
+  if ((typeof value !== "number" && typeof value !== "string") || (typeof value === "string" && value.trim().length === 0)) {
+    throw new Error(errorMessage);
+  }
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) throw new Error(errorMessage);
+  return parsed;
 }

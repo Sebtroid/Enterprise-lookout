@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getAllowedUser } from "@/lib/auth/request";
 import { getSafeOAuthRedirectPath } from "@/lib/gmail/connection-policy";
-import { GMAIL_OAUTH_NONCE_COOKIE, verifyOAuthNonce, verifyOAuthState } from "@/lib/gmail/oauth-state";
+import { GMAIL_OAUTH_NONCE_COOKIE, hashOAuthNonce, verifyOAuthNonce, verifyOAuthState } from "@/lib/gmail/oauth-state";
 import { fetchConnectedGmailEmail } from "@/lib/gmail/profile";
 import { encryptToken } from "@/lib/gmail/token-crypto";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
@@ -31,6 +31,12 @@ export async function GET(req: NextRequest) {
     const validState = verifiedState && verifiedState.userId === user.id && verifiedState.workspaceId === membership.workspace_id && Boolean(verifiedState.nonce) && verifyOAuthNonce(verifiedState.nonce!, nonceHash, encryptionKey);
     if (!code || !validState) return redirectWithStatus(req, DEFAULT_REDIRECT, { gmail_error: !code ? "no_code" : "invalid_state" });
     const redirectPath = getSafeOAuthRedirectPath(verifiedState.redirect);
+    const { data: nonceConsumed, error: nonceError } = await admin.rpc("consume_gmail_oauth_nonce", {
+      target_nonce_hash: hashOAuthNonce(verifiedState.nonce!, encryptionKey),
+      target_workspace_id: membership.workspace_id,
+      target_user_id: user.id,
+    });
+    if (nonceError || nonceConsumed !== true) return redirectWithStatus(req, redirectPath, { gmail_error: "invalid_state" });
     const tokenResponse = await fetch("https://oauth2.googleapis.com/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ code, client_id: clientId, client_secret: clientSecret, redirect_uri: REDIRECT_URI, grant_type: "authorization_code" }) });
     const tokens = await tokenResponse.json() as { access_token?: string; refresh_token?: string; expires_in?: number; error?: string };
     if (!tokenResponse.ok || !tokens.access_token) return redirectWithStatus(req, redirectPath, { gmail_error: tokens.error ?? "token_exchange_failed" });

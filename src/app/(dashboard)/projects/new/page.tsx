@@ -19,7 +19,7 @@ async function createProject(formData: FormData) {
   const accessMode = formData.get("mode") === "personal" ? "personal" : "shared";
   const brief = String(formData.get("brief") ?? "").trim();
   if (name.length < 3 || brief.length < 10) throw new Error("Completa el nombre y el objetivo del proyecto");
-  const { data: membership } = await supabase.from("workspace_members").select("workspace_id").eq("user_id", user.id).eq("status", "active").limit(1).maybeSingle();
+  const { data: membership } = await supabase.from("workspace_members").select("workspace_id").eq("user_id", user.id).eq("status", "active").order("joined_at", { ascending: true }).order("workspace_id", { ascending: true }).limit(1).maybeSingle();
   if (!membership) throw new Error("No perteneces a un workspace activo");
   let institutionId: string | null = null;
   if (institutionName) {

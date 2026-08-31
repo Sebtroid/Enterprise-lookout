@@ -30,7 +30,8 @@ export async function GET(req: NextRequest) {
   const user = await getAllowedUser();
   if (!user) return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   const admin = getSupabaseAdminClient();
-  const { data: membership } = admin ? await admin.from("workspace_members").select("workspace_id").eq("user_id", user.id).eq("status", "active").order("joined_at", { ascending: true }).order("workspace_id", { ascending: true }).limit(1).maybeSingle() : { data: null };
+  if (!admin) return NextResponse.json({ ok: false, error: "Workspace unavailable" }, { status: 503 });
+  const { data: membership } = await admin.from("workspace_members").select("workspace_id").eq("user_id", user.id).eq("status", "active").order("joined_at", { ascending: true }).order("workspace_id", { ascending: true }).limit(1).maybeSingle();
   if (!membership) return NextResponse.json({ ok: false, error: "Workspace unavailable" }, { status: 403 });
   const runtime = await getWorkspaceRuntimeConfig(membership.workspace_id, ["gmail-client-id", "gmail-client-secret", "gmail-token-encryption-key"]);
   const clientId = runtime.secrets["gmail-client-id"];
@@ -47,12 +48,19 @@ export async function GET(req: NextRequest) {
   if (action === "url" || action === "connect") {
     const redirect = getSafeOAuthRedirectPath(getRefererPath(req));
     const nonce = createOAuthNonce();
+    const nonceHash = hashOAuthNonce(nonce, runtime.secrets["gmail-token-encryption-key"]);
     const state = signOAuthState({
       redirect,
       workspaceId: membership.workspace_id,
       userId: user.id,
       nonce,
     }, runtime.secrets["gmail-token-encryption-key"]);
+    const { error: nonceError } = await admin.rpc("create_gmail_oauth_nonce", {
+      target_nonce_hash: nonceHash,
+      target_workspace_id: membership.workspace_id,
+      target_user_id: user.id,
+    });
+    if (nonceError) return NextResponse.json({ ok: false, error: "OAuth state unavailable" }, { status: 503 });
 
     const scopes = [
       "https://www.googleapis.com/auth/gmail.send",
@@ -70,7 +78,7 @@ export async function GET(req: NextRequest) {
     authUrl.searchParams.set("state", state);
 
     const response = action === "connect" ? NextResponse.redirect(authUrl) : NextResponse.json({ url: authUrl.toString() });
-    response.cookies.set(GMAIL_OAUTH_NONCE_COOKIE, hashOAuthNonce(nonce, runtime.secrets["gmail-token-encryption-key"]), { httpOnly: true, secure: true, sameSite: "lax", path: "/api/gmail/callback", maxAge: 600 });
+    response.cookies.set(GMAIL_OAUTH_NONCE_COOKIE, nonceHash, { httpOnly: true, secure: true, sameSite: "lax", path: "/api/gmail/callback", maxAge: 600 });
     return response;
   }
 

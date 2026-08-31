@@ -32,7 +32,22 @@ describe("runtime Vault consumers", () => {
     }
   });
 
-  it("stores and consumes the Gmail OAuth nonce in a hardened short-lived cookie", () => {
+  it("orders every remaining single-membership selector deterministically", () => {
+    for (const path of [
+      ["src", "app", "oauth", "authorize", "route.ts"],
+      ["src", "app", "(dashboard)", "projects", "new", "page.tsx"],
+    ]) {
+      const file = source(...path);
+      expect(file).toContain('.order("joined_at", { ascending: true })');
+      expect(file).toContain('.order("workspace_id", { ascending: true })');
+    }
+
+    const repository = source("src", "lib", "v2", "repository.ts");
+    expect(repository.match(/\.order\("joined_at", \{ ascending: true \}\)/g)).toHaveLength(3);
+    expect(repository.match(/\.order\("workspace_id", \{ ascending: true \}\)/g)).toHaveLength(3);
+  });
+
+  it("stores and consumes the Gmail OAuth nonce server-side before exchanging tokens", () => {
     const connect = source("src", "app", "api", "gmail", "route.ts");
     const callback = source("src", "app", "api", "gmail", "callback", "route.ts");
     expect(connect).toContain("httpOnly: true");
@@ -41,6 +56,9 @@ describe("runtime Vault consumers", () => {
     expect(connect).toContain("maxAge: 600");
     expect(callback).toContain("verifiedState.userId === user.id");
     expect(callback).toContain("verifyOAuthNonce");
+    expect(connect).toContain('admin.rpc("create_gmail_oauth_nonce"');
+    expect(callback).toContain('admin.rpc("consume_gmail_oauth_nonce"');
+    expect(callback.indexOf('admin.rpc("consume_gmail_oauth_nonce"')).toBeLessThan(callback.indexOf('fetch("https://oauth2.googleapis.com/token"'));
     expect(callback).toContain("response.cookies.delete");
   });
   it("authorizes both workers by workspace Vault cron secrets", () => {

@@ -19,7 +19,14 @@ describe("MiniMax budget ledger", () => {
     await expect(getMonthlyMinimaxSpend("workspace")).rejects.toThrow("No se pudo leer el consumo mensual de IA");
   });
 
-  it.each([[[{ cost_usd: -1 }]], [[{ cost_usd: "NaN" }]]])("rejects invalid ledger values", async (data) => {
+  it.each([
+    [[{ cost_usd: null }]],
+    [[{ cost_usd: "" }]],
+    [[{ cost_usd: "   " }]],
+    [[{ cost_usd: "NaN" }]],
+    [[{ cost_usd: {} }]],
+    [[{ cost_usd: -1 }]],
+  ])("rejects invalid ledger values", async (data) => {
     getSupabaseAdminClient.mockReturnValue(ledger({ data, error: null }));
     await expect(getMonthlyMinimaxSpend("workspace")).rejects.toThrow("Consumo mensual de IA inválido");
   });

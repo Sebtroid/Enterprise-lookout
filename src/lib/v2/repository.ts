@@ -437,7 +437,7 @@ export async function getV2MigrationReview(): Promise<V2MigrationReview> {
   if (!supabase) return { projects: [], owners: [], institutions: [], quarantine: [] };
   const { data: auth } = await supabase.auth.getUser();
   if (!auth.user) throw new Error("Se requiere una sesión válida");
-  const { data: membership } = await supabase.from("workspace_members").select("workspace_id").eq("user_id", auth.user.id).eq("status", "active").limit(1).maybeSingle();
+  const { data: membership } = await supabase.from("workspace_members").select("workspace_id").eq("user_id", auth.user.id).eq("status", "active").order("joined_at", { ascending: true }).order("workspace_id", { ascending: true }).limit(1).maybeSingle();
   if (!membership) throw new Error("El usuario no pertenece a un workspace");
   const [projectsResult, ownersResult, institutionsResult, quarantineResult] = await Promise.all([
     supabase.from("projects").select("id,name,owner_user_id,institution_id,status,owner:profiles!projects_owner_user_id_fkey(display_name),institution:institutions(name)").eq("workspace_id", membership.workspace_id).not("legacy_campaign_id", "is", null).order("name"),

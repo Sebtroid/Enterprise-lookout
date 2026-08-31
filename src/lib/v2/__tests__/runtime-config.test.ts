@@ -3,9 +3,9 @@ const { getSupabaseAdminClient } = vi.hoisted(() => ({ getSupabaseAdminClient: v
 vi.mock("@/lib/supabase/admin", () => ({ getSupabaseAdminClient }));
 import { authorizeWorkspaceCronRequest, getWorkspaceRuntimeConfig } from "../runtime-config";
 
-function adminClient(secretValues: Record<string, string | null>, budget: number | null = 5) {
-  const rpc = vi.fn((_name: string, args: { target_secret_key: string }) => Promise.resolve({ data: secretValues[args.target_secret_key] ?? null, error: null }));
-  const maybeSingle = vi.fn().mockResolvedValue({ data: budget === null ? null : { minimax_monthly_budget_usd: budget }, error: null });
+function adminClient(secretValues: Record<string, string | null>, budget: unknown = 5, hasBudgetRow = true) {
+  const rpc = vi.fn((_name: string, args: { target_secret_key: string }): Promise<{ data: string | null; error: { message: string } | null }> => Promise.resolve({ data: secretValues[args.target_secret_key] ?? null, error: null }));
+  const maybeSingle = vi.fn().mockResolvedValue({ data: hasBudgetRow ? { minimax_monthly_budget_usd: budget } : null, error: null });
   const chain = { select: vi.fn(), eq: vi.fn(), maybeSingle };
   chain.select.mockReturnValue(chain); chain.eq.mockReturnValue(chain);
   return { rpc, from: vi.fn(() => chain) };
@@ -18,11 +18,11 @@ describe("workspace runtime config", () => {
     vi.stubEnv("MINIMAX_API_KEY", "env-key"); vi.stubEnv("MINIMAX_MODEL", "env-model"); vi.stubEnv("MINIMAX_MONTHLY_BUDGET_USD", "9");
     await expect(getWorkspaceRuntimeConfig("workspace", ["minimax-api-key", "minimax-model"])).resolves.toMatchObject({ budgetUsd: 0, secrets: { "minimax-api-key": "vault-key", "minimax-model": "vault-model" } });
   });
-  it("falls back to env only when Vault/settings are absent", async () => {
-    getSupabaseAdminClient.mockReturnValue(adminClient({}, null));
+  it("fails closed when workspace budget settings are absent", async () => {
+    getSupabaseAdminClient.mockReturnValue(adminClient({}, null, false));
     vi.stubEnv("MINIMAX_API_KEY", "env-key"); vi.stubEnv("MINIMAX_MONTHLY_BUDGET_USD", "7");
-    const config = await getWorkspaceRuntimeConfig("workspace", ["minimax-api-key"]);
-    expect(config.secrets["minimax-api-key"]).toBe("env-key"); expect(config.budgetUsd).toBe(7);
+    await expect(getWorkspaceRuntimeConfig("workspace", ["minimax-api-key"]))
+      .rejects.toThrow("Presupuesto de IA inválido");
   });
   it("does not fall back to env when the Vault RPC fails", async () => {
     const client = adminClient({}, null);
@@ -41,7 +41,7 @@ describe("workspace runtime config", () => {
     getSupabaseAdminClient.mockReturnValue(client);
     await expect(getWorkspaceRuntimeConfig("workspace", [])).rejects.toThrow("No se pudo leer el presupuesto de IA");
   });
-  it.each([Number.NaN, -1, Number.POSITIVE_INFINITY])("rejects invalid budgets: %s", async (budget) => {
+  it.each([null, "", "   ", "not-a-number", Number.NaN, -1, Number.POSITIVE_INFINITY])("rejects invalid budgets: %s", async (budget) => {
     getSupabaseAdminClient.mockReturnValue(adminClient({}, budget));
     await expect(getWorkspaceRuntimeConfig("workspace", [])).rejects.toThrow("Presupuesto de IA inválido");
   });

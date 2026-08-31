@@ -23,7 +23,7 @@ export async function POST(request: Request) {
     const scopes = normalizeScopes(params.get("scope"));
     const admin = getSupabaseAdminClient();
     if (!admin) throw new Error("OAuth no está disponible");
-    const { data: membership } = await admin.from("workspace_members").select("workspace_id").eq("user_id", user.id).eq("status", "active").limit(1).maybeSingle();
+    const { data: membership } = await admin.from("workspace_members").select("workspace_id").eq("user_id", user.id).eq("status", "active").order("joined_at", { ascending: true }).order("workspace_id", { ascending: true }).limit(1).maybeSingle();
     if (!membership) throw new Error("Tu perfil no pertenece a un workspace");
     const code = randomOAuthToken();
     const { error } = await admin.from("oauth_authorization_codes").insert({ code_hash: hashOAuthToken(code), client_id: params.get("client_id"), workspace_id: membership.workspace_id, user_id: user.id, redirect_uri: params.get("redirect_uri"), resource: params.get("resource"), scopes, code_challenge: params.get("code_challenge"), expires_at: new Date(Date.now() + 5 * 60_000).toISOString() });
