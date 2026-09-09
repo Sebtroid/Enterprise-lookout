@@ -2,17 +2,18 @@ import { buildGmailSendBody, buildMimeMessage, encodeRawMessage } from "@/lib/gm
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { evaluateV2SendReadiness } from "@/lib/v2/gmail-policy";
 import { getReadableGmailAccount } from "@/lib/v2/gmail-sync";
+import { requireGmailDraftProvider } from "@/lib/v2/mail-provider";
 import { assertProjectWriteAccessForUser } from "@/lib/v2/project-authorization";
 
 export async function sendApprovedV2Draft(draftId: string, userId: string) {
   const admin = getSupabaseAdminClient(); if (!admin) throw new Error("Supabase no está configurado");
-  const { data: draft } = await admin.from("mail_drafts").select("*, sender_identities!inner(id,gmail_account_id,display_name,active)").eq("id", draftId).single();
+  const { data: draft } = await admin.from("mail_drafts").select("*, sender_identities!inner(id,gmail_account_id,microsoft_account_id,display_name,active)").eq("id", draftId).single();
   if (!draft) throw new Error("Borrador no encontrado");
   if (!draft.project_id) throw new Error("El borrador no pertenece a un proyecto");
   await assertProjectWriteAccessForUser(draft.project_id, userId);
-  const identity = draft.sender_identities as { gmail_account_id: string | null; display_name: string; active: boolean };
-  if (!identity.gmail_account_id) throw new Error("El borrador no tiene una cuenta Gmail asociada");
-  const { account, accessToken } = await getReadableGmailAccount(identity.gmail_account_id, userId, "can_send");
+  const identity = draft.sender_identities as { gmail_account_id: string | null; microsoft_account_id: string | null; display_name: string; active: boolean };
+  const gmailAccountId = requireGmailDraftProvider({ gmailAccountId: identity.gmail_account_id, microsoftAccountId: identity.microsoft_account_id });
+  const { account, accessToken } = await getReadableGmailAccount(gmailAccountId, userId, "can_send");
   const dayStart = new Date(); dayStart.setHours(0, 0, 0, 0);
   const { count: sentToday } = await admin.from("mail_drafts").select("id", { count: "exact", head: true }).eq("sender_identity_id", draft.sender_identity_id).eq("status", "sent").gte("sent_at", dayStart.toISOString());
   const { data: suppressions } = await admin.from("suppression_entries").select("reason").eq("workspace_id", draft.workspace_id).or(`email.eq.${draft.to_email},domain.eq.${String(draft.to_email ?? "").split("@")[1] ?? ""}`);

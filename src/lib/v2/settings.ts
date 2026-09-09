@@ -13,3 +13,6 @@ export function aggregateGmailProviderState(accountStates: V2ProviderState[], oa
   if (accountStates.includes("connected")) return "connected";
   return oauthConfigured ? "action_required" : "not_configured";
 }
+
+export const getMicrosoftAccountState = getGmailAccountState;
+export const aggregateMicrosoftProviderState = aggregateGmailProviderState;

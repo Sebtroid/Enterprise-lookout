@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { aggregateGmailProviderState, getGmailAccountState } from "../settings";
+import {
+  aggregateGmailProviderState,
+  aggregateMicrosoftProviderState,
+  getGmailAccountState,
+  getMicrosoftAccountState,
+} from "../settings";
 
 describe("Gmail settings state", () => {
   it.each([
@@ -24,5 +29,19 @@ describe("Gmail settings state", () => {
     expect(aggregateGmailProviderState(["connected", "unavailable"], true)).toBe("unavailable");
     expect(aggregateGmailProviderState(["action_required", "connected", "unavailable"], false)).toBe("action_required");
     expect(aggregateGmailProviderState(["connected", "connected"], false)).toBe("connected");
+  });
+});
+
+describe("Microsoft settings state", () => {
+  it("uses the same honest sync health states as Gmail", () => {
+    expect(getMicrosoftAccountState({ active: true, syncStatus: "ready" })).toBe("connected");
+    expect(getMicrosoftAccountState({ active: true, syncStatus: "error" })).toBe("action_required");
+    expect(getMicrosoftAccountState({ active: false, syncStatus: "ready" })).toBe("unavailable");
+  });
+
+  it("requires OAuth configuration or a connected account", () => {
+    expect(aggregateMicrosoftProviderState([], false)).toBe("not_configured");
+    expect(aggregateMicrosoftProviderState([], true)).toBe("action_required");
+    expect(aggregateMicrosoftProviderState(["connected"], false)).toBe("connected");
   });
 });

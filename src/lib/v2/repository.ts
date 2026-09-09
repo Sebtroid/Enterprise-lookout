@@ -2,12 +2,18 @@ import { isDemoAccessEnabled } from "@/lib/auth/route-policy";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { v2DemoSnapshot } from "@/lib/v2/demo-data";
-import { aggregateGmailProviderState, getGmailAccountState } from "@/lib/v2/settings";
+import {
+  aggregateGmailProviderState,
+  aggregateMicrosoftProviderState,
+  getGmailAccountState,
+  getMicrosoftAccountState,
+} from "@/lib/v2/settings";
 import type {
   FactStatus,
   V2AttentionItem,
   V2Company,
   V2Contact,
+  V2EligibleSender,
   V2InboxThread,
   V2Project,
   V2SettingsResult,
@@ -88,6 +94,7 @@ async function loadLiveSnapshot(
     draftsResult,
     senderIdentitiesResult,
     senderPermissionsResult,
+    microsoftSenderPermissionsResult,
     tasksResult,
     jobsResult,
     usageResult,
@@ -101,17 +108,18 @@ async function loadLiveSnapshot(
     supabase.from("finance_goals").select("project_id,fundraising_goal").eq("workspace_id", workspaceId),
     supabase.from("contributions").select("project_id,kind,status,committed_value,received_value").eq("workspace_id", workspaceId),
     supabase.from("mail_messages").select("thread_id,sender,body_text,snippet,sent_at,received_at").eq("workspace_id", workspaceId).eq("is_crm_linked", true).order("created_at", { ascending: true }),
-    supabase.from("mail_threads").select("id,subject,snippet,last_message_at,labels,gmail_accounts(email),projects(name),companies(canonical_name),contacts(full_name)").eq("workspace_id", workspaceId).order("last_message_at", { ascending: false }).limit(100),
-    supabase.from("mail_drafts").select("id,thread_id,kind,subject,body,status,to_email,created_at,sender_identity_id,sender_identities(id,gmail_account_id,display_name,gmail_accounts(email)),projects(name),companies(canonical_name),contacts(full_name)").eq("workspace_id", workspaceId).in("status", ["draft", "needs_review", "approved", "failed"]).order("updated_at", { ascending: false }).limit(100),
-    supabase.from("sender_identities").select("id,gmail_account_id,gmail_accounts(email,owner_user_id,active)").eq("workspace_id", workspaceId).eq("active", true),
+    supabase.from("mail_threads").select("id,subject,snippet,last_message_at,labels,gmail_account_id,microsoft_account_id,gmail_accounts(email),microsoft_accounts(email),projects(name),companies(canonical_name),contacts(full_name)").eq("workspace_id", workspaceId).order("last_message_at", { ascending: false }).limit(100),
+    supabase.from("mail_drafts").select("id,thread_id,kind,subject,body,status,to_email,created_at,sender_identity_id,sender_identities(id,gmail_account_id,microsoft_account_id,display_name,gmail_accounts(email),microsoft_accounts(email)),projects(name),companies(canonical_name),contacts(full_name)").eq("workspace_id", workspaceId).in("status", ["draft", "needs_review", "approved", "failed"]).order("updated_at", { ascending: false }).limit(100),
+    supabase.from("sender_identities").select("id,gmail_account_id,microsoft_account_id,gmail_accounts(email,owner_user_id,active),microsoft_accounts(email,owner_user_id,active)").eq("workspace_id", workspaceId).eq("active", true),
     supabase.from("gmail_account_permissions").select("gmail_account_id,can_draft,can_send").eq("user_id", user.id).eq("active", true),
+    supabase.from("microsoft_account_permissions").select("microsoft_account_id,can_draft,can_send").eq("user_id", user.id).eq("active", true),
     supabase.from("project_tasks").select("id,project_id,title,due_at,source,assigned_to,projects(name),profiles!project_tasks_assigned_to_fkey(display_name)").eq("workspace_id", workspaceId).in("status", ["pending", "in_progress"]).order("due_at", { ascending: true }).limit(30),
     supabase.from("ai_jobs").select("id,job_type,status,approved_by,projects(name)").eq("workspace_id", workspaceId).in("status", ["approved", "completed", "reviewing", "failed"]).order("updated_at", { ascending: false }).limit(30),
     supabase.from("ai_usage_ledger").select("cost_usd").eq("workspace_id", workspaceId).gte("created_at", new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()),
     supabase.from("workspace_ai_settings").select("minimax_monthly_budget_usd").eq("workspace_id", workspaceId).maybeSingle(),
   ]);
 
-  const results = [profilesResult, projectsResult, companiesResult, contactsResult, projectCompaniesResult, goalsResult, contributionsResult, messagesResult, threadsResult, draftsResult, senderIdentitiesResult, senderPermissionsResult, tasksResult, jobsResult, usageResult, aiSettingsResult];
+  const results = [profilesResult, projectsResult, companiesResult, contactsResult, projectCompaniesResult, goalsResult, contributionsResult, messagesResult, threadsResult, draftsResult, senderIdentitiesResult, senderPermissionsResult, microsoftSenderPermissionsResult, tasksResult, jobsResult, usageResult, aiSettingsResult];
   const failed = results.find((result) => result.error);
   if (failed?.error) throw new Error(`No se pudo cargar Enterprise Lookout V2: ${failed.error.message}`);
 
@@ -128,11 +136,18 @@ async function loadLiveSnapshot(
   const senderPermissionRows = (senderPermissionsResult.data ?? []) as Row[];
 
   const permissionsByAccount = new Map(senderPermissionRows.map((row) => [text(row.gmail_account_id), row]));
-  const eligibleSenders = senderIdentityRows.flatMap((identity) => {
-    const account = relation(identity.gmail_accounts);
-    const permission = permissionsByAccount.get(text(identity.gmail_account_id));
-    if (!account || account.active !== true || !text(account.email) || !(permission?.can_draft && permission.can_send)) return [];
-    return [{ senderIdentityId: text(identity.id), email: text(account.email), provider: "gmail" as const }];
+  const microsoftPermissionsByAccount = new Map(((microsoftSenderPermissionsResult.data ?? []) as Row[]).map((row) => [text(row.microsoft_account_id), row]));
+  const eligibleSenders: V2EligibleSender[] = senderIdentityRows.flatMap<V2EligibleSender>((identity) => {
+    const gmailAccount = relation(identity.gmail_accounts);
+    const microsoftAccount = relation(identity.microsoft_accounts);
+    if (gmailAccount) {
+      const permission = permissionsByAccount.get(text(identity.gmail_account_id));
+      if (gmailAccount.active !== true || !text(gmailAccount.email) || !(permission?.can_draft && permission.can_send)) return [];
+      return [{ senderIdentityId: text(identity.id), email: text(gmailAccount.email), provider: "gmail" as const }];
+    }
+    const permission = microsoftPermissionsByAccount.get(text(identity.microsoft_account_id));
+    if (!microsoftAccount || microsoftAccount.active !== true || !text(microsoftAccount.email) || !(permission?.can_draft && permission.can_send)) return [];
+    return [{ senderIdentityId: text(identity.id), email: text(microsoftAccount.email), provider: "microsoft" as const }];
   });
 
   const contactsById = new Map(contactRows.map((row) => [text(row.id), row]));
@@ -195,7 +210,9 @@ async function loadLiveSnapshot(
   const threads: V2InboxThread[] = ((threadsResult.data ?? []) as Row[]).map((row) => {
     const company = text(relation(row.companies)?.canonical_name, "Sin empresa vinculada");
     const contact = text(relation(row.contacts)?.full_name, "Contacto por identificar");
-    const account = text(relation(row.gmail_accounts)?.email, "Cuenta no disponible");
+    const microsoftAccount = relation(row.microsoft_accounts);
+    const provider = microsoftAccount ? "microsoft" as const : "gmail" as const;
+    const account = text((microsoftAccount ?? relation(row.gmail_accounts))?.email, "Cuenta no disponible");
     const draft = draftRows.find((item) => item.thread_id === row.id);
     const messages = (messagesByThread.get(text(row.id)) ?? []).map((message) => {
       const inbound = !text(message.sender).toLowerCase().includes(account.toLowerCase());
@@ -207,7 +224,7 @@ async function loadLiveSnapshot(
       };
     });
     return {
-      id: text(row.id), account, provider: "gmail", company, contact,
+      id: text(row.id), account, provider, company, contact,
       subject: text(row.subject, "Sin asunto"),
       snippet: text(row.snippet),
       receivedAt: dateLabel(row.last_message_at),
@@ -227,10 +244,11 @@ async function loadLiveSnapshot(
   for (const draft of draftRows.filter((row) => !row.thread_id || !existingThreadIds.has(text(row.thread_id)))) {
     const identity = relation(draft.sender_identities);
     const gmail = relation(identity?.gmail_accounts);
+    const microsoft = relation(identity?.microsoft_accounts);
     threads.push({
       id: `draft-${text(draft.id)}`,
-      account: text(gmail?.email, text(identity?.display_name, "Remitente por seleccionar")),
-      provider: "gmail",
+      account: text((microsoft ?? gmail)?.email, text(identity?.display_name, "Remitente por seleccionar")),
+      provider: microsoft ? "microsoft" : "gmail",
       company: text(relation(draft.companies)?.canonical_name, "Sin empresa vinculada"),
       contact: text(relation(draft.contacts)?.full_name, text(draft.to_email, "Contacto por identificar")),
       subject: text(draft.subject, "Sin asunto"), snippet: text(draft.body).slice(0, 160), receivedAt: dateLabel(draft.created_at), unread: false,
@@ -315,7 +333,7 @@ const demoSettingsSnapshot: V2SettingsSnapshot = {
   ],
   mailProviders: [
     { id: "gmail", name: "Gmail", state: "not_configured", actionHref: "/api/gmail?action=connect", accounts: [] },
-    { id: "microsoft", name: "Microsoft 365", state: "action_required", accounts: [] },
+    { id: "microsoft", name: "Microsoft 365", state: "action_required", actionHref: "/api/microsoft?action=connect", accounts: [] },
   ],
   integrations: [
     { id: "minimax", name: "MiniMax", detail: "Investigación y redacción asistida", state: "not_configured" },
@@ -349,15 +367,17 @@ export async function getV2SettingsSnapshot(): Promise<V2SettingsResult> {
   if (!membership) throw new Error("El usuario no pertenece a un workspace");
   const isOwner = membership.role === "owner";
   const admin = getSupabaseAdminClient();
-  const [teamResult, accountsResult, permissionsResult, vaultStatusResult] = await Promise.all([
+  const [teamResult, accountsResult, permissionsResult, microsoftAccountsResult, microsoftPermissionsResult, vaultStatusResult] = await Promise.all([
     supabase.from("workspace_members").select("user_id,role,status,profiles(display_name)").eq("workspace_id", membership.workspace_id),
     supabase.from("gmail_accounts").select("id,email,sync_status,active").eq("workspace_id", membership.workspace_id).order("email"),
     supabase.from("gmail_account_permissions").select("gmail_account_id,can_read,can_draft,can_send,can_manage").eq("user_id", auth.user.id),
+    supabase.from("microsoft_accounts").select("id,email,sync_status,active").eq("workspace_id", membership.workspace_id).order("email"),
+    supabase.from("microsoft_account_permissions").select("microsoft_account_id,can_read,can_draft,can_send,can_manage").eq("user_id", auth.user.id),
     isOwner && admin
       ? admin.rpc("workspace_secret_status", { target_workspace_id: membership.workspace_id })
       : Promise.resolve({ data: [], error: null }),
   ]);
-  const error = teamResult.error ?? accountsResult.error ?? permissionsResult.error ?? vaultStatusResult.error;
+  const error = teamResult.error ?? accountsResult.error ?? permissionsResult.error ?? microsoftAccountsResult.error ?? microsoftPermissionsResult.error ?? vaultStatusResult.error;
   if (error) {
     if (demoEnabled) return { ...demoSettingsSnapshot, isDemo: true };
     throw new Error(error.message);
@@ -382,9 +402,24 @@ export async function getV2SettingsSnapshot(): Promise<V2SettingsResult> {
     gmailAccounts.map((account) => account.state),
     configuredSecrets.has("gmail-client-id") && configuredSecrets.has("gmail-client-secret") && configuredSecrets.has("gmail-token-encryption-key"),
   );
+  const microsoftPermissionMap = new Map(((microsoftPermissionsResult.data ?? []) as Row[]).map((row) => [text(row.microsoft_account_id), row]));
+  const microsoftAccounts = ((microsoftAccountsResult.data ?? []) as Row[]).map((row) => {
+    const permission = microsoftPermissionMap.get(text(row.id));
+    const permissions = permission ? [permission.can_read && "leer", permission.can_draft && "redactar", permission.can_send && "enviar", permission.can_manage && "administrar"].filter(Boolean) as string[] : [];
+    return {
+      id: text(row.id),
+      email: text(row.email),
+      state: getMicrosoftAccountState({ active: row.active === true, syncStatus: text(row.sync_status) }),
+      permissions,
+    };
+  });
   const minimaxState = configuredSecrets.has("minimax-api-key") && configuredSecrets.has("minimax-model") ? "connected" as const : "not_configured" as const;
   const hunterState = configuredSecrets.has("hunter-api-key") ? "connected" as const : "not_configured" as const;
   const microsoftConfigured = ["microsoft-client-id", "microsoft-client-secret", "microsoft-tenant-id"].every((key) => configuredSecrets.has(key));
+  const microsoftState = aggregateMicrosoftProviderState(
+    microsoftAccounts.map((account) => account.state),
+    microsoftConfigured && configuredSecrets.has("gmail-token-encryption-key"),
+  );
   const vaultSecret = (id: string, name: string) => {
     const configured = configuredSecrets.has(id);
     return {
@@ -403,7 +438,7 @@ export async function getV2SettingsSnapshot(): Promise<V2SettingsResult> {
     })),
     mailProviders: [
       { id: "gmail", name: "Gmail", state: gmailState, actionHref: "/api/gmail?action=connect", accounts: gmailAccounts },
-      { id: "microsoft", name: "Microsoft 365", state: microsoftConfigured ? "action_required" : "not_configured", accounts: [] },
+      { id: "microsoft", name: "Microsoft 365", state: microsoftState, actionHref: "/api/microsoft?action=connect", accounts: microsoftAccounts },
     ],
     integrations: [
       { id: "minimax", name: "MiniMax", detail: "Investigación y redacción asistida", state: minimaxState },

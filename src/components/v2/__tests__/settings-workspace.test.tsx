@@ -11,7 +11,7 @@ const demoSettingsSnapshot: V2SettingsSnapshot = {
   ],
   mailProviders: [
     { id: "gmail", name: "Gmail", state: "not_configured" as const, accounts: [], actionHref: "/api/gmail?action=connect" },
-    { id: "microsoft", name: "Microsoft 365", state: "action_required" as const, accounts: [] },
+    { id: "microsoft", name: "Microsoft 365", state: "action_required" as const, accounts: [], actionHref: "/api/microsoft?action=connect" },
   ],
   integrations: [
     { id: "minimax", name: "MiniMax", detail: "Investigación asistida", state: "not_configured" as const },
@@ -53,6 +53,13 @@ describe("SettingsWorkspace", () => {
 
     expect(screen.getByRole("link", { name: "Conectar Gmail" })).toHaveAttribute("href", "/api/gmail?action=connect");
     expect(screen.queryByRole("button", { name: "Conectar Gmail" })).not.toBeInTheDocument();
+  });
+
+  it("keeps the Microsoft 365 OAuth action available outside demo mode", () => {
+    render(<SettingsWorkspace settings={demoSettingsSnapshot} budget={{ spentUsd: 1.82, limitUsd: 5 }} isDemo={false} />);
+
+    expect(screen.getByRole("link", { name: "Conectar Microsoft 365" })).toHaveAttribute("href", "/api/microsoft?action=connect");
+    expect(screen.queryByRole("button", { name: "Conectar Microsoft 365" })).not.toBeInTheDocument();
   });
 
   it("intercepts the Gmail OAuth action honestly in demo mode", () => {
