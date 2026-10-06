@@ -1,49 +1,52 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
-# dependencies
-/node_modules
-/.pnp
-.pnp.*
-.yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/releases
-!.yarn/versions
+# Dependencies
+node_modules
+.pnp
+.pnp.js
 
-# testing
-/coverage
-.playwright-cli/
-output/*.png
-output/playwright/
-graphify-out/
+# Local env files. `.env.example` is the one that is committed — it is the
+# documentation, so the catch-all below must not swallow it.
+.env
+.env.*
+!.env.example
 
-# next.js
-/.next/
-/out/
+# Testing
+coverage
 
-# production
-/build
+# Turbo
+.turbo
 
-# misc
-.DS_Store
-*.pem
+# Vercel
+.vercel
 
-# debug
+# Build Outputs
+.next/
+out/
+build
+dist
+
+
+# Debug
+/.logs/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-.pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
-!.env.example
+# Misc
+.DS_Store
+*.pem
 
-# vercel
-.vercel
+# Agent worktrees
+.claude/worktrees/
 
-# typescript
-*.tsbuildinfo
-next-env.d.ts
-cache-life.d.ts
-routes.d.ts
-validator.ts
+# Skills are installed to .agents/skills; .claude/skills mirrors them per-tool
+.claude/skills/
+
+# eve build output
+.eve
+.output
+/dogfood-output
+
+# Agent scratch files
+.scratch/

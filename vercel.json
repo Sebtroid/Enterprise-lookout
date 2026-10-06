@@ -1,8 +1,0 @@
-{
-  "crons": [
-    {
-      "path": "/api/pastoral/followups/run",
-      "schedule": "5 13 * * 1-3"
-    }
-  ]
-}
