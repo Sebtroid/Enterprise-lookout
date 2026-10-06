@@ -68,9 +68,10 @@ El contrato `apps/api/src/generated/server.ts` se incluye en Git y debe
 regenerarse localmente después de cambiar routers. El build de interfaz en Vercel
 consume ese contrato y evita el generador nativo incompatible con su entorno.
 
-Esta rama es un respaldo para desarrollo y revisión. No se fusiona automáticamente
-con `main` y no publica una nueva versión en Vercel. Las automatizaciones de PR y
-release del CRM original no se incluyen en la importación.
+Los tres proyectos de Vercel están conectados a este repositorio. Cada subida a
+`codex/lookout-v2` compila la interfaz, la API y Dom en Vercel, usando sus variables
+de producción. `main` conserva V1. Las automatizaciones de PR y release del CRM
+original no se incluyen en la importación.
 
 ## Verificación y límites
 

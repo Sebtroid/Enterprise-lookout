@@ -10,12 +10,23 @@ La V2 usa tres proyectos independientes del Enterprise Lookout anterior.
 
 Los proyectos usan `bun install --frozen-lockfile`. Las compilaciones ocurren en
 Vercel. No necesitan Docker ni servidores de desarrollo activos en el Mac.
-El despliegue se realiza desde la carpeta de V2 mediante CLI. La rama
-`codex/lookout-v2` del repositorio `Sebtroid/Enterprise-lookout` guarda el código
-de V2 y conserva `main` como V1. Los despliegues no están conectados a esa rama.
+Los tres proyectos están conectados al repositorio `Sebtroid/Enterprise-lookout`.
+Su rama de producción es `codex/lookout-v2`. Cada subida a esa rama inicia las tres
+compilaciones. `main` conserva V1. La CLI queda disponible para despliegues manuales.
 Las automatizaciones de publicación del CRM original quedan fuera de esta
 importación. `trycompai/crm` se conserva como referencia de origen; los cambios
 de Enterprise Lookout se publican en el repositorio de Sebastián.
+
+Los proyectos de V2 omiten las otras ramas mediante Ignored Build Step:
+
+```sh
+if [ "$VERCEL_GIT_COMMIT_REF" = "codex/lookout-v2" ]; then exit 1; else exit 0; fi
+```
+
+Para comprobar un cambio antes de publicarlo, desactiva temporalmente Auto-assign
+Custom Production Domains. La compilación usa las variables de producción y
+conserva el despliegue anterior en las direcciones públicas. Después de verificar
+los tres servicios, promueve esas compilaciones y reactiva la asignación automática.
 
 Los proyectos de V1, `enterprise-lookout` y `enterprise-lookout-repo`, conservan
 `main` como rama de producción. Su campo Ignored Build Step excluye únicamente
