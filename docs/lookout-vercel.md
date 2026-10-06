@@ -17,6 +17,18 @@ Las automatizaciones de publicación del CRM original quedan fuera de esta
 importación. `trycompai/crm` se conserva como referencia de origen; los cambios
 de Enterprise Lookout se publican en el repositorio de Sebastián.
 
+Los proyectos de V1, `enterprise-lookout` y `enterprise-lookout-repo`, conservan
+`main` como rama de producción. Su campo Ignored Build Step excluye únicamente
+`codex/lookout-v2`, porque la configuración de V1 no compila el monorepo de V2:
+
+```sh
+if [ "$VERCEL_GIT_COMMIT_REF" = "codex/lookout-v2" ]; then exit 0; else exit 1; fi
+```
+
+Ambos proyectos exponen las variables de sistema. Las demás ramas mantienen su
+comportamiento de compilación. Esta regla sigue la
+[documentación de Vercel](https://vercel.com/kb/guide/how-do-i-use-the-ignored-build-step-field-on-vercel).
+
 ## Contrato de la API
 
 `apps/api/src/generated/server.ts` está generado y admitido expresamente por
