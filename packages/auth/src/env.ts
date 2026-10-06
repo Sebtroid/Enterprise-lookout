@@ -1,4 +1,8 @@
 import "@crm/env/load";
+import {
+	RUNTIME_SECRET_NAMES,
+	readRuntimeSecret,
+} from "@crm/db/runtime-secrets";
 
 const DEFAULT_API_URL = "http://localhost:3001";
 const DEFAULT_APP_URL = "http://localhost:3000";
@@ -26,9 +30,17 @@ const pair = (
 	return { clientId, clientSecret };
 };
 
-const googleCredentials = ():
-	| { clientId: string; clientSecret: string }
-	| undefined => pair("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET");
+async function googleCredentials(): Promise<
+	{ clientId: string; clientSecret: string } | undefined
+> {
+	const fromEnv = pair("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET");
+	if (fromEnv) return fromEnv;
+	const [clientId, clientSecret] = await Promise.all([
+		readRuntimeSecret(RUNTIME_SECRET_NAMES.googleClientId),
+		readRuntimeSecret(RUNTIME_SECRET_NAMES.googleClientSecret),
+	]);
+	return clientId && clientSecret ? { clientId, clientSecret } : undefined;
+}
 
 const microsoftCredentials = ():
 	| { clientId: string; clientSecret: string; tenantId: string }
@@ -48,6 +60,7 @@ const slackCredentials = ():
 
 const apiUrl =
 	optional("API_URL") ?? optional("BETTER_AUTH_URL") ?? DEFAULT_API_URL;
+const authUrl = optional("BETTER_AUTH_URL") ?? apiUrl;
 
 const appUrls = (optional("APP_URL") ?? DEFAULT_APP_URL)
 	.split(",")
@@ -58,12 +71,13 @@ const appUrl = appUrls[0] ?? DEFAULT_APP_URL;
 
 export const env = {
 	apiUrl,
+	authUrl,
 	appUrl,
-	google: googleCredentials(),
+	google: await googleCredentials(),
 	microsoft: microsoftCredentials(),
 	slack: slackCredentials(),
 	cookieDomain: optional("AUTH_COOKIE_DOMAIN"),
-	trustedOrigins: [...new Set([...appUrls, apiUrl])],
+	trustedOrigins: [...new Set([...appUrls, apiUrl, authUrl])],
 	isProduction: process.env.NODE_ENV === "production",
 } as const;
 

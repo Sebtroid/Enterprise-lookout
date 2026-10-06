@@ -69,7 +69,7 @@ export function MeetingEntry({
 					rel="noreferrer"
 					className="text-muted-foreground text-xs underline underline-offset-3 hover:text-foreground"
 				>
-					Join call
+					Entrar a la llamada
 				</a>
 			) : null}
 		</div>

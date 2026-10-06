@@ -20,9 +20,9 @@ export default function AgentsPage() {
 		<PageShell className="min-h-0">
 			<PageShellHeader>
 				<PageShellHeading>
-					<PageShellTitle>Team agents</PageShellTitle>
+					<PageShellTitle>Agentes del equipo</PageShellTitle>
 					<PageShellDescription>
-						Durable automations created from private agent-builder chats.
+						Automatizaciones creadas desde conversaciones privadas con el asistente.
 					</PageShellDescription>
 				</PageShellHeading>
 			</PageShellHeader>

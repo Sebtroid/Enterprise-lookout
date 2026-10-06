@@ -74,19 +74,27 @@ export async function createApp(): Promise<NestExpressApplication> {
 			});
 
 			const swaggerConfig = new DocumentBuilder()
-				.setTitle("CRM API")
+				.setTitle("Enterprise Lookout API")
 				.setDescription(
-					`REST surface of the CRM API — auth, health, the internal cron routes, and a generated REST bridge (under ${REST_BRIDGE_PATH}) for every tRPC procedure.`,
+					`API de auspicios, empresas y contactos. Las rutas de datos usan ${REST_BRIDGE_PATH} y requieren autenticación.`,
 				)
 				.setVersion("1.0")
+				.addServer(apiUrl)
 				.addCookieAuth(SESSION_COOKIE_NAME)
 				.addApiKey(apiKeySecurityScheme, "apiKey")
 				.build();
 			const swaggerDocument = SwaggerModule.createDocument(app, swaggerConfig);
+			swaggerDocument.openapi = "3.1.0";
+			const bridgePaths = Object.fromEntries(
+				Object.entries(trpcDocument.paths ?? {}).map(([path, operation]) => [
+					`${REST_BRIDGE_PATH}${path}`,
+					operation,
+				]),
+			) as typeof swaggerDocument.paths;
 
 			swaggerDocument.paths = {
 				...swaggerDocument.paths,
-				...(trpcDocument.paths as typeof swaggerDocument.paths),
+				...bridgePaths,
 			};
 			swaggerDocument.components = {
 				...swaggerDocument.components,

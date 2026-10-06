@@ -1,21 +1,27 @@
 import type { Metadata } from "next";
-import { GoogleConnection } from "../google-connection";
-import {
-	type ConnectionQuery,
-	OAuthConnectionPage,
-} from "../oauth-connection-page";
+import { Suspense } from "react";
+import { requireSession } from "@/lib/session";
+import { ConnectionPageLoading } from "../connection-page";
+import { GmailMailbox } from "../gmail-mailbox";
 
-export const metadata: Metadata = { title: "Google Workspace" };
+export const metadata: Metadata = { title: "Correo de auspicios" };
 
-export default function GoogleConnectionPage(props: {
-	params: Promise<{ slug: string }>;
-	searchParams: Promise<ConnectionQuery>;
-}) {
+export default function GoogleConnectionPage() {
 	return (
-		<OAuthConnectionPage
-			{...props}
-			connection={GoogleConnection}
-			provider="google"
+		<Suspense fallback={<ConnectionPageLoading />}>
+			<GoogleConnectionContent />
+		</Suspense>
+	);
+}
+
+async function GoogleConnectionContent() {
+	const { user } = await requireSession();
+	return (
+		<GmailMailbox
+			loginEmail={user.email}
+			initialSender={
+				user.email === "sebawitting@gmail.com" ? "sawitting@miuandes.cl" : ""
+			}
 		/>
 	);
 }

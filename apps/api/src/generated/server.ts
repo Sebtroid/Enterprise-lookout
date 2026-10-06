@@ -26,6 +26,7 @@ import { enrichmentQueueInput } from "@crm/validation/enrichment-queue";
 import { fieldListInput, fieldListOutput, fieldByKeyInput, serializedFieldOutput, fieldEntityInput, fieldFiltersOutput, fieldIdInput, fieldCoverageOutput, fieldCreateInput, fieldUpdateArgs, fieldReorderInput, fieldReorderOutput, fieldDeleteOutput, fieldBackfillOutput } from "../fields/fields.contracts";
 import { googleConnectionStatusOutput, setAutoCreateInput, suppressDomainInput, suppressDomainOutput, threadInput, emailThreadOutput, calendarEventInput, calendarEventOutput } from "../google/google.contracts";
 import { purgeSyncedDataOutput, revokeAccessOutput, microsoftConnectionStatusOutput, setOutlookAutoCreateInput } from "../microsoft/microsoft.contracts";
+import { mailboxStatusOutput, mailboxConnectInput, mailboxConnectOutput, sendDraftInput, sendDraftOutput, runtimeStatusOutput, operationsInput, operationsOutput, snapshotInput, snapshotOutput, profileInput, profileSchema, usageInput, usageOutput, contactSearchInput, contactSearchOutput, actionInput, commandOutput } from "@crm/validation/lookout";
 import { savedViewListInput, savedViewListOutput, savedViewCreateInput, savedViewOutput, savedViewUpdateArgs, savedViewIdInput, savedViewDeleteOutput } from "../saved-views/saved-views.contracts";
 import { agentModelOutput, modelCatalogOutput, setAgentModelInput, researchKeyOutput, setResearchKeyInput, archiveRetentionOutput, setArchiveRetentionDaysInput } from "../settings/settings.contracts";
 import { slackStatusOutput, slackMatchesOutput, slackChannelsInput, slackChannelsOutput, slackJoinChannelInput, slackJoinChannelOutput, slackRefreshPeopleOutput, slackCreateChannelInput, slackCreateChannelOutput, slackDisconnectOutput } from "../slack/slack.contracts";
@@ -557,6 +558,53 @@ const appRouter = t.router({
       .input(calendarEventInput)
       .output(calendarEventOutput)
       .query(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any)
+    }),
+  lookout: t.router({
+    mailboxStatus: publicProcedure
+      .output(mailboxStatusOutput)
+      .query(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any),
+    connectMailbox: publicProcedure
+      .input(mailboxConnectInput)
+      .output(mailboxConnectOutput)
+      .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any),
+    disconnectMailbox: publicProcedure
+      .output(mailboxStatusOutput)
+      .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any),
+    sendDraft: publicProcedure
+      .input(sendDraftInput)
+      .output(sendDraftOutput)
+      .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any),
+    checkDraft: publicProcedure
+      .input(sendDraftInput.pick({ id: true, eventId: true }))
+      .output(sendDraftOutput)
+      .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any),
+    runtimeStatus: publicProcedure
+      .output(runtimeStatusOutput)
+      .query(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any),
+    operations: publicProcedure
+      .input(operationsInput)
+      .output(operationsOutput)
+      .query(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any),
+    snapshot: publicProcedure
+      .input(snapshotInput)
+      .output(snapshotOutput)
+      .query(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any),
+    profile: publicProcedure
+      .input(profileInput)
+      .output(profileSchema)
+      .query(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any),
+    usage: publicProcedure
+      .input(usageInput)
+      .output(usageOutput)
+      .query(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any),
+    searchContacts: publicProcedure
+      .input(contactSearchInput)
+      .output(contactSearchOutput)
+      .query(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any),
+    command: publicProcedure
+      .input(actionInput)
+      .output(commandOutput)
+      .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as any)
     }),
   microsoft: t.router({
     status: publicProcedure

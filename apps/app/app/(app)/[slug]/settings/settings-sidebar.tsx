@@ -16,12 +16,10 @@ const ROOT = "/settings";
 
 const ITEMS: SettingsNavItem[] = [
 	{ title: "General", href: ROOT },
-	{ title: "Tracking & Analytics", href: `${ROOT}/tracking` },
-	{ title: "Connections", href: `${ROOT}/connections` },
-	{ title: "Currencies", href: `${ROOT}/currencies` },
-	{ title: "Members", href: `${ROOT}/members` },
-	{ title: "API Keys", href: `${ROOT}/api-keys` },
-	{ title: "SSO", href: `${ROOT}/sso` },
+	{ title: "Conexiones", href: `${ROOT}/connections` },
+	{ title: "Monedas", href: `${ROOT}/currencies` },
+	{ title: "Miembros", href: `${ROOT}/members` },
+	{ title: "Claves API", href: `${ROOT}/api-keys` },
 ];
 
 function isActive(href: string, root: string, pathname: string): boolean {
@@ -65,7 +63,7 @@ export function SettingsSidebarFallback() {
 		<>
 			<aside className="hidden w-56 shrink-0 border-r md:block [view-transition-name:settings-sidebar]">
 				<nav
-					aria-label="Workspace settings"
+					aria-label="Configuración del espacio"
 					aria-busy="true"
 					className="flex flex-col gap-0.5 p-3"
 				>
@@ -83,7 +81,7 @@ export function SettingsSidebarFallback() {
 			</aside>
 
 			<nav
-				aria-label="Workspace settings"
+				aria-label="Configuración del espacio"
 				aria-busy="true"
 				className="flex gap-1 overflow-x-auto border-b p-2 md:hidden [view-transition-name:settings-sidebar]"
 			>
@@ -116,7 +114,7 @@ export function SettingsSidebar() {
 		<>
 			<aside className="hidden w-56 shrink-0 border-r md:block [view-transition-name:settings-sidebar]">
 				<nav
-					aria-label="Workspace settings"
+					aria-label="Configuración del espacio"
 					className="flex flex-col gap-0.5 p-3"
 				>
 					{items.map((item) => (
@@ -131,7 +129,7 @@ export function SettingsSidebar() {
 			</aside>
 
 			<nav
-				aria-label="Workspace settings"
+				aria-label="Configuración del espacio"
 				className="flex gap-1 overflow-x-auto border-b p-2 md:hidden [view-transition-name:settings-sidebar]"
 			>
 				{items.map((item) => (

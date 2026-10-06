@@ -18,17 +18,17 @@ import type { DealListItem, DealListResult } from "@/lib/agent-transcript";
 import { DEAL_STAGE_OPTIONS } from "@/lib/deal-stage";
 
 const COLUMNS: SimpleTableColumn[] = [
-	{ id: "deal", header: "Deal", width: "w-[20%]" },
-	{ id: "company", header: "Company", width: "w-[18%]" },
-	{ id: "stage", header: "Stage", width: "w-[18%]" },
+	{ id: "deal", header: "Auspicio", width: "w-[20%]" },
+	{ id: "company", header: "Empresa", width: "w-[18%]" },
+	{ id: "stage", header: "Etapa", width: "w-[18%]" },
 	{
 		id: "amount",
-		header: "Amount",
+		header: "Monto",
 		width: "w-[12%]",
 		align: "right",
 	},
-	{ id: "owner", header: "Owner", width: "w-[14%]" },
-	{ id: "close", header: "Close date", width: "w-[12%]" },
+	{ id: "owner", header: "Responsable", width: "w-[14%]" },
+	{ id: "close", header: "Fecha de cierre", width: "w-[12%]" },
 	{ id: "idle", header: "Idle", width: "w-[8%]", align: "right" },
 ];
 
@@ -105,7 +105,7 @@ export function DealListResultTable({ result }: { result: DealListResult }) {
 									className="overflow-hidden px-3 py-3 text-right text-muted-foreground tabular-nums"
 									title={
 										deal.neverActive
-											? "No activity has ever been recorded"
+											? "Todavía no hay actividad registrada"
 											: undefined
 									}
 								>
@@ -143,7 +143,7 @@ function tableTitle(result: DealListResult): string {
 		result.criteria.status === "all" ? "" : `${result.criteria.status} `;
 	const stale = result.criteria.inactiveForDays === null ? "" : "stale ";
 	return count === 0
-		? "No matching deals"
+		? "No hay auspicios con estos filtros"
 		: `${count} ${stale}${status}deal${count === 1 ? "" : "s"}`;
 }
 
@@ -154,7 +154,7 @@ function tableMeta(result: DealListResult): string {
 		result.criteria.inactiveForDays === null
 			? null
 			: `${result.criteria.inactiveForDays}+ days inactive`,
-		result.hasMore ? "More results available" : null,
+		result.hasMore ? "Hay más resultados" : null,
 	].filter((detail): detail is string => Boolean(detail));
 
 	return details.join(" · ");

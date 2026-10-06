@@ -5,11 +5,12 @@ import { Suspense } from "react";
 import { AuthHeading, AuthShell } from "@/components/auth-shell";
 import { getSession } from "@/lib/session";
 import { getServerQueryClient, getServerTrpc } from "@/lib/trpc/server";
+import { PasswordSignIn } from "./password-sign-in";
 import { SocialSignIn } from "./social-sign-in";
 import { type SsoProvider, SsoSignIn } from "./sso-sign-in";
 
 export const metadata: Metadata = {
-	title: "Sign in",
+	title: "Ingresar",
 };
 
 type SignInOptions = {
@@ -46,8 +47,8 @@ export default function SignInPage({ searchParams }: PageProps<"/sign-in">) {
 			<Suspense
 				fallback={
 					<AuthHeading
-						title="Welcome back"
-						description="Sign in with your account to continue."
+						title="Bienvenido"
+						description="Ingresa con tu cuenta para continuar."
 					/>
 				}
 			>
@@ -71,7 +72,7 @@ async function SignIn({
 	}
 
 	const configured: MailboxProviderId[] = [];
-	if (options?.google ?? true) configured.push("google");
+	if (options?.google ?? false) configured.push("google");
 	if (options?.microsoft ?? false) configured.push("microsoft");
 
 	const providers = options?.providers ?? [];
@@ -85,35 +86,36 @@ async function SignIn({
 				? configured
 				: [];
 
-	if (!showSso && social.length === 0) {
-		return (
-			<>
-				<AuthHeading
-					title="No way in yet"
-					description="This CRM has no sign-in method configured, so nobody can get in — including you."
-				/>
-
-				<p className="text-center text-muted-foreground text-sm/5">
-					Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET — or MICROSOFT_CLIENT_ID
-					and MICROSOFT_CLIENT_SECRET — in the root .env file and restart. Your
-					own identity provider can be added from Settings once somebody is
-					signed in.
-				</p>
-			</>
-		);
-	}
-
 	return (
 		<>
 			<AuthHeading
-				title="Welcome back"
-				description="Sign in with your account to continue."
+				title="Bienvenido"
+				description="Ingresa con tu cuenta para continuar."
 			/>
 
-			{showSso ? <SsoSignIn providers={providers} /> : null}
-			{social.map((provider) => (
-				<SocialSignIn key={provider} provider={provider} />
-			))}
+			{showSso || social.length > 0 ? (
+				<div className="flex flex-col gap-3">
+					<p className="text-center text-muted-foreground text-xs">
+						Acceso privado. Usa tu cuenta autorizada de Google.
+					</p>
+					{showSso ? <SsoSignIn providers={providers} /> : null}
+					{social.map((provider) => (
+						<SocialSignIn key={provider} provider={provider} />
+					))}
+				</div>
+			) : null}
+			{social.includes("google") ? (
+				<details className="border-t pt-5">
+					<summary className="cursor-pointer text-muted-foreground text-sm">
+						Ingresar con contraseña
+					</summary>
+					<div className="pt-4">
+						<PasswordSignIn />
+					</div>
+				</details>
+			) : (
+				<PasswordSignIn />
+			)}
 		</>
 	);
 }

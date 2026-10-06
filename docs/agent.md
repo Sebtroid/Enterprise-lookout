@@ -11,7 +11,7 @@ are in `docs/setup.md`.
 
 ## Model
 
-Default `zai/glm-5.2-fast`; `DEFAULT_AGENT_MODEL` in `@crm/db/settings` because the
+Default `zai/glm-5.3`; `DEFAULT_AGENT_MODEL` in `@crm/db/settings` because the
 agent and the API both need it.
 
 - **A row (`AppSetting`), not an env var**, via `defineDynamic` on `session.started`.
@@ -19,8 +19,14 @@ agent and the API both need it.
 - **`lib/model.ts` always sends `modelContextWindowTokens`**; eve never inherits it.
 - **A failed read logs and keeps the compiled fallback.** Never throws.
 - **The chooser offers only `tool-use` models** (`ModelCatalogService`).
-- **Not a frontier model, deliberately** — refusing wrong answers is enforced by the
-  tools and evidence model, not model strength.
+- **Direct Z.ai API for the default model.** `lib/glm.ts` re-reads
+  `lookout_v2_glm_api_key` from Supabase Vault on each request. `GLM_API_KEY` is
+  an optional server environment override. Empty credentials never break startup.
+  Inference reports the missing Vault secret and makes no external request.
+- **Explicit alternative model selections use AI Gateway.** Root and builder
+  sessions keep their selection. Deployed versions keep their stored model.
+- Provider packages are pinned to the installed Eve AI SDK provider version.
+  No API key is stored in Eve's compiled configuration or sent to the browser.
 
 ## Pictures are copied, never linked
 

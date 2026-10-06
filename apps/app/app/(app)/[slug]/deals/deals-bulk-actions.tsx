@@ -127,7 +127,7 @@ export function DealsBulkActions({
 					<DropdownMenuGroup>
 						<DropdownMenuItem onSelect={() => restore.mutate({ ids })}>
 							<Undo />
-							Restore
+							Restaurar
 						</DropdownMenuItem>
 					</DropdownMenuGroup>
 					<DropdownMenuSeparator />
@@ -136,7 +136,7 @@ export function DealsBulkActions({
 							variant="destructive"
 							onSelect={() => setConfirming(true)}
 						>
-							Delete forever
+							Eliminar definitivamente
 						</DropdownMenuItem>
 					</DropdownMenuGroup>
 				</BulkActionsMenu>
@@ -189,7 +189,7 @@ export function DealsBulkActions({
 				<DropdownMenuGroup>
 					<DropdownMenuItem onSelect={() => archive.mutate({ ids })}>
 						<Archive />
-						Archive
+						Archivar
 					</DropdownMenuItem>
 				</DropdownMenuGroup>
 			</BulkActionsMenu>
@@ -225,7 +225,7 @@ export function DealsBulkActions({
 						}}
 					>
 						<Field>
-							<FieldLabel htmlFor={reasonId}>Reason</FieldLabel>
+							<FieldLabel htmlFor={reasonId}>Motivo</FieldLabel>
 							<Textarea
 								id={reasonId}
 								value={reason}
@@ -252,7 +252,7 @@ export function DealsBulkActions({
 								setReason("");
 							}}
 						>
-							Cancel
+							Cancelar
 						</Button>
 					</DialogFooter>
 				</DialogContent>

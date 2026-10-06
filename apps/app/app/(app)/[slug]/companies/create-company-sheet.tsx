@@ -2,11 +2,14 @@
 
 import Add from "@carbon/icons-react/es/Add";
 import { Button } from "@crm/ui/components/button";
+import { Checkbox } from "@crm/ui/components/checkbox";
 import {
 	Field,
 	FieldDescription,
 	FieldGroup,
 	FieldLabel,
+	FieldLegend,
+	FieldSet,
 } from "@crm/ui/components/field";
 import { Icon } from "@crm/ui/components/icon";
 import { Input } from "@crm/ui/components/input";
@@ -28,6 +31,7 @@ import {
 	SheetTrigger,
 } from "@crm/ui/components/sheet";
 import { Spinner } from "@crm/ui/components/spinner";
+import { categories } from "@crm/validation/lookout";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { parseAsBoolean, useQueryState } from "nuqs";
 import { type ComponentProps, Suspense, useId, useState } from "react";
@@ -43,7 +47,7 @@ function AddButton(props: ComponentProps<typeof Button>) {
 	return (
 		<Button {...props}>
 			<Icon icon={Add} data-icon="inline-start" />
-			New company
+			Nueva empresa
 		</Button>
 	);
 }
@@ -68,9 +72,13 @@ function CreateCompanyForm() {
 	const [name, setName] = useState("");
 	const [domain, setDomain] = useState("");
 	const [ownerId, setOwnerId] = useState(UNASSIGNED);
+	const [selectedCategories, setSelectedCategories] = useState<
+		(typeof categories)[number][]
+	>([]);
 
 	const nameId = useId();
 	const domainId = useId();
+	const categoryId = useId();
 
 	const users = useQuery(trpc.users.list.queryOptions());
 
@@ -78,11 +86,12 @@ function CreateCompanyForm() {
 		trpc.companies.create.mutationOptions({
 			onSuccess: async (company) => {
 				await cache.company(company.id);
-				toast.success(`${company.name} added.`);
+				toast.success(`${company.name} agregada a la base de empresas.`);
 				await setOpen(null);
 				setName("");
 				setDomain("");
 				setOwnerId(UNASSIGNED);
+				setSelectedCategories([]);
 				openRecord({ kind: "company", id: company.id });
 			},
 			onError: (error) => toast.error(error.message),
@@ -96,10 +105,10 @@ function CreateCompanyForm() {
 			</SheetTrigger>
 			<SheetContent side="right">
 				<SheetHeader>
-					<SheetTitle>New company</SheetTitle>
+					<SheetTitle>Nueva empresa</SheetTitle>
 					<SheetDescription>
-						Give it a name and a domain. The agent fills in the logo,
-						description, industry, address and socials.
+						Clasifícala una vez y úsala en todos tus eventos. Después puedes
+						completar contactos y datos de la empresa.
 					</SheetDescription>
 				</SheetHeader>
 
@@ -108,16 +117,21 @@ function CreateCompanyForm() {
 					className="flex-1 overflow-y-auto px-4"
 					onSubmit={(event) => {
 						event.preventDefault();
+						if (selectedCategories.length === 0) {
+							toast.error("Selecciona al menos una categoría.");
+							return;
+						}
 						create.mutate({
 							name,
 							domain: domain || undefined,
 							ownerId: ownerId === UNASSIGNED ? null : ownerId,
+							categories: selectedCategories,
 						});
 					}}
 				>
 					<FieldGroup>
 						<Field>
-							<FieldLabel htmlFor={nameId}>Name</FieldLabel>
+							<FieldLabel htmlFor={nameId}>Nombre</FieldLabel>
 							<Input
 								id={nameId}
 								value={name}
@@ -129,7 +143,7 @@ function CreateCompanyForm() {
 						</Field>
 
 						<Field>
-							<FieldLabel htmlFor={domainId}>Domain</FieldLabel>
+							<FieldLabel htmlFor={domainId}>Dominio</FieldLabel>
 							<Input
 								id={domainId}
 								value={domain}
@@ -139,19 +153,50 @@ function CreateCompanyForm() {
 								inputMode="url"
 							/>
 							<FieldDescription>
-								A full URL is fine — it is reduced to the bare host, which has
-								to be unique.
+								Opcional. Puedes pegar el sitio completo; guardaremos solo el
+								dominio. No se puede repetir entre empresas activas.
 							</FieldDescription>
 						</Field>
 
+						<FieldSet>
+							<FieldLegend>Categorías para auspicios</FieldLegend>
+							<FieldDescription>
+								Selecciona al menos una. Puedes elegir varias, por ejemplo
+								bebidas y dinero.
+							</FieldDescription>
+							<div className="grid grid-cols-2 gap-3">
+								{categories.map((category, index) => {
+									const id = `${categoryId}-${index}`;
+									return (
+										<Field key={category} orientation="horizontal">
+											<Checkbox
+												id={id}
+												checked={selectedCategories.includes(category)}
+												onCheckedChange={(checked) =>
+													setSelectedCategories((current) =>
+														checked
+															? [...current, category]
+															: current.filter((value) => value !== category),
+													)
+												}
+											/>
+											<FieldLabel htmlFor={id}>{category}</FieldLabel>
+										</Field>
+									);
+								})}
+							</div>
+						</FieldSet>
+
 						<Field>
-							<FieldLabel htmlFor="create-company-owner">Owner</FieldLabel>
+							<FieldLabel htmlFor="create-company-owner">
+								Responsable
+							</FieldLabel>
 							<Select value={ownerId} onValueChange={setOwnerId}>
 								<SelectTrigger id="create-company-owner">
 									<SelectValue />
 								</SelectTrigger>
 								<SelectContent>
-									<SelectItem value={UNASSIGNED}>Unassigned</SelectItem>
+									<SelectItem value={UNASSIGNED}>Sin asignar</SelectItem>
 									{(users.data ?? []).map((user) => (
 										<SelectItem key={user.id} value={user.id}>
 											{user.name}
@@ -167,13 +212,17 @@ function CreateCompanyForm() {
 					<Button
 						type="submit"
 						form="create-company"
-						disabled={create.isPending || name.trim() === ""}
+						disabled={
+							create.isPending ||
+							name.trim() === "" ||
+							selectedCategories.length === 0
+						}
 					>
 						{create.isPending ? <Spinner /> : null}
-						Add company
+						Guardar empresa
 					</Button>
 					<SheetClose asChild>
-						<Button variant="outline">Cancel</Button>
+						<Button variant="outline">Cancelar</Button>
 					</SheetClose>
 				</SheetFooter>
 			</SheetContent>

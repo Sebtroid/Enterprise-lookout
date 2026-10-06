@@ -1,3 +1,4 @@
+import { LookoutModule } from "./lookout/lookout.module";
 import { auth } from "@crm/auth";
 import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
@@ -41,6 +42,7 @@ import { WorkspaceModule } from "./workspace/workspace.module";
 @Module({
 	imports: [
 		LoggingModule,
+		LookoutModule,
 		ConfigModule.forRoot({
 			isGlobal: true,
 			cache: true,

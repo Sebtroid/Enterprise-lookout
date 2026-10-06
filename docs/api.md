@@ -43,7 +43,8 @@ here, what do we sell.
 
 - **The id is a constant, never a parameter.** A function taking an `organizationId`
   has turned the plugin into tenancy plumbing.
-- **Signing in is the join; no invite flow.** `ensureWorkspaceMembership` runs in
+- **Private sign-in is the join.** Google admits exact `ALLOWED_SIGN_IN` addresses.
+  Password signup also requires a single-use Lookout invitation. `ensureWorkspaceMembership` runs in
   `databaseHooks.session.create.before` and **degrades, never throws** — a throw fails
   the session create and locks everyone out. The plugin's `invitation` table is unused.
 - **First account is owner**, and the hook enrols pre-existing users, oldest first.
@@ -53,34 +54,31 @@ here, what do we sell.
   `WorkspaceService` adds one invariant: **the last owner cannot be demoted**, with
   `FOR UPDATE` on the owner rows before counting.
 - **Reads and writes go through tRPC**, not `authClient.organization.*`.
-- **Name and website are required at onboarding and cannot be skipped**, in the form
-  *and* in `updateWorkspaceInput`, posting the same `workspace.update` as settings.
+- **The workspace name is required; its website is optional.** Lookout is a shared
+  sponsorship workspace, not the university or a selling company. Onboarding and
+  settings post the same `workspace.update`; supplied websites must normalize to a domain.
 - **Onboarded state is `onboardedAt` inside the plugin's `metadata` blob**, not a
   column; `isOnboarded`/`markOnboarded` (`@crm/db/workspace`) are the only accessors,
   and `markOnboarded` preserves every other key.
 - **The name starts as `DEFAULT_WORKSPACE_NAME` (`CRM`), a placeholder not an
   answer.** The header renders `<name> CRM`, so `workspaceLabel` tests the name rather
   than comparing to the default.
-- **The website queues the agent's `workspace-profile` task** and goes through
-  `normalizeDomain`, rejecting null. Stored canonical, so re-saving uncanonically
-  counts as a change and re-queues research.
+- **A supplied website queues the agent's `workspace-profile` task** when it changes.
+  An empty website stores null and queues no research. A removed website also
+  stops exposing the previous workspace profile.
 
 ### Gates in `proxy.ts`
 
-Onboarding, then `/onboarding/research` for the Context key. Asked server-side every
-request.
+Workspace onboarding is checked server-side. Context.dev and mailbox connections
+are optional capabilities; neither blocks normal CRM access.
 
-- **`getSessionCookie()` decides signed-in**; pages still resolve the real session via
-  `requireMailboxAccess()`.
+- **`getSessionCookie()` detects a candidate session**; pages resolve the real session via
+  `requireSession()`.
 - **Nothing is cached in a cookie** — both facts revert on a database reset while a
   year-long marker insists the gate passed. Cache in the API if cost ever matters.
-- **Both reads run concurrently**, but order decides which is *asked* — the research
-  read is never made while onboarding is open.
 - **An unreachable API fails open** (`unknown` lets the request through).
 - **`/sign-in`, `/grant-access`, `/eve` are ungated.** `/sign-in` is the only path a
   stranger may read; `/` joins it only when `IS_MARKETING` is set.
-- **There is no way past the key gate but to answer** — Skip stranded installs, every
-  later company sitting `PENDING` with nothing saying so.
 
 ### The name is also the URL
 
@@ -145,8 +143,10 @@ self-hoster's admin cannot redeploy.
 
 `GET /openapi.json` serves one document: Nest's own controllers plus a REST bridge
 under `/rest` generated from every tRPC procedure. Swagger UI renders it at `/`.
-`createApp` builds both halves and merges them, so nothing is generated at build
-time and no file is checked in — the document is whatever the routers are.
+`createApp` builds both halves and merges them as OpenAPI 3.1. The merged paths
+include `/rest`, and the server origin excludes that prefix. Nothing is generated
+at build time. The optional agent export in `evaluation/integrations/` is a
+reviewable subset; regenerate it from the running API after changing its contract.
 
 `SwaggerModule.setup` runs **before** `app.init()`, because it registers its Express
 routes synchronously and Nest's own routing would otherwise shadow them. The factory

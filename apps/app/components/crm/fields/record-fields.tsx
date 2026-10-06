@@ -38,7 +38,7 @@ export type RecordFieldEntry = {
 
 const NONE = "__none__";
 
-const UNASSIGNED = "Unassigned";
+const UNASSIGNED = "Sin asignar";
 
 const FORMER_MEMBER = "Former member";
 
@@ -50,10 +50,10 @@ export function FieldsCog({ kind }: { kind: RecordKind }) {
 			<TooltipTrigger asChild>
 				<Button variant="ghost" size="icon-sm" onClick={() => open(kind)}>
 					<Icon icon={Settings} />
-					<span className="sr-only">Fields</span>
+					<span className="sr-only">Campos</span>
 				</Button>
 			</TooltipTrigger>
-			<TooltipContent>Fields</TooltipContent>
+			<TooltipContent>Campos</TooltipContent>
 		</Tooltip>
 	);
 }

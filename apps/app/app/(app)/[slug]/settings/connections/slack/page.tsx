@@ -82,7 +82,7 @@ async function SlackConnectionPageContent({
 					<SlackLogo className="size-6" />
 					<h1 className="font-medium text-xl">Slack</h1>
 					<span className="ml-auto text-muted-foreground text-sm">
-						Not connected
+						Sin conectar
 					</span>
 				</div>
 				<p className="text-muted-foreground text-sm leading-relaxed">

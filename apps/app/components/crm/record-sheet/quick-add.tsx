@@ -48,7 +48,7 @@ function QuickAddForm({
 					disabled={pending}
 					onClick={onCancel}
 				>
-					Cancel
+					Cancelar
 				</Button>
 				<Button type="submit" size="sm" disabled={pending || !ready}>
 					{pending ? <Spinner /> : null}
@@ -94,7 +94,7 @@ export function QuickAddContact({
 
 	return (
 		<QuickAddForm
-			submitLabel="Add contact"
+			submitLabel="Añadir contacto"
 			pending={create.isPending}
 			ready={firstName.trim() !== ""}
 			onCancel={onDone}
@@ -110,7 +110,7 @@ export function QuickAddContact({
 			}
 		>
 			<Field>
-				<FieldLabel htmlFor={firstNameId}>First name</FieldLabel>
+				<FieldLabel htmlFor={firstNameId}>Nombre</FieldLabel>
 				<Input
 					id={firstNameId}
 					autoFocus
@@ -120,7 +120,7 @@ export function QuickAddContact({
 				/>
 			</Field>
 			<Field>
-				<FieldLabel htmlFor={lastNameId}>Last name</FieldLabel>
+				<FieldLabel htmlFor={lastNameId}>Apellido</FieldLabel>
 				<Input
 					id={lastNameId}
 					value={lastName}
@@ -129,7 +129,7 @@ export function QuickAddContact({
 				/>
 			</Field>
 			<Field>
-				<FieldLabel htmlFor={emailId}>Email</FieldLabel>
+				<FieldLabel htmlFor={emailId}>Correo</FieldLabel>
 				<Input
 					id={emailId}
 					type="email"
@@ -139,12 +139,12 @@ export function QuickAddContact({
 				/>
 			</Field>
 			<Field>
-				<FieldLabel htmlFor={titleId}>Title</FieldLabel>
+				<FieldLabel htmlFor={titleId}>Cargo</FieldLabel>
 				<Input
 					id={titleId}
 					value={title}
 					onChange={(event) => setTitle(event.target.value)}
-					placeholder="Head of Security"
+					placeholder="Encargado de auspicios"
 					autoComplete="off"
 				/>
 			</Field>
@@ -194,7 +194,7 @@ export function AttachDealContact({
 	const nobody = !options.isPending && candidates.length === 0;
 
 	const placeholder = options.isPending
-		? "Loading…"
+		? "Cargando…"
 		: nobody
 			? `Everybody at ${companyName} is already on it`
 			: "Choose somebody";
@@ -210,7 +210,7 @@ export function AttachDealContact({
 			}
 		>
 			<Field>
-				<FieldLabel htmlFor={personId}>Person</FieldLabel>
+				<FieldLabel htmlFor={personId}>Persona</FieldLabel>
 				<Select value={contactId} onValueChange={setContactId}>
 					<SelectTrigger id={personId} className="w-full" disabled={nobody}>
 						<SelectValue placeholder={placeholder} />
@@ -226,12 +226,12 @@ export function AttachDealContact({
 				</Select>
 			</Field>
 			<Field>
-				<FieldLabel htmlFor={roleId}>Role</FieldLabel>
+				<FieldLabel htmlFor={roleId}>Rol</FieldLabel>
 				<Input
 					id={roleId}
 					value={role}
 					onChange={(event) => setRole(event.target.value)}
-					placeholder="Champion"
+					placeholder="Contacto aliado"
 					autoComplete="off"
 				/>
 			</Field>
@@ -309,7 +309,7 @@ export function QuickAddDeal({
 			onSubmit={submit}
 		>
 			<Field className="sm:col-span-2">
-				<FieldLabel htmlFor={nameId}>Name</FieldLabel>
+				<FieldLabel htmlFor={nameId}>Nombre</FieldLabel>
 				<Input
 					id={nameId}
 					autoFocus
@@ -320,7 +320,7 @@ export function QuickAddDeal({
 				/>
 			</Field>
 			<Field>
-				<FieldLabel htmlFor={amountId}>Amount</FieldLabel>
+				<FieldLabel htmlFor={amountId}>Monto</FieldLabel>
 				<Input
 					id={amountId}
 					value={amount}
@@ -330,12 +330,12 @@ export function QuickAddDeal({
 				/>
 			</Field>
 			<Field>
-				<FieldLabel htmlFor={closeId}>Expected close</FieldLabel>
+				<FieldLabel htmlFor={closeId}>Cierre previsto</FieldLabel>
 				<DatePicker
 					id={closeId}
 					value={closeDate}
 					onChange={setCloseDate}
-					placeholder="No date yet"
+					placeholder="Sin fecha"
 				/>
 			</Field>
 		</QuickAddForm>

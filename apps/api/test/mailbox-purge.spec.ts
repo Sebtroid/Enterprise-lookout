@@ -2,6 +2,7 @@ import { afterAll, beforeEach, describe, expect, it } from "bun:test";
 import { ActivityType, db, EmailDirection, GoogleSyncStatus } from "@crm/db";
 import { ActivityStampService } from "../src/crm/activity-stamp.service";
 import { GoogleConnectionService } from "../src/google/google-connection.service";
+import { LookoutMailboxService } from "../src/mailbox/lookout-mailbox.service";
 import {
 	GOOGLE_PROVIDER_ID,
 	MICROSOFT_PROVIDER_ID,
@@ -26,7 +27,7 @@ const solo = `solo-${suffix}`;
 const theirs = `theirs-${suffix}`;
 const roots = [shared, solo, theirs];
 
-const tokens = new MailboxTokenService(db);
+const tokens = new MailboxTokenService(db, new LookoutMailboxService(db));
 const state = new SyncStateService(db);
 const stamp = new ActivityStampService(db);
 

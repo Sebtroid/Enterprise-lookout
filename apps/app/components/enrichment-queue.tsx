@@ -100,7 +100,7 @@ export function EnrichmentQueue() {
 						tone={total > 0 ? "primary" : "neutral"}
 						aria-hidden="true"
 					/>
-					{total > 0 ? `Enriching ${total}` : "Enriching"}
+					{total > 0 ? `Enriching ${total}` : "Investigaciones"}
 				</Button>
 			</PopoverTrigger>
 

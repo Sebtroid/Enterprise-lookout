@@ -6,7 +6,12 @@ import {
 	builderQuestion,
 } from "@crm/validation/builder-question";
 import {
+	type ChatScope,
+	chatScopeMessageSchema,
+} from "@crm/validation/lookout";
+import {
 	BadRequestException,
+	ConflictException,
 	Injectable,
 	Logger,
 	NotFoundException,
@@ -408,6 +413,7 @@ export class ConversationsService {
 		}
 
 		const now = new Date();
+		await this.validateLookoutScope(input.lookoutScope);
 		try {
 			const conversation = await this.db.agentConversation.create({
 				data: {
@@ -446,6 +452,7 @@ export class ConversationsService {
 		userId: string,
 	): Promise<{ id: string }> {
 		await this.assertWorkspaceMember(userId);
+		await this.validateLookoutScope(input.lookoutScope);
 		const existing = await this.requestByClientId(input.clientRequestId);
 
 		if (existing) {
@@ -454,7 +461,14 @@ export class ConversationsService {
 
 		const conversation = await this.db.agentConversation.findFirst({
 			where: { id: input.id, userId, kind: "BUILDER" },
-			select: { id: true },
+			select: {
+				id: true,
+				submissions: {
+					orderBy: { createdAt: "asc" },
+					take: 1,
+					select: { message: true },
+				},
+			},
 		});
 
 		if (!conversation) {
@@ -462,6 +476,19 @@ export class ConversationsService {
 				`No builder conversation with id ${input.id}.`,
 			);
 		}
+		const originalScope = conversation.submissions[0]
+			? chatScopeMessageSchema.parse(conversation.submissions[0].message)
+					.lookoutScope
+			: undefined;
+		if (
+			originalScope &&
+			input.lookoutScope &&
+			JSON.stringify(originalScope) !== JSON.stringify(input.lookoutScope)
+		)
+			throw new ConflictException(
+				"Abre un chat nuevo para cambiar de trabajo o evento.",
+			);
+		const lookoutScope = originalScope ?? input.lookoutScope;
 
 		try {
 			const attachmentWrites = await this.submissionAttachmentWrites(
@@ -475,7 +502,7 @@ export class ConversationsService {
 						submittedById: userId,
 						clientRequestId: input.clientRequestId,
 						commandType: input.commandType,
-						message: this.builderMessage(input),
+						message: this.builderMessage({ ...input, lookoutScope }),
 						attachments: {
 							create: attachmentWrites,
 						},
@@ -947,6 +974,7 @@ export class ConversationsService {
 
 	private builderMessage(input: {
 		message: string;
+		lookoutScope?: ChatScope;
 		resources: BuilderConversationCreateInput["resources"];
 		attachments:
 			| BuilderConversationCreateInput["attachments"]
@@ -954,6 +982,7 @@ export class ConversationsService {
 	}): Prisma.InputJsonValue {
 		return {
 			text: input.message,
+			...(input.lookoutScope ? { lookoutScope: input.lookoutScope } : {}),
 			resources: input.resources,
 			attachments: input.attachments.map(({ name, type, size }) => ({
 				name,
@@ -961,6 +990,22 @@ export class ConversationsService {
 				size,
 			})),
 		};
+	}
+	private async validateLookoutScope(scope?: ChatScope): Promise<void> {
+		if (!scope) return;
+		const work = await this.db.workArea.findFirst({
+			where: {
+				id: scope.workAreaId,
+				ownerId: scope.ownerId,
+				owner: { members: { some: { organizationId: WORKSPACE_ID } } },
+				...(scope.eventId ? { events: { some: { id: scope.eventId } } } : {}),
+			},
+			select: { id: true },
+		});
+		if (!work)
+			throw new NotFoundException(
+				"El trabajo o evento no pertenece a esta sección.",
+			);
 	}
 
 	private attachmentWrites(

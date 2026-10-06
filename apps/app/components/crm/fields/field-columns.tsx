@@ -18,7 +18,7 @@ function render(
 ) {
 	if (value === null || value === "") return <EmptyCellValue />;
 
-	if (type === "CHECKBOX") return value === true ? "Yes" : "No";
+	if (type === "CHECKBOX") return value === true ? "Sí" : "No";
 	if (type === "DATE") return formatDay(String(value));
 	if (type === "USER") {
 		const user = users.get(String(value));

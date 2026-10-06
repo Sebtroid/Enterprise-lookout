@@ -93,7 +93,7 @@ export function BulkOwnerMenu({
 }) {
 	return (
 		<DropdownMenuSub>
-			<DropdownMenuSubTrigger>Assign owner</DropdownMenuSubTrigger>
+			<DropdownMenuSubTrigger>Asignar responsable</DropdownMenuSubTrigger>
 			<DropdownMenuSubContent className="max-h-72 overflow-y-auto">
 				<DropdownMenuGroup>
 					{unassignedLabel && (
@@ -141,9 +141,9 @@ export function BulkDeleteDialog({
 				</AlertDialogHeader>
 
 				<AlertDialogFooter>
-					<AlertDialogCancel>Cancel</AlertDialogCancel>
+					<AlertDialogCancel>Cancelar</AlertDialogCancel>
 					<AlertDialogAction variant="destructive" onClick={onConfirm}>
-						Delete
+						Eliminar
 					</AlertDialogAction>
 				</AlertDialogFooter>
 			</AlertDialogContent>

@@ -9,7 +9,7 @@ import Image from "next/image";
 import { COMPANY_COLUMNS, MOCK_COMPANIES } from "./companies";
 import { CompanyMark } from "./company-mark";
 
-const FACETS = ["Owner", "Industry", "Enrichment"];
+const FACETS = ["Responsable", "Rubro", "Enrichment"];
 
 export function CompaniesPage() {
 	return (
@@ -34,12 +34,12 @@ export function CompaniesPage() {
 export function CompaniesList() {
 	return (
 		<div className="flex min-h-0 min-w-0 grow flex-col gap-3 p-4">
-			<p className="font-medium text-xl/[120%] tracking-[-0.5px]">Companies</p>
+			<p className="font-medium text-xl/[120%] tracking-[-0.5px]">Empresas</p>
 
 			<div className="flex h-8 shrink-0 items-center rounded-md border border-border bg-muted px-2">
 				<Search size={14} className="shrink-0 text-muted-foreground" />
 				<span className="truncate pl-1.5 text-muted-foreground text-xs">
-					Search companies…
+					Buscar empresas…
 				</span>
 			</div>
 
@@ -67,14 +67,14 @@ function PageHeader() {
 	return (
 		<div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2">
 			<p className="col-start-1 row-start-1 self-center font-medium text-3xl/[120%] tracking-[-0.75px]">
-				Companies
+				Empresas
 			</p>
 			<p className="col-start-1 -col-end-1 row-start-2 text-muted-foreground text-sm/[142%]">
-				Every account in the pipeline.
+				Base compartida de empresas, marcas y posibles auspiciadores.
 			</p>
 			<span className="col-start-2 row-start-1 flex h-8 shrink-0 items-center justify-self-end rounded-md bg-primary pr-2.5 pl-2 text-primary-foreground shadow-2xs">
 				<Add size={16} />
-				<span className="pl-1.5 font-medium text-xs/[133%]">New company</span>
+				<span className="pl-1.5 font-medium text-xs/[133%]">Nueva empresa</span>
 			</span>
 		</div>
 	);
@@ -86,7 +86,7 @@ function Toolbar() {
 			<div className="flex h-8 w-64 shrink-0 items-center rounded-md border border-border bg-muted pl-2">
 				<Search size={16} className="shrink-0 text-muted-foreground" />
 				<span className="truncate pl-1.5 text-muted-foreground text-xs">
-					Search companies by name or domain…
+					Buscar empresas por nombre o dominio…
 				</span>
 			</div>
 
@@ -102,11 +102,11 @@ function Toolbar() {
 				))}
 				<span className="flex h-7 shrink-0 items-center gap-1 rounded-md border border-border bg-muted pr-2.5 pl-1.5 font-medium text-xs/[133%] shadow-2xs">
 					<ArrowsVertical size={14} className="shrink-0" />
-					Sort
+					Ordenar
 				</span>
 				<span className="flex h-7 shrink-0 items-center gap-1 rounded-md border border-border bg-muted pr-2.5 pl-1.5 font-medium text-xs/[133%] shadow-2xs">
 					<Column size={14} className="shrink-0" />
-					Columns
+					Columnas
 					<span className="opacity-60">(7)</span>
 				</span>
 			</div>
@@ -198,13 +198,13 @@ function Pagination() {
 			<div className="flex items-center gap-2">
 				<span className="flex h-7 shrink-0 items-center gap-1 rounded-md pr-2.5 pl-1.5 font-medium text-xs/[133%] opacity-50">
 					<ChevronLeft size={14} className="shrink-0" />
-					Previous
+					Anterior
 				</span>
 				<span className="text-muted-foreground text-xs/[133%] tabular-nums">
 					1 / 2
 				</span>
 				<span className="flex h-7 shrink-0 items-center gap-1 rounded-md bg-foreground pr-1.5 pl-2.5 font-medium text-background text-xs/[133%] shadow-2xs">
-					Next
+					Siguiente
 					<ChevronRight size={14} className="shrink-0" />
 				</span>
 			</div>

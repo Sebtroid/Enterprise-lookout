@@ -52,7 +52,7 @@ export function WorkspaceForm() {
 			onSuccess: async (saved) => {
 				await cache.workspace();
 				setDraft(null);
-				toast.success("Workspace saved.");
+				toast.success("Espacio de trabajo guardado.");
 
 				if (saved.slug !== slug) {
 					router.replace(workspaceUrl(saved.slug, "/settings"));
@@ -75,9 +75,9 @@ export function WorkspaceForm() {
 	return (
 		<Card>
 			<CardHeader>
-				<CardTitle>Workspace</CardTitle>
+				<CardTitle>Espacio de trabajo</CardTitle>
 				<CardDescription>
-					The name and website of the company using this CRM.
+					El espacio compartido para empresas, contactos y auspicios.
 				</CardDescription>
 
 				<CardAction>
@@ -88,12 +88,11 @@ export function WorkspaceForm() {
 							!canRename ||
 							save.isPending ||
 							!dirty ||
-							values.name.trim() === "" ||
-							values.website.trim() === ""
+							values.name.trim() === ""
 						}
 					>
 						{save.isPending ? <Spinner data-icon="inline-start" /> : null}
-						Save
+						Guardar
 					</Button>
 				</CardAction>
 			</CardHeader>
@@ -111,23 +110,23 @@ export function WorkspaceForm() {
 				>
 					<FieldGroup>
 						<Field>
-							<FieldLabel htmlFor={nameId}>Name</FieldLabel>
+							<FieldLabel htmlFor={nameId}>Nombre</FieldLabel>
 							<Input
 								id={nameId}
 								value={values.name}
 								onChange={(event) => edit({ name: event.target.value })}
-								placeholder="Acme Inc."
+								placeholder="Enterprise Lookout"
 								autoComplete="organization"
 								disabled={!canRename || save.isPending}
 								required
 							/>
 							<FieldDescription>
-								Shown wherever the CRM refers to your own company.
+								Nombre que verán tú y Miguel en la app.
 							</FieldDescription>
 						</Field>
 
 						<Field>
-							<FieldLabel htmlFor={websiteId}>Website</FieldLabel>
+							<FieldLabel htmlFor={websiteId}>Sitio web (opcional)</FieldLabel>
 							<InputGroup>
 								<InputGroupAddon>
 									<InputGroupText>https://</InputGroupText>
@@ -136,7 +135,7 @@ export function WorkspaceForm() {
 									id={websiteId}
 									value={values.website}
 									onChange={(event) => edit({ website: event.target.value })}
-									placeholder="acme.com"
+									placeholder="tu-organizacion.cl"
 									autoComplete="off"
 									autoCapitalize="off"
 									autoCorrect="off"
@@ -145,14 +144,14 @@ export function WorkspaceForm() {
 									disabled={!canRename || save.isPending}
 								/>
 							</InputGroup>
-							<FieldDescription>Your own company's website.</FieldDescription>
+							<FieldDescription>Puedes dejarlo vacío.</FieldDescription>
 						</Field>
 					</FieldGroup>
 				</form>
 
 				{canRename ? null : (
 					<p className="text-muted-foreground text-xs">
-						Only an owner or an admin can change this.
+						Solo el dueño o un administrador pueden cambiar estos datos.
 					</p>
 				)}
 			</CardContent>

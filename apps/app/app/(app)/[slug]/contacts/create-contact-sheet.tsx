@@ -39,7 +39,7 @@ function AddButton(props: ComponentProps<typeof Button>) {
 	return (
 		<Button {...props}>
 			<Icon icon={Add} data-icon="inline-start" />
-			New contact
+			Nuevo contacto
 		</Button>
 	);
 }
@@ -80,7 +80,7 @@ function CreateContactForm({ companyId }: { companyId?: string }) {
 			onSuccess: async (contact) => {
 				await cache.contact(contact.id);
 				toast.success(
-					`${[contact.firstName, contact.lastName].filter(Boolean).join(" ")} added.`,
+					`${[contact.firstName, contact.lastName].filter(Boolean).join(" ")} se agregó a contactos.`,
 				);
 				await setOpen(null);
 				setFirstName("");
@@ -100,10 +100,10 @@ function CreateContactForm({ companyId }: { companyId?: string }) {
 			</SheetTrigger>
 			<SheetContent side="right">
 				<SheetHeader>
-					<SheetTitle>New contact</SheetTitle>
+					<SheetTitle>Nuevo contacto</SheetTitle>
 					<SheetDescription>
-						Email addresses are unique, so importing the same person twice
-						updates them rather than duplicating them.
+						Cada correo identifica a un contacto. Si importas a la misma persona
+						dos veces, su ficha se actualiza en vez de duplicarse.
 					</SheetDescription>
 				</SheetHeader>
 
@@ -124,7 +124,7 @@ function CreateContactForm({ companyId }: { companyId?: string }) {
 				>
 					<FieldGroup>
 						<Field>
-							<FieldLabel htmlFor={firstNameId}>First name</FieldLabel>
+							<FieldLabel htmlFor={firstNameId}>Nombre</FieldLabel>
 							<Input
 								id={firstNameId}
 								value={firstName}
@@ -135,7 +135,7 @@ function CreateContactForm({ companyId }: { companyId?: string }) {
 						</Field>
 
 						<Field>
-							<FieldLabel htmlFor={lastNameId}>Last name</FieldLabel>
+							<FieldLabel htmlFor={lastNameId}>Apellido</FieldLabel>
 							<Input
 								id={lastNameId}
 								value={lastName}
@@ -145,7 +145,7 @@ function CreateContactForm({ companyId }: { companyId?: string }) {
 						</Field>
 
 						<Field>
-							<FieldLabel htmlFor={emailId}>Email</FieldLabel>
+							<FieldLabel htmlFor={emailId}>Correo</FieldLabel>
 							<Input
 								id={emailId}
 								type="email"
@@ -156,34 +156,36 @@ function CreateContactForm({ companyId }: { companyId?: string }) {
 						</Field>
 
 						<Field>
-							<FieldLabel htmlFor={titleId}>Title</FieldLabel>
+							<FieldLabel htmlFor={titleId}>Cargo</FieldLabel>
 							<Input
 								id={titleId}
 								value={title}
 								onChange={(event) => setTitle(event.target.value)}
-								placeholder="Head of Security"
+								placeholder="Encargado de auspicios"
 								autoComplete="off"
 							/>
 						</Field>
 
 						<Field>
-							<FieldLabel htmlFor="create-contact-company">Company</FieldLabel>
+							<FieldLabel htmlFor="create-contact-company">Empresa</FieldLabel>
 							<CompanyPicker
 								id="create-contact-company"
 								value={company}
 								onValueChange={setCompany}
-								none={{ value: NONE, label: "No company" }}
+								none={{ value: NONE, label: "Sin empresa" }}
 							/>
 						</Field>
 
 						<Field>
-							<FieldLabel htmlFor="create-contact-owner">Owner</FieldLabel>
+							<FieldLabel htmlFor="create-contact-owner">
+								Responsable
+							</FieldLabel>
 							<Select value={ownerId} onValueChange={setOwnerId}>
 								<SelectTrigger id="create-contact-owner">
 									<SelectValue />
 								</SelectTrigger>
 								<SelectContent>
-									<SelectItem value={NONE}>Unassigned</SelectItem>
+									<SelectItem value={NONE}>Sin asignar</SelectItem>
 									{(users.data ?? []).map((user) => (
 										<SelectItem key={user.id} value={user.id}>
 											{user.name}
@@ -202,10 +204,10 @@ function CreateContactForm({ companyId }: { companyId?: string }) {
 						disabled={create.isPending || firstName.trim() === ""}
 					>
 						{create.isPending ? <Spinner /> : null}
-						Add contact
+						Guardar contacto
 					</Button>
 					<SheetClose asChild>
-						<Button variant="outline">Cancel</Button>
+						<Button variant="outline">Cancelar</Button>
 					</SheetClose>
 				</SheetFooter>
 			</SheetContent>

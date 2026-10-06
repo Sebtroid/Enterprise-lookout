@@ -96,7 +96,7 @@ export function SavedViewsMenu({
 						className="justify-start sm:justify-center"
 					>
 						<Bookmark data-icon="inline-start" />
-						Views
+						Vistas
 					</Button>
 				</DropdownMenuTrigger>
 				<DropdownMenuContent align="end" className="min-w-56">
@@ -137,7 +137,7 @@ export function SavedViewsMenu({
 					</DialogHeader>
 					<div className="flex flex-col gap-4">
 						<Field>
-							<FieldLabel htmlFor="saved-view-name">Name</FieldLabel>
+							<FieldLabel htmlFor="saved-view-name">Nombre</FieldLabel>
 							<Input
 								id="saved-view-name"
 								value={name}
@@ -158,7 +158,7 @@ export function SavedViewsMenu({
 					</div>
 					<DialogFooter>
 						<Button variant="outline" onClick={closeDialog}>
-							Cancel
+							Cancelar
 						</Button>
 						<Button
 							disabled={name.trim() === "" || create.isPending}
@@ -171,7 +171,7 @@ export function SavedViewsMenu({
 								})
 							}
 						>
-							Save
+							Guardar
 						</Button>
 					</DialogFooter>
 				</DialogContent>

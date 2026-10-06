@@ -2,13 +2,14 @@ import { db } from "@crm/db";
 import { DEFAULT_AGENT_MODEL } from "@crm/db/settings";
 import { defineAgent, defineDynamic } from "eve";
 import { z } from "zod";
+import { glmModel } from "../../lib/glm";
 import { attribute, purposeOf } from "../../lib/session-purpose";
 
 export default defineAgent({
 	description:
 		"Execute one immutable deployed CRM agent version and persist its result and every side effect.",
 	model: defineDynamic({
-		fallback: DEFAULT_AGENT_MODEL.id,
+		fallback: glmModel,
 		events: {
 			"session.started": async (_event, ctx) => {
 				if (purposeOf(ctx) !== "team-agent") return null;
@@ -23,7 +24,7 @@ export default defineAgent({
 						},
 					},
 				});
-				return run
+				return run && run.version.modelId !== DEFAULT_AGENT_MODEL.id
 					? {
 							model: run.version.modelId,
 							modelContextWindowTokens: run.version.modelContextWindowTokens,
@@ -32,6 +33,7 @@ export default defineAgent({
 			},
 		},
 	}),
+	modelContextWindowTokens: DEFAULT_AGENT_MODEL.contextWindowTokens,
 	outputSchema: z.object({
 		summary: z.string().min(1).max(1000),
 		result: z.record(z.string(), z.unknown()).nullable(),

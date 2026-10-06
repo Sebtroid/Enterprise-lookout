@@ -61,7 +61,7 @@ export function EnrichmentActions({
 				) : (
 					<Icon icon={Renew} data-icon="inline-start" />
 				)}
-				<span className="hidden sm:inline">Re-enrich</span>
+				<span className="hidden sm:inline">Actualizar información</span>
 			</Button>
 
 			<Button
@@ -74,7 +74,7 @@ export function EnrichmentActions({
 				) : (
 					<Icon icon={MagicWand} data-icon="inline-start" />
 				)}
-				<span className="hidden sm:inline">Research</span>
+				<span className="hidden sm:inline">Investigar</span>
 			</Button>
 		</>
 	);
@@ -110,7 +110,7 @@ export function ContactEnrichmentAction({ contactId }: { contactId: string }) {
 			) : (
 				<Icon icon={Renew} data-icon="inline-start" />
 			)}
-			<span className="hidden sm:inline">Re-enrich</span>
+			<span className="hidden sm:inline">Actualizar información</span>
 		</Button>
 	);
 }

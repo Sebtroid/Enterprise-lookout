@@ -183,7 +183,7 @@ export function AgentCode({
 								size="sm"
 								variant="outline"
 							>
-								{editing ? "Done" : "Edit"}
+								{editing ? "Listo" : "Editar"}
 							</Button>
 						) : null}
 					</div>
@@ -242,7 +242,7 @@ export function AgentCode({
 					}}
 					size="sm"
 				>
-					{saving ? "Saving…" : "Save"}
+					{saving ? "Guardando…" : "Guardar"}
 				</Button>
 			</SaveBar>
 		</EditProvider>

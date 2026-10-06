@@ -32,12 +32,12 @@ export type TimelineAnchor =
 	| { dealId: string };
 
 const TAB_LABELS = {
-	all: "All",
-	notes: "Notes",
-	email: "Email",
-	meetings: "Meetings",
-	upcoming: "Upcoming",
-	done: "Done",
+	all: "Todo",
+	notes: "Notas",
+	email: "Correo",
+	meetings: "Reuniones",
+	upcoming: "Próximos",
+	done: "Listo",
 } satisfies Record<TimelineTab, string>;
 
 const EMPTY_STATES = {

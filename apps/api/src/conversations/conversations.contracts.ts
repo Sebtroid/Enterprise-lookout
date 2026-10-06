@@ -7,6 +7,7 @@ import {
 	AgentTriggerType,
 	AgentVersionStatus,
 } from "@crm/db";
+import { chatScopeSchema } from "@crm/validation/lookout";
 import { z } from "zod";
 
 const agentManifestSummaryOutput = z.object({
@@ -122,6 +123,7 @@ const builderPromptShape = {
 	commandType: z.enum(["CHAT", "CREATE_AGENT"]).default("CHAT"),
 	message: z.string().trim().min(1).max(20_000),
 	resources: z.array(builderResource).max(20).default([]),
+	lookoutScope: chatScopeSchema.optional(),
 };
 
 export const builderConversationCreateInput = z.object({

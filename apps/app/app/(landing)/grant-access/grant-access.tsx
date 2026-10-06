@@ -96,7 +96,7 @@ export function GrantAccess({
 				type="button"
 				variant="ghost"
 			>
-				Sign out
+				Cerrar sesión
 			</Button>
 		</div>
 	);

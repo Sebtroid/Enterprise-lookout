@@ -8,7 +8,7 @@ import { toast } from "sonner";
 export function CopyValue({ value, label }: { value: string; label: string }) {
 	const unavailable = () =>
 		toast.error(
-			`Could not copy the ${label.toLowerCase()}. Select it instead.`,
+			`No se pudo copiar ${label.toLowerCase()}. Selecciona el texto y cópialo.`,
 		);
 
 	return (
@@ -26,12 +26,12 @@ export function CopyValue({ value, label }: { value: string; label: string }) {
 
 				clipboard
 					.writeText(value)
-					.then(() => toast.success(`${label} copied.`))
+					.then(() => toast.success(`${label}: copiado.`))
 					.catch(unavailable);
 			}}
 		>
 			<Icon icon={Copy} />
-			<span className="sr-only">Copy {label.toLowerCase()}</span>
+			<span className="sr-only">Copiar {label.toLowerCase()}</span>
 		</Button>
 	);
 }

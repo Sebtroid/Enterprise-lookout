@@ -7,6 +7,7 @@ import {
 import { type Db } from "@crm/db";
 import { Injectable, Logger } from "@nestjs/common";
 import { InjectDatabase } from "../database/database.constants";
+import { LookoutMailboxService } from "./lookout-mailbox.service";
 import {
 	GOOGLE_PROVIDER_ID,
 	PROVIDER_FOR_SOURCE,
@@ -26,18 +27,31 @@ const GOOGLE_REVOKE_URL = "https://oauth2.googleapis.com/revoke";
 export class MailboxTokenService {
 	private readonly logger = new Logger(MailboxTokenService.name);
 
-	constructor(@InjectDatabase() private readonly db: Db) {}
+	constructor(
+		@InjectDatabase() private readonly db: Db,
+		private readonly lookoutMailbox: LookoutMailboxService,
+	) {}
 
 	async grantedScopes(
 		userId: string,
 		providerId: MailboxProviderId,
 	): Promise<Set<string>> {
+		const mailbox =
+			providerId === GOOGLE_PROVIDER_ID
+				? await this.db.lookoutMailbox.findUnique({
+						where: { userId },
+						select: { scopes: true },
+					})
+				: null;
 		const account = await this.db.account.findFirst({
 			where: { userId, providerId },
 			select: { scope: true },
 		});
 
-		return parseScopes(account?.scope);
+		return new Set([
+			...parseScopes(account?.scope),
+			...(mailbox?.scopes ?? []),
+		]);
 	}
 
 	async isConnected(userId: string, source: SyncSource): Promise<boolean> {
@@ -59,6 +73,14 @@ export class MailboxTokenService {
 		userId: string,
 		providerId: MailboxProviderId,
 	): Promise<boolean> {
+		if (
+			providerId === GOOGLE_PROVIDER_ID &&
+			(await this.db.lookoutMailbox.findUnique({
+				where: { userId },
+				select: { userId: true },
+			}))
+		)
+			return true;
 		const account = await this.db.account.findFirst({
 			where: { userId, providerId },
 			select: { refreshToken: true },
@@ -71,6 +93,24 @@ export class MailboxTokenService {
 		userId: string,
 		source: SyncSource,
 	): Promise<TokenResult> {
+		if (
+			source === "gmail" &&
+			(await this.db.lookoutMailbox.findUnique({
+				where: { userId },
+				select: { userId: true },
+			}))
+		) {
+			try {
+				const mailbox = await this.lookoutMailbox.access(userId);
+				return { outcome: "ok", accessToken: mailbox.accessToken };
+			} catch {
+				return {
+					outcome: "needs-reconnect",
+					reason:
+						"Vuelve a autorizar el correo de envío en Conexiones → Gmail.",
+				};
+			}
+		}
 		const providerId = PROVIDER_FOR_SOURCE[source];
 
 		if (!(await this.isConnected(userId, source))) {

@@ -1,3 +1,4 @@
+import { DEFAULT_AGENT_MODEL } from "@crm/db/settings";
 import { CACHE_MANAGER } from "@nestjs/cache-manager";
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import type { Cache } from "cache-manager";
@@ -72,8 +73,17 @@ export class ModelCatalogService {
 		const cached = await this.cache.get<CatalogModel[]>(CATALOG_KEY);
 		if (cached) return cached;
 
-		const models = await this.fetchCatalog();
-		if (!models) return null;
+		const gateway = await this.fetchCatalog();
+		const models = [
+			{
+				id: DEFAULT_AGENT_MODEL.id,
+				name: "GLM 5.3 · API directa",
+				provider: "Z.ai",
+				contextWindowTokens: DEFAULT_AGENT_MODEL.contextWindowTokens,
+				pricing: null,
+			},
+			...(gateway ?? []).filter((model) => model.id !== DEFAULT_AGENT_MODEL.id),
+		];
 
 		await this.cache.set(CATALOG_KEY, models, CATALOG_TTL_MS);
 		return models;

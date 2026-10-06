@@ -86,7 +86,7 @@ export function SlackChannels() {
 					size="sm"
 					variant="outline"
 				>
-					{refreshing ? "Refreshing…" : "Refresh"}
+					{refreshing ? "Refreshing…" : "Actualizar"}
 				</Button>
 			</div>
 
@@ -133,7 +133,7 @@ export function SlackChannels() {
 					size="sm"
 					variant="outline"
 				>
-					{channels.fetchingMore ? "Loading…" : "Load more"}
+					{channels.fetchingMore ? "Cargando…" : "Load more"}
 				</Button>
 			) : null}
 
@@ -199,7 +199,7 @@ function AskDialog({
 
 				<AlertDialogFooter>
 					<AlertDialogCancel disabled={status === "pending"}>
-						Cancel
+						Cancelar
 					</AlertDialogCancel>
 					<Button
 						disabled={status === "pending"}

@@ -17,7 +17,7 @@ export function AgentBuilderHomeFallback() {
 				<Skeleton className="h-24 w-full rounded-lg" aria-hidden="true" />
 			</div>
 			<span role="status" className="sr-only">
-				Opening chat…
+				Abriendo chat…
 			</span>
 		</main>
 	);
@@ -43,7 +43,7 @@ export function AgentBuilderChatFallback() {
 				</div>
 			</div>
 			<span role="status" className="sr-only">
-				Opening chat…
+				Abriendo chat…
 			</span>
 		</main>
 	);

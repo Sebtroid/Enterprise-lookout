@@ -19,10 +19,10 @@ import { useTRPC } from "@/lib/trpc/client";
 const CELL = "px-3 py-2.5 align-middle";
 
 const COLUMNS: SimpleTableColumn[] = [
-	{ id: "source", header: "Source" },
+	{ id: "source", header: "Fuente" },
 	{ id: "medium", header: "Medium", width: "w-32" },
-	{ id: "views", header: "Page views", width: "w-28", align: "right" },
-	{ id: "contacts", header: "Contacts", width: "w-24", align: "right" },
+	{ id: "views", header: "Vistas de página", width: "w-28", align: "right" },
+	{ id: "contacts", header: "Contactos", width: "w-24", align: "right" },
 ];
 
 export function TrafficSources() {

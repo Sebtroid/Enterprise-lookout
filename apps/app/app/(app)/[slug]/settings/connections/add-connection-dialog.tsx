@@ -35,17 +35,17 @@ export function AddConnectionDialog({
 		>
 			<DialogContent className="max-w-(--container-narrow) gap-0 p-0 md:left-[calc(50%+calc((56px+213px)/2))]">
 				<DialogHeader className="gap-2 px-(--spacing-block-inline) pt-5 pb-4">
-					<DialogTitle className="text-base">Add a connection</DialogTitle>
+					<DialogTitle className="text-base">Añadir conexión</DialogTitle>
 					<DialogDescription>
-						Nothing moves until you finish setting one up.
+						Configura una conexión para comenzar.
 					</DialogDescription>
 				</DialogHeader>
 				<div className="flex flex-col border-y px-2 py-2">
-					{!connected.includes("Google Workspace") ? (
+					{!connected.includes("Gmail") ? (
 						<CatalogRow
 							logo={GoogleLogo}
-							name="Google Workspace"
-							description="Bring in Gmail messages and Google Calendar meetings"
+							name="Gmail"
+							description="Sincronizar correos de Gmail y reuniones de Google Calendar"
 							href={`/${slug}/settings/connections/google`}
 						/>
 					) : null}
@@ -53,7 +53,7 @@ export function AddConnectionDialog({
 						<CatalogRow
 							logo={SlackLogo}
 							name="Slack"
-							description="Let deployed agents notify approved channels and people"
+							description="Avisos de agentes a canales y personas aprobados"
 							href={`/${slug}/settings/connections/slack`}
 						/>
 					) : null}
@@ -61,31 +61,31 @@ export function AddConnectionDialog({
 						<CatalogRow
 							logo={MicrosoftLogo}
 							name="Microsoft 365"
-							description="Bring in Outlook email and the people on it"
+							description="Sincronizar correos y contactos de Outlook"
 							href={`/${slug}/settings/connections/microsoft`}
 						/>
 					) : null}
 					<CatalogRow
 						logo={StripeLogo}
 						name="Stripe"
-						description="Coming soon"
+						description="Próximamente"
 					/>
 					<CatalogRow
 						logo={DocusignLogo}
 						name="Docusign"
-						description="Coming soon"
+						description="Próximamente"
 					/>
 					<CatalogRow
 						logo={Plug}
-						name="Anything else"
-						description="The intake API is not available yet"
+						name="Otra herramienta"
+						description="Conecta herramientas mediante la API"
 						href={`/${slug}/settings/connections/intake`}
 					/>
 				</div>
 				<p className="px-(--spacing-block-inline) py-4 text-muted-foreground text-xs">
 					{connected.length > 0
-						? `${connected.join(", ")} ${connected.length === 1 ? "is" : "are"} already connected.`
-						: "Nothing is connected yet."}
+						? `Conectado: ${connected.join(", ")}.`
+						: "Todavía no hay conexiones."}
 				</p>
 			</DialogContent>
 		</Dialog>

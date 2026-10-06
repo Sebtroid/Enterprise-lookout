@@ -57,7 +57,7 @@ export function DeleteChatAction({
 			onSuccess: async () => {
 				await cache.conversationRemoved(conversationId);
 				setConfirming(false);
-				toast.success("Chat deleted.");
+				toast.success("Chat eliminado.");
 				onDeleted?.();
 
 				if (returnToChatList) {
@@ -93,7 +93,7 @@ export function DeleteChatAction({
 							disabled={removeAction.pending}
 						>
 							<Icon icon={OverflowMenuVertical} />
-							<span className="sr-only">More chat actions</span>
+							<span className="sr-only">Más acciones del chat</span>
 						</Button>
 					</DropdownMenuTrigger>
 					<DropdownMenuContent align="end">
@@ -102,7 +102,7 @@ export function DeleteChatAction({
 							onSelect={() => setConfirming(true)}
 						>
 							<Icon icon={TrashCan} />
-							Delete chat
+							Eliminar chat
 						</DropdownMenuItem>
 					</DropdownMenuContent>
 				</DropdownMenu>
@@ -116,15 +116,16 @@ export function DeleteChatAction({
 			>
 				<AlertDialogContent>
 					<AlertDialogHeader>
-						<AlertDialogTitle>Delete {title}?</AlertDialogTitle>
+						<AlertDialogTitle>¿Eliminar {title}?</AlertDialogTitle>
 						<AlertDialogDescription>
-							This permanently deletes the chat, its messages, attachments, and
-							shared link. Any agent created from it stays available.
+							Se eliminan permanentemente el chat, sus mensajes, adjuntos y
+							enlace compartido. Los agentes creados desde este chat siguen
+							disponibles.
 						</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>
 						<AlertDialogCancel disabled={removeAction.pending}>
-							Cancel
+							Cancelar
 						</AlertDialogCancel>
 						<Button
 							variant="destructive"
@@ -134,11 +135,11 @@ export function DeleteChatAction({
 						>
 							<AsyncButtonContent
 								status={removeAction.status}
-								pendingLabel="Deleting"
-								successLabel="Deleted"
-								errorLabel="Try again"
+								pendingLabel="Eliminando"
+								successLabel="Eliminado"
+								errorLabel="Inténtalo de nuevo"
 							>
-								Delete chat
+								Eliminar chat
 							</AsyncButtonContent>
 						</Button>
 					</AlertDialogFooter>

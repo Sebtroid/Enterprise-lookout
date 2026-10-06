@@ -26,7 +26,9 @@ export function SsoSignIn({ providers }: { providers: SsoProvider[] }) {
 		});
 
 		if (error) {
-			toast.error(error.message ?? "Could not reach the sign-in service.");
+			toast.error(
+				error.message ?? "No pudimos conectar con el servicio de acceso.",
+			);
 			setPending(null);
 		}
 	}
@@ -45,7 +47,7 @@ export function SsoSignIn({ providers }: { providers: SsoProvider[] }) {
 					{pending === provider.providerId ? (
 						<Spinner data-icon="inline-start" />
 					) : null}
-					Continue with {provider.name}
+					Continuar con {provider.name}
 				</Button>
 			))}
 		</>

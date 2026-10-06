@@ -1,4 +1,5 @@
 "use client";
+import { SponsorProfile } from "@/components/lookout/profile";
 
 import Email from "@carbon/icons-react/es/Email";
 import Partnership from "@carbon/icons-react/es/Partnership";
@@ -74,16 +75,16 @@ const DATE_OPTIONS: Intl.DateTimeFormatOptions = {
 };
 
 const DEAL_COLUMNS = [
-	{ id: "deal", header: "Deal", width: "w-[32%]", className: "pl-5" },
-	{ id: "role", header: "Role", width: "w-[16%]" },
-	{ id: "stage", header: "Stage", width: "w-[22%]" },
+	{ id: "deal", header: "Auspicio", width: "w-[32%]", className: "pl-5" },
+	{ id: "role", header: "Rol", width: "w-[16%]" },
+	{ id: "stage", header: "Etapa", width: "w-[22%]" },
 	{
 		id: "amount",
-		header: "Amount",
+		header: "Monto",
 		width: "w-[16%]",
 		align: "right" as const,
 	},
-	{ id: "owner", header: "Owner", width: "w-[14%]" },
+	{ id: "owner", header: "Responsable", width: "w-[14%]" },
 ];
 
 export function ContactSheet({ contactId }: { contactId: string }) {
@@ -116,23 +117,23 @@ export function ContactSheet({ contactId }: { contactId: string }) {
 		? [
 				{
 					value: "overview",
-					label: "Overview",
+					label: "Eventos",
 					content: <ContactOverview contact={contact} />,
 				},
 				{
 					value: "deals",
-					label: "Deals",
+					label: "Auspicios",
 					count: contact.deals.length,
 					content: <ContactDeals contact={contact} />,
 				},
 				{
 					value: "activity",
-					label: "Activity",
+					label: "Actividad",
 					content: <Timeline anchor={{ contactId: contact.id }} />,
 				},
 				{
 					value: "agent",
-					label: "Agent",
+					label: "Dom",
 					content: <AgentPanel record={{ kind: "contact", id: contact.id }} />,
 					keepMounted: true,
 				},
@@ -143,7 +144,7 @@ export function ContactSheet({ contactId }: { contactId: string }) {
 		<RecordSheetFrame
 			loading={query.isPending}
 			error={query.error?.message ?? null}
-			title={contact ? contactName(contact) : "Contact"}
+			title={contact ? contactName(contact) : "Contacto"}
 			description={
 				contact ? (
 					<MetaLine parts={[contact.title, contact.company?.name]} />
@@ -184,7 +185,7 @@ export function ContactSheet({ contactId }: { contactId: string }) {
 							<Button asChild variant="outline" size="sm">
 								<a href={`mailto:${contact.email}`}>
 									<Icon icon={Email} data-icon="inline-start" />
-									<span className="hidden sm:inline">Email</span>
+									<span className="hidden sm:inline">Correo</span>
 								</a>
 							</Button>
 						) : null}
@@ -201,7 +202,7 @@ export function ContactSheet({ contactId }: { contactId: string }) {
 								}
 							>
 								<Icon icon={Star} data-icon="inline-start" />
-								<span className="hidden sm:inline">Make primary</span>
+								<span className="hidden sm:inline">Marcar como principal</span>
 							</Button>
 						) : null}
 						<RecordActions
@@ -216,14 +217,14 @@ export function ContactSheet({ contactId }: { contactId: string }) {
 			stats={
 				contact ? (
 					<DetailSheetStats>
-						<DetailSheetStat label="Company">
+						<DetailSheetStat label="Empresa">
 							{contact.company ? (
 								<CompanyStat company={contact.company} />
 							) : (
 								<EmptyCellValue />
 							)}
 						</DetailSheetStat>
-						<DetailSheetStat label="Email">
+						<DetailSheetStat label="Correo">
 							{contact.email ? (
 								<a
 									href={`mailto:${contact.email}`}
@@ -235,7 +236,7 @@ export function ContactSheet({ contactId }: { contactId: string }) {
 								<EmptyCellValue />
 							)}
 						</DetailSheetStat>
-						<DetailSheetStat label="Phone">
+						<DetailSheetStat label="Teléfono">
 							{contact.phone ? (
 								<a
 									href={`tel:${contact.phone}`}
@@ -247,7 +248,7 @@ export function ContactSheet({ contactId }: { contactId: string }) {
 								<EmptyCellValue />
 							)}
 						</DetailSheetStat>
-						<DetailSheetStat label="Owner">
+						<DetailSheetStat label="Responsable">
 							<OwnerCell owner={contact.owner} />
 						</DetailSheetStat>
 					</DetailSheetStats>
@@ -323,37 +324,38 @@ function ContactOverview({ contact }: { contact: Contact }) {
 
 	return (
 		<DetailSheetBody>
-			<DetailSheetSection title="Details" action={<FieldsCog kind="contact" />}>
+<SponsorProfile entity="contact" id={contact.id} />
+			<DetailSheetSection title="Detalles" action={<FieldsCog kind="contact" />}>
 				<DetailSheetProperties>
 					<InlineField
-						label="First name"
+						label="Nombre"
 						value={contact.firstName}
 						saving={isSaving("firstName")}
 						onSave={(firstName) => firstName && save({ firstName })}
 					/>
 					<InlineField
-						label="Last name"
+						label="Apellido"
 						value={contact.lastName}
 						saving={isSaving("lastName")}
 						onSave={(lastName) => save({ lastName })}
 					/>
 					<InlineField
-						label="Title"
+						label="Cargo"
 						value={contact.title}
-						placeholder="Head of Security"
+						placeholder="Encargado de auspicios"
 						saving={isSaving("title")}
 						onSave={(title) => save({ title })}
 						{...agentProps("title")}
 					/>
 					<InlineField
-						label="Email"
+						label="Correo"
 						value={contact.email}
 						type="email"
 						saving={isSaving("email")}
 						onSave={(email) => save({ email })}
 					/>
 					<InlineField
-						label="Phone"
+						label="Teléfono"
 						value={contact.phone}
 						type="tel"
 						saving={isSaving("phone")}
@@ -393,10 +395,10 @@ function ContactOverview({ contact }: { contact: Contact }) {
 						}
 					/>
 					<InlineSelectField
-						label="Owner"
+						label="Responsable"
 						value={contact.owner?.id ?? NONE}
 						options={[
-							{ value: NONE, label: "Unassigned" },
+							{ value: NONE, label: "Sin asignar" },
 							...(users.data ?? []).map((user) => ({
 								value: user.id,
 								label: user.name,
@@ -422,7 +424,7 @@ function ContactOverview({ contact }: { contact: Contact }) {
 			/>
 
 			{hasContactLinks(contact) ? (
-				<DetailSheetSection title="Links">
+				<DetailSheetSection title="Enlaces">
 					<ContactSocials contact={contact} />
 				</DetailSheetSection>
 			) : null}
@@ -446,7 +448,7 @@ function Background({ brief }: { brief: NonNullable<Contact["brief"]> }) {
 
 	return (
 		<DetailSheetSection
-			title="Background"
+			title="Trayectoria"
 			action={
 				<span className="text-muted-foreground text-xs">
 					{brief.sourceUrl ? (
@@ -456,7 +458,7 @@ function Background({ brief }: { brief: NonNullable<Contact["brief"]> }) {
 							rel="noreferrer noopener"
 							className="underline-offset-2 hover:underline"
 						>
-							Source
+							Fuente
 						</a>
 					) : null}
 					{brief.sourceUrl ? " · " : null}
@@ -474,7 +476,7 @@ function Background({ brief }: { brief: NonNullable<Contact["brief"]> }) {
 				))}
 
 				{previous.length > 0 ? (
-					<DetailSheetProperty label="Previously" wide>
+					<DetailSheetProperty label="Anteriormente" wide>
 						<PreviousRoles roles={previous} />
 					</DetailSheetProperty>
 				) : null}
@@ -517,10 +519,10 @@ function WeKnowThem({
 	const first = name.split(" ")[0] ?? name;
 
 	return (
-		<DetailSheetSection title="We know them">
+		<DetailSheetSection title="Relación existente">
 			<DetailSheetProperties>
 				{emails > 0 ? (
-					<DetailSheetProperty label="Emails">
+					<DetailSheetProperty label="Correos">
 						<span className="tabular-nums">{emails}</span>
 						<span className="text-muted-foreground">
 							{" · "}
@@ -536,14 +538,14 @@ function WeKnowThem({
 				) : null}
 
 				{meetings > 0 ? (
-					<DetailSheetProperty label="Meetings">
+					<DetailSheetProperty label="Reuniones">
 						<span className="tabular-nums">{meetings}</span>
 					</DetailSheetProperty>
 				) : null}
 
 				{nextMeeting ? (
-					<DetailSheetProperty label="Next meeting" wide>
-						{nextMeeting.title ?? "Meeting"}
+					<DetailSheetProperty label="Próxima reunión" wide>
+						{nextMeeting.title ?? "Reunión"}
 						<span className="text-muted-foreground">
 							{" · "}
 							<LocalDateTime
@@ -555,7 +557,7 @@ function WeKnowThem({
 				) : null}
 
 				{colleagues.length > 0 ? (
-					<DetailSheetProperty label="Also here" wide>
+					<DetailSheetProperty label="También participa" wide>
 						<Colleagues colleagues={colleagues} />
 					</DetailSheetProperty>
 				) : null}
@@ -597,7 +599,7 @@ function ContactDeals({ contact }: { contact: Contact }) {
 		return (
 			<DetailSheetEmpty
 				icon={Partnership}
-				title="Not on any deals"
+				title="Sin auspicios asociados"
 				description={`${contactName(contact)} is not attached to anything being sold yet. Deals are opened on the company, then people are added to them.`}
 			/>
 		);

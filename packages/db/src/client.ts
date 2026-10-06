@@ -2,6 +2,7 @@ import "@crm/env/load";
 
 import { PrismaPg } from "@prisma/adapter-pg";
 import { type Prisma, PrismaClient } from "./generated/prisma/client";
+import { SUPABASE_ROOT_CA } from "./supabase-root-ca";
 
 const connectionString =
 	process.env.NODE_ENV === "test" ? testDatabase() : liveDatabase();
@@ -98,9 +99,35 @@ const logDefinitions: Prisma.LogDefinition[] = [
 		: []),
 ];
 
+function databaseSchema(url: string): string | undefined {
+	const schema = new URL(url).searchParams.get("schema");
+	if (!schema) return undefined;
+	if (!/^[a-z][a-z0-9_]*$/.test(schema)) {
+		throw new Error("DATABASE_URL has an invalid PostgreSQL schema name.");
+	}
+	return schema;
+}
+
 const createPrismaClient = () => {
+	const runtimeUrl = new URL(connectionString);
+	const host = runtimeUrl.hostname;
+	const isSupabase =
+		host.endsWith(".pooler.supabase.com") || host.endsWith(".supabase.co");
+	if (isSupabase) {
+		runtimeUrl.searchParams.delete("sslmode");
+		runtimeUrl.searchParams.delete("sslrootcert");
+	}
 	const client = new PrismaClient({
-		adapter: new PrismaPg({ connectionString }),
+		adapter: new PrismaPg(
+			{
+				connectionString: runtimeUrl.toString(),
+				...(isSupabase && {
+					ssl: { ca: SUPABASE_ROOT_CA, rejectUnauthorized: true },
+					max: 3,
+				}),
+			},
+			{ schema: databaseSchema(connectionString) },
+		),
 		log: logDefinitions,
 	});
 

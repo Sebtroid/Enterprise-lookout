@@ -26,6 +26,7 @@ import { type BulkResult, requireOwner, runBulk } from "../crm/bulk";
 import { blankToNull, normalizeEmail, toCents } from "../crm/values";
 import { InjectDatabase } from "../database/database.constants";
 import { FieldsService } from "../fields/fields.service";
+import { revokeDraftApprovals } from "../lookout/approvals";
 import {
 	activityFacetCounts,
 	activityFilter,
@@ -349,10 +350,14 @@ export class ContactsService {
 
 	async archive(id: string): Promise<{ id: string; name: string }> {
 		try {
-			const contact = await this.db.contact.update({
-				where: { id },
-				data: { archivedAt: new Date() },
-				select: { firstName: true, lastName: true },
+			const contact = await this.db.$transaction(async (tx) => {
+				const updated = await tx.contact.update({
+					where: { id },
+					data: { archivedAt: new Date() },
+					select: { firstName: true, lastName: true },
+				});
+				await revokeDraftApprovals(tx, { sponsorship: { contactId: id } });
+				return updated;
 			});
 
 			this.logger.log({ message: "Contact archived", contactId: id });
@@ -415,6 +420,7 @@ export class ContactsService {
 
 				await tx.agentTask.deleteMany({ where: { contactId: id } });
 				await tx.agentEvent.deleteMany({ where: { contactId: id } });
+				await revokeDraftApprovals(tx, { sponsorship: { contactId: id } });
 
 				const contact = await tx.contact.delete({
 					where: { id },
@@ -509,6 +515,9 @@ export class ContactsService {
 					data,
 					select: { id: true, firstName: true, lastName: true },
 				});
+				if (input.email !== undefined || input.companyId !== undefined) {
+					await revokeDraftApprovals(tx, { sponsorship: { contactId: id } });
+				}
 
 				if (email !== null) {
 					await this.allowAgain(tx, email);
@@ -561,9 +570,15 @@ export class ContactsService {
 		}
 
 		const ids = [...new Set(input.ids)];
-		const { count } = await this.db.contact.updateMany({
-			where: { id: { in: ids } },
-			data: { companyId },
+		const { count } = await this.db.$transaction(async (tx) => {
+			const changed = await tx.contact.updateMany({
+				where: { id: { in: ids } },
+				data: { companyId },
+			});
+			await revokeDraftApprovals(tx, {
+				sponsorship: { contactId: { in: ids } },
+			});
+			return changed;
 		});
 
 		this.logger.log({

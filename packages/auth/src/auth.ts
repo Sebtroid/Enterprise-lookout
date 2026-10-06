@@ -4,19 +4,20 @@ import { db } from "@crm/db";
 import { schemas } from "@crm/validation";
 import { type BetterAuthOptions, betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
-import { APIError } from "better-auth/api";
+import { APIError, createAuthMiddleware } from "better-auth/api";
 import { genericOAuth } from "better-auth/plugins/generic-oauth";
 import { organization } from "better-auth/plugins/organization";
 import { API_KEY_EXPIRATION, API_KEY_HEADER, API_KEY_PREFIX } from "./api-keys";
 import { AUTH_COOKIE_PREFIX } from "./cookies";
 import { env } from "./env";
+import { signupInviteGuard } from "./invites";
 import { ensureWorkspaceMembership } from "./organization";
 import {
 	GOOGLE_PROVIDER_ID,
+	IDENTITY_SCOPES,
 	MICROSOFT_PROVIDER_ID,
 	MICROSOFT_SYNC_SCOPES,
 	SLACK_PROVIDER_ID,
-	SYNC_SCOPES,
 } from "./scopes";
 import { notifySignedIn } from "./signed-in";
 import { slackConnectGuard } from "./slack-connect";
@@ -40,9 +41,9 @@ if (env.google) {
 	const google: NonNullable<typeof socialProviders.google> = {
 		...env.google,
 
-		scope: [...SYNC_SCOPES],
+		scope: [...IDENTITY_SCOPES],
 
-		accessType: "offline",
+		prompt: "select_account",
 	};
 
 	const hostedDomain = primaryWorkspaceDomain();
@@ -70,15 +71,18 @@ if (env.microsoft) {
 }
 
 export const auth = betterAuth({
-	appName: "CRM",
-	baseURL: env.apiUrl,
+	appName: "Enterprise Lookout",
+	baseURL: env.authUrl,
 
 	database: prismaAdapter(db, {
 		provider: "postgresql",
 	}),
 
 	emailAndPassword: {
-		enabled: false,
+		enabled: true,
+		minPasswordLength: 12,
+		requireEmailVerification: false,
+		autoSignIn: true,
 	},
 
 	socialProviders,
@@ -118,7 +122,10 @@ export const auth = betterAuth({
 
 	trustedOrigins: [...env.trustedOrigins],
 	hooks: {
-		before: slackConnectGuard,
+		before: createAuthMiddleware(async (ctx) => {
+			await slackConnectGuard(ctx);
+			await signupInviteGuard(ctx);
+		}),
 	},
 
 	plugins: [
@@ -262,7 +269,7 @@ export const auth = betterAuth({
 					if (!hasSignInAllowList()) {
 						throw new APIError("FORBIDDEN", {
 							message:
-								'No one can sign in yet: set ALLOWED_SIGN_IN in .env to your email domain (for example ALLOWED_SIGN_IN="acme.com") and restart.',
+								"El acceso aún no está configurado. Define ALLOWED_SIGN_IN con los correos autorizados y reinicia la API.",
 						});
 					}
 
@@ -270,12 +277,18 @@ export const auth = betterAuth({
 						const domain = primaryWorkspaceDomain();
 						throw new APIError("FORBIDDEN", {
 							message: domain
-								? `This CRM is private. Sign in with your @${domain} account.`
-								: "This CRM is private. That address is not on the allow-list.",
+								? `Enterprise Lookout es privado. Ingresa con tu cuenta @${domain}.`
+								: "Enterprise Lookout es privado. Ese correo no está autorizado.",
 						});
 					}
 
 					return { data: user };
+				},
+				after: async (user) => {
+					await db.lookoutInvite.updateMany({
+						where: { email: user.email.trim().toLowerCase(), usedAt: null },
+						data: { usedAt: new Date() },
+					});
 				},
 			},
 		},
@@ -283,6 +296,16 @@ export const auth = betterAuth({
 		session: {
 			create: {
 				before: async (session) => {
+					const user = await db.user.findUnique({
+						where: { id: session.userId },
+						select: { email: true },
+					});
+					if (!isWorkspaceEmail(user?.email)) {
+						throw new APIError("FORBIDDEN", {
+							message:
+								"Enterprise Lookout es privado. Ese correo no está autorizado.",
+						});
+					}
 					const workspaceId = await ensureWorkspaceMembership(session.userId);
 
 					return {

@@ -95,8 +95,8 @@ const TYPE_HINTS = {
 	CHECKBOX: "Checkbox — yes or no",
 	SELECT: "Select — one of a fixed list",
 	URL: "URL",
-	EMAIL: "Email",
-	PHONE: "Phone",
+	EMAIL: "Correo",
+	PHONE: "Teléfono",
 	USER: "User — someone in the workspace",
 } satisfies Record<(typeof FIELD_TYPES)[number], string>;
 
@@ -444,7 +444,7 @@ export function FieldEditor({
 						<AlertDialogHeader>
 							<AlertDialogTitle>Archive {field.label}?</AlertDialogTitle>
 							<AlertDialogDescription>
-								Hidden everywhere. Its values are kept.
+								Oculto en todas las vistas. Los valores se conservan.
 							</AlertDialogDescription>
 						</AlertDialogHeader>
 						<AlertDialogFooter>
@@ -453,7 +453,7 @@ export function FieldEditor({
 								variant="destructive"
 								onClick={() => archive.mutate({ id: field.id })}
 							>
-								Archive field
+								Archivar campo
 							</AlertDialogAction>
 						</AlertDialogFooter>
 					</AlertDialogContent>

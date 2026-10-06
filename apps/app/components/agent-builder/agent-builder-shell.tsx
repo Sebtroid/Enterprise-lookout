@@ -30,7 +30,7 @@ export function AgentBuilderSidebarFallback() {
 				<Skeleton className="h-7 w-full" />
 			</div>
 			<span role="status" className="sr-only">
-				Loading agent navigation…
+				Cargando chats…
 			</span>
 		</aside>
 	);

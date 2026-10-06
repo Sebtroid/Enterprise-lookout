@@ -26,9 +26,9 @@ import type { RouterOutputs } from "@/lib/trpc/types";
 import { membersSearchParams } from "./members-search-params";
 
 const ROLE_LABEL = {
-	owner: "Owner",
-	admin: "Admin",
-	member: "Member",
+	owner: "Responsable",
+	admin: "Administrador",
+	member: "Miembro",
 } as const;
 
 type Role = keyof typeof ROLE_LABEL;
@@ -43,7 +43,7 @@ function columns(
 	return [
 		{
 			id: "name",
-			header: "Name",
+			header: "Nombre",
 			sortable: true,
 			hideable: false,
 			width: "w-[34%]",
@@ -57,14 +57,14 @@ function columns(
 					/>
 					<span className="truncate font-medium">{row.name}</span>
 					{row.isViewer ? (
-						<span className="text-muted-foreground text-xs">You</span>
+						<span className="text-muted-foreground text-xs">Tú</span>
 					) : null}
 				</span>
 			),
 		},
 		{
 			id: "email",
-			header: "Email",
+			header: "Correo",
 			sortable: true,
 			width: "w-[32%]",
 			hideBelow: "md",
@@ -74,7 +74,7 @@ function columns(
 		},
 		{
 			id: "role",
-			header: "Role",
+			header: "Rol",
 			sortable: true,
 			width: "w-[14%]",
 			cell: (row) => (
@@ -83,8 +83,8 @@ function columns(
 		},
 		{
 			id: "joinedAt",
-			header: "Joined",
-			label: "Joined date",
+			header: "Ingreso",
+			label: "Fecha de ingreso",
 			sortable: true,
 			align: "right",
 			width: "w-[14%]",
@@ -97,8 +97,8 @@ function columns(
 		},
 		{
 			id: "actions",
-			header: <span className="sr-only">Actions</span>,
-			label: "Actions",
+			header: <span className="sr-only">Acciones</span>,
+			label: "Acciones",
 			hideable: false,
 			align: "right",
 			width: "w-[6%]",
@@ -108,7 +108,7 @@ function columns(
 						<DropdownMenuTrigger asChild>
 							<Button variant="ghost" size="icon" disabled={pending}>
 								<Icon icon={OverflowMenuHorizontal} />
-								<span className="sr-only">Change {row.name}'s role</span>
+								<span className="sr-only">Cambiar rol de {row.name}</span>
 							</Button>
 						</DropdownMenuTrigger>
 
@@ -147,7 +147,7 @@ export function MembersTable() {
 		trpc.workspace.setMemberRole.mutationOptions({
 			onSuccess: async () => {
 				await cache.workspace();
-				toast.success("Role changed.");
+				toast.success("Rol actualizado.");
 			},
 			onError: (error) => toast.error(error.message),
 		}),
@@ -158,7 +158,7 @@ export function MembersTable() {
 	const facets: DataTableFacet[] = [
 		{
 			id: "role",
-			label: "Role",
+			label: "Rol",
 			options: (Object.keys(ROLE_LABEL) as Role[]).flatMap((role) =>
 				(facetCounts?.role?.[role] ?? 0) > 0
 					? [{ value: role, label: ROLE_LABEL[role] }]
@@ -170,7 +170,7 @@ export function MembersTable() {
 	return (
 		<DataTable
 			query={query}
-			search={<ListSearch placeholder="Search by name or email…" />}
+			search={<ListSearch placeholder="Buscar por nombre o correo…" />}
 			columns={columns(
 				workspace.data?.canChangeRoles ?? false,
 				(member, role) => setRole.mutate({ memberId: member.id, role }),
@@ -182,7 +182,7 @@ export function MembersTable() {
 			facets={facets}
 			getRowId={(row) => row.id}
 			loading={members.isFetching}
-			empty="Nobody matches this view."
+			empty="No hay miembros con estos filtros."
 		/>
 	);
 }

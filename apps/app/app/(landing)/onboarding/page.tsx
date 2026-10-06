@@ -1,26 +1,25 @@
-import { DEFAULT_WORKSPACE_NAME } from "@crm/auth";
 import type { Metadata } from "next";
 import { AuthHeading, AuthShell } from "@/components/auth-shell";
-import { requireMailboxAccess } from "@/lib/session";
+import { requireSession } from "@/lib/session";
 import { OnboardingForm } from "./onboarding-form";
 
 export const metadata: Metadata = {
-	title: "Set up",
+	title: "Preparar Lookout",
 };
 
 export const instant = false;
 
 export default async function OnboardingPage() {
-	await requireMailboxAccess();
+	await requireSession();
 
 	return (
 		<AuthShell>
 			<AuthHeading
-				title="Tell us about your company"
-				description="Two things, once. The name is what the CRM calls you; the website is how the agent learns what you sell."
+				title="Prepara tu espacio"
+				description="Reúne la base compartida de empresas y contactos. Después podrás crear tus trabajos y eventos."
 			/>
 
-			<OnboardingForm placeholder={DEFAULT_WORKSPACE_NAME} />
+			<OnboardingForm placeholder="Enterprise Lookout" />
 		</AuthShell>
 	);
 }

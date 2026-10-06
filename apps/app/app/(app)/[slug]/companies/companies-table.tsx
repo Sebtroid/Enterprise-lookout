@@ -1,6 +1,7 @@
 "use client";
 
 import Archive from "@carbon/icons-react/es/Archive";
+import { Badge } from "@crm/ui/components/badge";
 import { Button } from "@crm/ui/components/button";
 import {
 	DataTable,
@@ -13,6 +14,7 @@ import {
 	type EntityLogoTone,
 } from "@crm/ui/components/entity-logo";
 import { useTableSelection } from "@crm/ui/hooks/use-table-selection";
+import { categories } from "@crm/validation/lookout";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { EnrichmentIndicator } from "@/components/crm/enrichment-status";
@@ -41,7 +43,7 @@ type CompanyRow = RouterOutputs["companies"]["list"]["rows"][number];
 const COLUMNS: DataTableColumn<CompanyRow>[] = [
 	{
 		id: "name",
-		header: "Company",
+		header: "Empresa",
 		sortable: true,
 		hideable: false,
 		width: "w-[26%]",
@@ -59,8 +61,33 @@ const COLUMNS: DataTableColumn<CompanyRow>[] = [
 		),
 	},
 	{
+		id: "category",
+		header: "Categorías",
+		width: "w-[22%]",
+		cell: (row) =>
+			row.sponsorshipCategories.length ? (
+				<span className="flex flex-wrap gap-1">
+					{row.sponsorshipCategories.slice(0, 2).map((category) => (
+						<Badge key={category} variant="secondary">
+							{category}
+						</Badge>
+					))}
+					{row.sponsorshipCategories.length > 2 ? (
+						<Badge
+							variant="outline"
+							title={row.sponsorshipCategories.slice(2).join(", ")}
+						>
+							+{row.sponsorshipCategories.length - 2}
+						</Badge>
+					) : null}
+				</span>
+			) : (
+				<span className="text-muted-foreground">Por clasificar</span>
+			),
+	},
+	{
 		id: "domain",
-		header: "Domain",
+		header: "Dominio",
 		sortable: true,
 		width: "w-[16%]",
 		hideBelow: "md",
@@ -73,7 +100,7 @@ const COLUMNS: DataTableColumn<CompanyRow>[] = [
 	},
 	{
 		id: "industry",
-		header: "Industry",
+		header: "Rubro",
 		sortable: true,
 		width: "w-[16%]",
 		hideBelow: "lg",
@@ -86,7 +113,7 @@ const COLUMNS: DataTableColumn<CompanyRow>[] = [
 	},
 	{
 		id: "owner",
-		header: "Owner",
+		header: "Responsable",
 		sortable: true,
 		width: "w-[16%]",
 		hideBelow: "md",
@@ -94,7 +121,7 @@ const COLUMNS: DataTableColumn<CompanyRow>[] = [
 	},
 	{
 		id: "contacts",
-		header: "Contacts",
+		header: "Contactos",
 		sortable: true,
 		align: "right",
 		width: "w-[9%]",
@@ -102,17 +129,17 @@ const COLUMNS: DataTableColumn<CompanyRow>[] = [
 		cell: (row) => <span className="tabular-nums">{row.contactCount}</span>,
 	},
 	{
-		id: "deals",
-		header: "Open deals",
+		id: "sponsorships",
+		header: "Eventos",
 		sortable: true,
 		align: "right",
 		width: "w-[9%]",
-		cell: (row) => <span className="tabular-nums">{row.openDealCount}</span>,
+		cell: (row) => <span className="tabular-nums">{row.sponsorshipCount}</span>,
 	},
 	{
 		id: "createdAt",
-		header: "Created",
-		label: "Created date",
+		header: "Creado",
+		label: "Fecha de creación",
 		sortable: true,
 		align: "right",
 		width: "w-[10%]",
@@ -125,7 +152,7 @@ const COLUMNS: DataTableColumn<CompanyRow>[] = [
 	},
 	{
 		id: "lastActivity",
-		header: "Last activity",
+		header: "Última actividad",
 		sortable: true,
 		align: "right",
 		width: "w-[12%]",
@@ -142,8 +169,8 @@ const COLUMNS: DataTableColumn<CompanyRow>[] = [
 	},
 	{
 		id: "enrichment",
-		header: "Enrichment",
-		label: "Enrichment status",
+		header: "Investigación",
+		label: "Estado de investigación",
 		defaultHidden: true,
 		width: "w-[14%]",
 		cell: (row) => (
@@ -154,8 +181,8 @@ const COLUMNS: DataTableColumn<CompanyRow>[] = [
 
 const ARCHIVED_COLUMN: DataTableColumn<CompanyRow> = {
 	id: "archivedAt",
-	header: "Archived",
-	label: "Archived date",
+	header: "Archivados",
+	label: "Fecha de archivo",
 	sortable: true,
 	align: "right",
 	width: "w-[12%]",
@@ -200,9 +227,9 @@ export function CompaniesTable() {
 	const facets: DataTableFacet[] = [
 		{
 			id: "owner",
-			label: "Owner",
+			label: "Responsable",
 			options: [
-				{ value: "unassigned", label: "Unassigned" },
+				{ value: "unassigned", label: "Sin asignar" },
 				...(users.data ?? []).map((user) => ({
 					value: user.id,
 					label: user.name,
@@ -210,22 +237,30 @@ export function CompaniesTable() {
 			].filter((option) => (facetCounts?.owner?.[option.value] ?? 0) > 0),
 		},
 		{
+			id: "category",
+			label: "Categorías",
+			options: categories.map((category) => ({
+				value: category,
+				label: category,
+			})),
+		},
+		{
 			id: "industry",
-			label: "Industry",
+			label: "Rubro",
 			options: Object.keys(facetCounts?.industry ?? {})
 				.sort()
 				.map((value) => ({ value, label: value })),
 		},
 		{
 			id: "enrichment",
-			label: "Enrichment",
+			label: "Investigación",
 			options: ENRICHMENT_FACET_OPTIONS.filter(
 				(option) => (facetCounts?.enrichment?.[option.value] ?? 0) > 0,
 			),
 		},
 		{
 			id: "activity",
-			label: "Activity",
+			label: "Actividad",
 			options: ACTIVITY_FACET_OPTIONS.filter(
 				(option) => (facetCounts?.activity?.[option.value] ?? 0) > 0,
 			),
@@ -245,7 +280,9 @@ export function CompaniesTable() {
 	return (
 		<DataTable
 			query={query}
-			search={<ListSearch placeholder="Search companies by name or domain…" />}
+			search={
+				<ListSearch placeholder="Buscar empresas por nombre o dominio…" />
+			}
 			actions={
 				<>
 					<SavedViewsMenu entity="COMPANY" table={table} />
@@ -256,7 +293,7 @@ export function CompaniesTable() {
 						onClick={() => setArchived(!input.archived)}
 					>
 						<Archive data-icon="inline-start" />
-						Archived
+						Archivados
 					</Button>
 				</>
 			}
@@ -282,8 +319,8 @@ export function CompaniesTable() {
 			onRowClick={(row) => openRecord({ kind: "company", id: row.id })}
 			empty={
 				input.archived
-					? "No archived companies."
-					: "No companies match this view."
+					? "No hay empresas archivadas."
+					: "No hay empresas que coincidan con esta vista."
 			}
 		/>
 	);

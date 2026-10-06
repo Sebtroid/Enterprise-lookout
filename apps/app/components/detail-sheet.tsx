@@ -100,22 +100,22 @@ export function DetailSheetHeader({
 }) {
 	return (
 		<SheetHeader className={cn("gap-0 border-b py-3", GUTTER)}>
-			<div className="flex items-start gap-3">
+			<div className="flex flex-wrap items-start gap-3">
 				{onBack ? (
 					<Tooltip>
 						<TooltipTrigger asChild>
 							<Button variant="ghost" size="icon-sm" onClick={onBack}>
 								<Icon icon={ArrowLeft} />
-								<span className="sr-only">Back</span>
+								<span className="sr-only">Volver</span>
 							</Button>
 						</TooltipTrigger>
-						<TooltipContent>Back</TooltipContent>
+						<TooltipContent>Volver</TooltipContent>
 					</Tooltip>
 				) : null}
 
 				{media}
 
-				<div className="min-w-0 flex-1 space-y-0.5 pt-0.5">
+				<div className="min-w-48 flex-1 space-y-0.5 pt-0.5">
 					<SheetTitle size="lg" className="wrap-anywhere">
 						{title}
 					</SheetTitle>
@@ -131,14 +131,14 @@ export function DetailSheetHeader({
 					) : null}
 				</div>
 
-				<div className="flex shrink-0 items-center gap-1">
+				<div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-1">
 					{actions}
 					{actions ? (
 						<Separator orientation="vertical" className="mx-1 h-5" />
 					) : null}
 					<Button variant="ghost" size="icon-sm" onClick={onClose}>
 						<Icon icon={Close} />
-						<span className="sr-only">Close</span>
+						<span className="sr-only">Cerrar</span>
 					</Button>
 				</div>
 			</div>

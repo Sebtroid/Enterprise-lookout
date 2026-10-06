@@ -88,7 +88,7 @@ function SuggestedActions() {
 				</span>
 				<Chip className="gap-1.5 px-2">
 					<span className="size-1.5 shrink-0 rounded-full bg-success" />
-					Closed won
+					Confirmado
 				</Chip>
 			</SuggestedAction>
 

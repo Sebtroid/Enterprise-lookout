@@ -363,13 +363,13 @@ export function FieldsList({
 												</DropdownMenuTrigger>
 												<DropdownMenuContent align="end">
 													<DropdownMenuItem onSelect={() => onEdit(field.key)}>
-														Edit
+														Editar
 													</DropdownMenuItem>
 													<DropdownMenuSeparator />
 													<DropdownMenuItem
 														onSelect={() => archive.mutate({ id: field.id })}
 													>
-														Archive
+														Archivar
 													</DropdownMenuItem>
 												</DropdownMenuContent>
 											</DropdownMenu>
@@ -398,7 +398,7 @@ export function FieldsList({
 												size="xs"
 												onClick={() => restore.mutate({ id: field.id })}
 											>
-												Restore
+												Restaurar
 											</Button>
 										</li>
 									))}

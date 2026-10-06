@@ -14,11 +14,11 @@ type ActivityPresentation = Record<
 >;
 
 const PRESENTATION: ActivityPresentation = {
-	NOTE: { icon: Chat, label: "Note" },
-	CALL: { icon: Phone, label: "Call" },
-	EMAIL: { icon: Email, label: "Email" },
-	MEETING: { icon: Events, label: "Meeting" },
-	TASK: { icon: Task, label: "Task" },
+	NOTE: { icon: Chat, label: "Nota" },
+	CALL: { icon: Phone, label: "Llamada" },
+	EMAIL: { icon: Email, label: "Correo" },
+	MEETING: { icon: Events, label: "Reunión" },
+	TASK: { icon: Task, label: "Tarea" },
 	STAGE_CHANGE: { icon: ArrowRight, label: "Stage change" },
 	ENRICHMENT: { icon: MagicWand, label: "Enrichment" },
 };

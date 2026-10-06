@@ -46,10 +46,10 @@ import { SalesDashboard } from "./sales-dashboard";
 
 const CELL = "px-3 py-2.5 align-middle";
 const OPEN_COLUMNS: SimpleTableColumn[] = [
-	{ id: "deal", header: "Deal" },
+	{ id: "deal", header: "Auspicio" },
 	{
 		id: "stage",
-		header: "Stage",
+		header: "Etapa",
 		width: "w-32",
 		className: "hidden lg:table-cell",
 	},
@@ -62,21 +62,21 @@ const OPEN_COLUMNS: SimpleTableColumn[] = [
 	{ id: "value", header: "Value", width: "w-20", align: "right" },
 ];
 const TASK_COLUMNS: SimpleTableColumn[] = [
-	{ id: "done", srLabel: "Done", width: "w-8" },
-	{ id: "task", header: "Task" },
+	{ id: "done", srLabel: "Listo", width: "w-8" },
+	{ id: "task", header: "Tarea" },
 	{ id: "overdue", header: "Overdue", width: "w-24", align: "right" },
 ];
 const ACTIVITY_COLUMNS: SimpleTableColumn[] = [
-	{ id: "activity", header: "Activity" },
+	{ id: "activity", header: "Actividad" },
 	{
 		id: "company",
-		header: "Company",
+		header: "Empresa",
 		width: "w-44",
 		className: "hidden md:table-cell",
 	},
 	{
 		id: "deal",
-		header: "Deal",
+		header: "Auspicio",
 		width: "w-48",
 		className: "hidden lg:table-cell",
 	},
@@ -140,7 +140,7 @@ export function DashboardSummary() {
 						</CardDescription>
 						<CardAction>
 							<Button asChild variant="contrast" size="sm">
-								<Link href={workspaceUrl("/deals")}>Open deals</Link>
+								<Link href={workspaceUrl("/deals")}>Auspicios activos</Link>
 							</Button>
 						</CardAction>
 					</CardHeader>
@@ -220,7 +220,7 @@ export function DashboardSummary() {
 											<Checkbox
 												checked={false}
 												disabled={complete.isPending}
-												aria-label="Mark as done"
+												aria-label="Marcar como completado"
 												onCheckedChange={() =>
 													complete.mutate({ id: task.id, completed: true })
 												}
@@ -274,7 +274,7 @@ export function DashboardSummary() {
 					</CardDescription>
 					<CardAction>
 						<Button asChild variant="contrast" size="sm">
-							<Link href={workspaceUrl("/companies")}>All companies</Link>
+							<Link href={workspaceUrl("/companies")}>Todas las empresas</Link>
 						</Button>
 					</CardAction>
 				</CardHeader>

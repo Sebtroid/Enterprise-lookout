@@ -166,7 +166,7 @@ export function CloseReasonDialog() {
 					}}
 				>
 					<Field>
-						<FieldLabel htmlFor={reasonId}>Reason</FieldLabel>
+						<FieldLabel htmlFor={reasonId}>Motivo</FieldLabel>
 						<Textarea
 							id={reasonId}
 							value={reason}
@@ -187,7 +187,7 @@ export function CloseReasonDialog() {
 						Save
 					</Button>
 					<Button variant="outline" onClick={close}>
-						Cancel
+						Cancelar
 					</Button>
 				</DialogFooter>
 			</DialogContent>

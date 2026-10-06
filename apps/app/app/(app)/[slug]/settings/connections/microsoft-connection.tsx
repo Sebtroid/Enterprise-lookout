@@ -56,7 +56,7 @@ function MicrosoftUnavailable() {
 				<CardTitle>
 					<div className="flex items-center gap-2">
 						Microsoft
-						<StatusIndicator size="sm" tone="neutral" label="Not configured" />
+						<StatusIndicator size="sm" tone="neutral" label="Sin configurar" />
 					</div>
 				</CardTitle>
 				<CardDescription>
@@ -103,7 +103,7 @@ function ConnectMicrosoft({
 				<CardTitle>
 					<div className="flex items-center gap-2">
 						Microsoft
-						<StatusIndicator size="sm" tone="neutral" label="Not connected" />
+						<StatusIndicator size="sm" tone="neutral" label="Sin conectar" />
 					</div>
 				</CardTitle>
 				<CardDescription>
@@ -134,7 +134,7 @@ function ConnectMicrosoft({
 				<CardContent>
 					<Alert variant="destructive">
 						<Icon icon={Warning} />
-						<AlertTitle>Microsoft did not finish connecting</AlertTitle>
+						<AlertTitle>Microsoft no terminó de conectarse</AlertTitle>
 						<AlertDescription>
 							{CONNECT_ERRORS.get(connectError) ??
 								"Microsoft returned an error before the connection was made. Try again."}
@@ -253,13 +253,13 @@ export function MicrosoftConnection({
 					<Alert variant="destructive">
 						<Icon icon={Warning} />
 						<AlertTitle>Microsoft did not return a refresh token</AlertTitle>
-						<AlertDescription>Sign out and back in.</AlertDescription>
+						<AlertDescription>Cierra sesión y vuelve a entrar.</AlertDescription>
 					</Alert>
 				) : failing.length > 0 ? (
 					failing.map((source) => (
 						<Alert key={source.source} variant="destructive">
 							<Icon icon={Warning} />
-							<AlertTitle>Email sync failed</AlertTitle>
+							<AlertTitle>Falló la sincronización de correos</AlertTitle>
 							<AlertDescription>
 								{source.lastError ?? "Microsoft needs reconnecting."}
 							</AlertDescription>
@@ -269,7 +269,7 @@ export function MicrosoftConnection({
 					<p className="text-muted-foreground text-xs">
 						{lastSyncedAt ? (
 							<>
-								Last checked <LocalRelativeTime date={lastSyncedAt} />
+								Última comprobación <LocalRelativeTime date={lastSyncedAt} />
 							</>
 						) : (
 							"Waiting for the first check"
@@ -286,7 +286,7 @@ export function MicrosoftConnection({
 							htmlFor={`auto-create-${source.source}`}
 							className="flex flex-col items-start gap-1"
 						>
-							<span className="text-sm">Email</span>
+							<span className="text-sm">Correo</span>
 							<span className="font-normal text-muted-foreground text-xs">
 								{AUTO_CREATE}
 							</span>
@@ -308,13 +308,13 @@ export function MicrosoftConnection({
 						<AlertDialog>
 							<AlertDialogTrigger asChild>
 								<Button variant="ghost" size="xs" disabled={purge.isPending}>
-									Delete synced data
+									Eliminar datos sincronizados
 								</Button>
 							</AlertDialogTrigger>
 
 							<AlertDialogContent>
 								<AlertDialogHeader>
-									<AlertDialogTitle>Delete synced data?</AlertDialogTitle>
+									<AlertDialogTitle>¿Eliminar datos sincronizados?</AlertDialogTitle>
 									<AlertDialogDescription>
 										Every email brought in from Outlook is removed from the CRM.
 										The next check starts from now, so nothing deleted here
@@ -323,12 +323,12 @@ export function MicrosoftConnection({
 								</AlertDialogHeader>
 
 								<AlertDialogFooter>
-									<AlertDialogCancel>Cancel</AlertDialogCancel>
+									<AlertDialogCancel>Cancelar</AlertDialogCancel>
 									<AlertDialogAction
 										variant="destructive"
 										onClick={() => purge.mutate()}
 									>
-										Delete
+										Eliminar
 									</AlertDialogAction>
 								</AlertDialogFooter>
 							</AlertDialogContent>
@@ -354,12 +354,12 @@ export function MicrosoftConnection({
 								</AlertDialogHeader>
 
 								<AlertDialogFooter>
-									<AlertDialogCancel>Cancel</AlertDialogCancel>
+									<AlertDialogCancel>Cancelar</AlertDialogCancel>
 									<AlertDialogAction
 										variant="destructive"
 										onClick={() => revoke.mutate()}
 									>
-										Disconnect
+										Desconectar
 									</AlertDialogAction>
 								</AlertDialogFooter>
 							</AlertDialogContent>

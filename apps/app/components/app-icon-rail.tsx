@@ -16,14 +16,9 @@ import {
 	SheetHeader,
 	SheetTitle,
 } from "@crm/ui/components/sheet";
-import {
-	Tooltip,
-	TooltipContent,
-	TooltipTrigger,
-} from "@crm/ui/components/tooltip";
 import { cn } from "@crm/ui/lib/utils";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useMemo } from "react";
 import { AgentBuilderSidebar } from "@/components/agent-builder/agent-builder-sidebar";
 import { usePrefetchSection } from "@/components/crm/section-prefetch";
@@ -40,30 +35,37 @@ type RailItem = {
 };
 
 const ITEMS: RailItem[] = [
-	{ title: "Overview", href: "/", icon: Dashboard, match: "exact" },
+	{ title: "Dom", href: "/", icon: Bot, match: "exact" },
+	{ title: "Eventos", href: "/events", icon: Dashboard, match: "prefix" },
 	{
-		title: "Chat",
+		title: "Conversaciones",
 		href: "/chat",
 		icon: Bot,
 		iconClassName: "size-5",
 		match: "prefix",
 		related: ["/agents"],
 	},
-	{ title: "Companies", href: "/companies", icon: Building, match: "prefix" },
+	{ title: "Empresas", href: "/companies", icon: Building, match: "prefix" },
 	{
-		title: "Contacts",
+		title: "Contactos",
 		href: "/contacts",
 		icon: UserMultiple,
 		match: "prefix",
 	},
-	{ title: "Deals", href: "/deals", icon: Partnership, match: "prefix" },
-	{ title: "Settings", href: "/settings", icon: Settings, match: "prefix" },
+	{ title: "Auspicios", href: "/deals", icon: Partnership, match: "prefix" },
+	{
+		title: "Configuración",
+		href: "/settings",
+		icon: Settings,
+		match: "prefix",
+	},
 ];
 
 function isActive(item: RailItem, pathname: string): boolean {
 	return (
-		pathname === item.href ||
-		(item.match === "prefix" && pathname.startsWith(item.href)) ||
+		pathname === item.href.split("?")[0] ||
+		(item.match === "prefix" &&
+			pathname.startsWith(item.href.split("?")[0] ?? item.href)) ||
 		Boolean(item.related?.some((prefix) => pathname.startsWith(prefix)))
 	);
 }
@@ -78,33 +80,27 @@ function RailLink({
 	onPrefetch: () => void;
 }) {
 	return (
-		<Tooltip>
-			<TooltipTrigger asChild>
-				<Button
-					asChild
-					variant="ghost"
-					size="icon"
-					className={cn(
-						"text-muted-foreground",
-						active &&
-							"bg-muted text-foreground hover:bg-muted hover:text-foreground",
-					)}
-				>
-					<Link
-						href={item.href}
-						prefetch
-						onMouseEnter={onPrefetch}
-						onFocus={onPrefetch}
-						aria-current={active ? "page" : undefined}
-						transitionTypes={["nav-lateral"]}
-					>
-						<Icon icon={item.icon} className={item.iconClassName} />
-						<span className="sr-only">{item.title}</span>
-					</Link>
-				</Button>
-			</TooltipTrigger>
-			<TooltipContent side="right">{item.title}</TooltipContent>
-		</Tooltip>
+		<Button
+			asChild
+			variant="ghost"
+			className={cn(
+				"w-full justify-start gap-3 text-muted-foreground",
+				active &&
+					"bg-muted text-foreground hover:bg-muted hover:text-foreground",
+			)}
+		>
+			<Link
+				href={item.href}
+				prefetch
+				onMouseEnter={onPrefetch}
+				onFocus={onPrefetch}
+				aria-current={active ? "page" : undefined}
+				transitionTypes={["nav-lateral"]}
+			>
+				<Icon icon={item.icon} className={item.iconClassName} />
+				<span>{item.title}</span>
+			</Link>
+		</Button>
 	);
 }
 
@@ -137,7 +133,7 @@ function MobileRailLink({
 				aria-current={active ? "page" : undefined}
 				onClick={onNavigate}
 				transitionTypes={[
-					item.title === "Chat" ? "nav-forward" : "nav-lateral",
+					item.title === "Conversaciones" ? "nav-forward" : "nav-lateral",
 				]}
 			>
 				<Icon icon={item.icon} className={item.iconClassName} />
@@ -187,20 +183,19 @@ function MobileRailIconLink({
 export function AppIconRailFallback() {
 	return (
 		<nav
-			aria-label="Primary"
+			aria-label="Principal"
 			aria-busy="true"
-			className="hidden w-14 shrink-0 flex-col items-center gap-1 border-r py-3 md:flex [view-transition-name:app-rail]"
+			className="hidden w-48 shrink-0 flex-col gap-1 border-r px-2 py-3 md:flex [view-transition-name:app-rail]"
 		>
 			{ITEMS.map((item) => (
 				<Button
 					key={item.href}
 					variant="ghost"
-					size="icon"
+					className="justify-start gap-3"
 					disabled
-					className="text-muted-foreground"
 				>
 					<Icon icon={item.icon} className={item.iconClassName} />
-					<span className="sr-only">{item.title}</span>
+					<span>{item.title}</span>
 				</Button>
 			))}
 		</nav>
@@ -209,6 +204,13 @@ export function AppIconRailFallback() {
 
 export function AppIconRail() {
 	const pathname = usePathname();
+	const search = useSearchParams();
+	const scope = new URLSearchParams();
+	for (const key of ["person", "work"]) {
+		const v = search.get(key);
+		if (v) scope.set(key, v);
+	}
+	const scopeQuery = scope.toString();
 	const workspaceUrl = useWorkspaceUrl();
 	const { open, setOpen } = useMobileNav();
 	const prefetchSection = usePrefetchSection();
@@ -218,20 +220,20 @@ export function AppIconRail() {
 			ITEMS.map((item) => ({
 				...item,
 				section: item.href,
-				href: workspaceUrl(item.href),
+				href: workspaceUrl(item.href) + (scopeQuery ? `?${scopeQuery}` : ""),
 				related: item.related?.map((path) => workspaceUrl(path)),
 			})),
-		[workspaceUrl],
+		[workspaceUrl, scopeQuery],
 	);
 	const inChat = items.some(
-		(item) => item.title === "Chat" && isActive(item, pathname),
+		(item) => item.title === "Conversaciones" && isActive(item, pathname),
 	);
 
 	return (
 		<>
 			<nav
-				aria-label="Primary"
-				className="hidden w-14 shrink-0 flex-col items-center gap-1 border-r py-3 md:flex [view-transition-name:app-rail]"
+				aria-label="Principal"
+				className="hidden w-48 shrink-0 flex-col gap-1 border-r px-2 py-3 md:flex [view-transition-name:app-rail]"
 			>
 				{items.map((item) => (
 					<RailLink
@@ -251,16 +253,16 @@ export function AppIconRail() {
 						className="w-5/6 max-w-sm flex-row gap-0 p-0"
 					>
 						<SheetHeader className="sr-only">
-							<SheetTitle>Navigation and agent chats</SheetTitle>
+							<SheetTitle>Navegación y conversaciones</SheetTitle>
 						</SheetHeader>
 						<nav
-							aria-label="Primary"
+							aria-label="Principal"
 							className="flex w-14 shrink-0 flex-col items-center gap-1 border-r py-3"
 						>
 							<Button
 								variant="ghost"
 								size="icon"
-								aria-label="Close navigation"
+								aria-label="Cerrar navegación"
 								onClick={() => setOpen(false)}
 							>
 								<Icon icon={Close} />
@@ -284,10 +286,10 @@ export function AppIconRail() {
 				) : (
 					<SheetContent side="left" className="w-64 gap-0 p-0">
 						<SheetHeader>
-							<SheetTitle>Navigation</SheetTitle>
+							<SheetTitle>Navegación</SheetTitle>
 						</SheetHeader>
 						<nav
-							aria-label="Primary"
+							aria-label="Principal"
 							className="flex flex-1 flex-col gap-1 p-2"
 						>
 							{items.map((item) => (

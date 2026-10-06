@@ -26,7 +26,7 @@ export function OverviewScopeToggleFallback() {
 			size="sm"
 			spacing={0}
 			disabled
-			aria-label="Whose numbers to show"
+			aria-label="Qué sección mostrar"
 		>
 			{OVERVIEW_SCOPES.map((value) => (
 				<ToggleGroupItem key={value} value={value}>
@@ -53,7 +53,7 @@ export function OverviewScopeToggle() {
 			onValueChange={(next) => {
 				if (isScope(next)) void setScope(next);
 			}}
-			aria-label="Whose numbers to show"
+			aria-label="Qué sección mostrar"
 		>
 			{OVERVIEW_SCOPES.map((value) => (
 				<ToggleGroupItem key={value} value={value}>

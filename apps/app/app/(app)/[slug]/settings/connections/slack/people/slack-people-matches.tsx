@@ -106,7 +106,7 @@ export function SlackPeopleMatches({
 			</p>
 			<div className="flex justify-end">
 				<Button asChild>
-					<Link href={`/${slug}/settings/connections/slack`}>Continue</Link>
+					<Link href={`/${slug}/settings/connections/slack`}>Continuar</Link>
 				</Button>
 			</div>
 		</div>

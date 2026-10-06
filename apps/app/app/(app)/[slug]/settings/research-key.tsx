@@ -39,7 +39,7 @@ export function ResearchKey() {
 			onSuccess: async () => {
 				await cache.settings();
 				setDraft("");
-				toast.success("Context API key saved.");
+				toast.success("Clave de Context guardada.");
 			},
 			onError: (error) => toast.error(error.message),
 		}),
@@ -52,10 +52,10 @@ export function ResearchKey() {
 	return (
 		<Card>
 			<CardHeader>
-				<CardTitle>Company research</CardTitle>
+				<CardTitle>Investigación de empresas</CardTitle>
 				<CardDescription>
-					Enter your Context API key so our agents can research every company in
-					the CRM.
+					Conecta Context para enriquecer datos de empresas. Es una herramienta
+					opcional.
 				</CardDescription>
 
 				<CardAction>
@@ -65,7 +65,7 @@ export function ResearchKey() {
 						disabled={save.isPending || draft.trim() === ""}
 					>
 						{save.isPending ? <Spinner data-icon="inline-start" /> : null}
-						{configured ? "Replace key" : "Save key"}
+						{configured ? "Reemplazar clave" : "Guardar clave"}
 					</Button>
 				</CardAction>
 			</CardHeader>
@@ -81,11 +81,11 @@ export function ResearchKey() {
 					<FieldGroup>
 						<Field>
 							<div className="flex items-center justify-between gap-3">
-								<FieldLabel htmlFor={keyId}>Context API key</FieldLabel>
+								<FieldLabel htmlFor={keyId}>Clave API de Context</FieldLabel>
 								<StatusIndicator
 									size="sm"
 									tone={configured ? "success" : "warning"}
-									label={configured ? "Connected" : "Not connected"}
+									label={configured ? "Conectado" : "Sin conectar"}
 								/>
 							</div>
 							<Input
@@ -93,7 +93,7 @@ export function ResearchKey() {
 								type="password"
 								value={draft}
 								onChange={(event) => setDraft(event.target.value)}
-								placeholder={hint ?? "Paste the key"}
+								placeholder={hint ?? "Pega la clave"}
 								autoComplete="off"
 								autoCapitalize="off"
 								autoCorrect="off"
@@ -101,14 +101,14 @@ export function ResearchKey() {
 								disabled={save.isPending}
 							/>
 							<FieldDescription>
-								Don't have a Context API key?{" "}
+								¿No tienes una clave de Context?{" "}
 								<a
 									href={CONTEXT_DEV_SIGNUP_URL}
 									target="_blank"
 									rel="noreferrer"
 									className="underline underline-offset-4 hover:text-foreground"
 								>
-									Sign up here
+									Crear cuenta
 								</a>
 							</FieldDescription>
 						</Field>

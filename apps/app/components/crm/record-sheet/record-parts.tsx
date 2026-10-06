@@ -61,7 +61,7 @@ export function RecordSheetFrame({
 				</div>
 			) : error ? (
 				<div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-1 p-6 text-center">
-					<p className="font-medium text-sm">This record could not be loaded</p>
+					<p className="font-medium text-sm">No se pudo cargar esta ficha</p>
 					<p className="text-muted-foreground text-xs">{error}</p>
 				</div>
 			) : (

@@ -3,6 +3,7 @@ import { CRM_EVENT_CATALOG } from "@crm/db/crm-events";
 import { lockIdempotencyKey } from "@crm/db/idempotency";
 import { crmEventTask } from "@crm/validation/agent-events";
 import { readAgentTriggerConfig } from "@crm/validation/agent-manifest";
+import { chatScopeSchema } from "@crm/validation/lookout";
 import type { SendFn } from "eve/channels";
 import { z } from "zod";
 import { DISPATCH } from "./dispatch-config";
@@ -35,6 +36,7 @@ const builderInputResponse = z
 const builderSubmissionMessage = z
 	.object({
 		text: z.string().catch(""),
+		lookoutScope: chatScopeSchema.optional(),
 		resources: z
 			.array(z.object({ label: z.string().catch("") }).catch({ label: "" }))
 			.catch([]),
@@ -149,12 +151,21 @@ export async function dispatchBuilderSubmission(
 						title: true,
 						userId: true,
 						kind: true,
+						submissions: {
+							orderBy: { createdAt: "asc" },
+							take: 1,
+							select: { message: true },
+						},
 					},
 				},
 			},
 		});
 	});
 	const conversationId = submission.conversation.id;
+	const originalMessage = submission.conversation.submissions[0]?.message;
+	const scope = builderSubmissionMessage.parse(
+		originalMessage ?? submission.message,
+	).lookoutScope;
 
 	try {
 		const session = await send(
@@ -177,6 +188,13 @@ export async function dispatchBuilderSubmission(
 						needsTitle: submission.conversation.title ? "false" : "true",
 						conversationId,
 						userId: submission.conversation.userId,
+						...(scope
+							? {
+									lookoutOwnerId: scope.ownerId,
+									lookoutWorkId: scope.workAreaId,
+									...(scope.eventId ? { lookoutEventId: scope.eventId } : {}),
+								}
+							: {}),
 						submissionId: submission.id,
 					},
 				},

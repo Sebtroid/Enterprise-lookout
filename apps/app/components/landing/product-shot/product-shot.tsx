@@ -10,11 +10,11 @@ import { CompaniesList, CompaniesPage } from "./companies-page";
 import { CompanyDrawer, CompanySheet } from "./company-sheet";
 
 const RAIL = [
-	{ icon: Dashboard, label: "Overview", active: false },
-	{ icon: Building, label: "Companies", active: true },
-	{ icon: Group, label: "Contacts", active: false },
-	{ icon: Partnership, label: "Deals", active: false },
-	{ icon: Settings, label: "Settings", active: false },
+	{ icon: Dashboard, label: "Eventos", active: false },
+	{ icon: Building, label: "Empresas", active: true },
+	{ icon: Group, label: "Contactos", active: false },
+	{ icon: Partnership, label: "Auspicios", active: false },
+	{ icon: Settings, label: "Configuración", active: false },
 ];
 
 export function ProductShot() {

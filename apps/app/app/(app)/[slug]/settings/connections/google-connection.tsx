@@ -48,11 +48,11 @@ import { useTRPC } from "@/lib/trpc/client";
 
 const SOURCES = {
 	calendar: {
-		label: "Meetings",
+		label: "Reuniones",
 		autoCreate: "Add the company and contact when you meet someone new",
 	},
 	gmail: {
-		label: "Email",
+		label: "Correo",
 		autoCreate: "Add the company and contact when you reply to someone new",
 	},
 } as const;
@@ -111,12 +111,11 @@ function GoogleUnavailable() {
 				<CardTitle>
 					<div className="flex items-center gap-2">
 						Google
-						<StatusIndicator size="sm" tone="neutral" label="Not configured" />
+						<StatusIndicator size="sm" tone="neutral" label="Sin configurar" />
 					</div>
 				</CardTitle>
 				<CardDescription>
-					Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in the root .env file
-					and restart.
+					La conexión con Google aún no está configurada. Puedes usar Lookout sin vincular un correo.
 				</CardDescription>
 			</CardHeader>
 		</Card>
@@ -165,7 +164,7 @@ function ConnectGoogle({
 				<CardTitle>
 					<div className="flex items-center gap-2">
 						Google
-						<StatusIndicator size="sm" tone="neutral" label="Not connected" />
+						<StatusIndicator size="sm" tone="neutral" label="Sin conectar" />
 					</div>
 				</CardTitle>
 				<CardDescription>
@@ -196,7 +195,7 @@ function ConnectGoogle({
 				<CardContent>
 					<Alert variant="destructive">
 						<Icon icon={Warning} />
-						<AlertTitle>Google did not finish connecting</AlertTitle>
+						<AlertTitle>Google no terminó de conectarse</AlertTitle>
 						<AlertDescription>
 							{CONNECT_ERRORS.get(connectError) ??
 								"Google returned an error before the connection was made. Try again."}
@@ -327,7 +326,7 @@ export function GoogleConnection({
 					<Alert variant="destructive" attention={insistence}>
 						<Icon icon={Warning} />
 						<AlertTitle>Google did not return a refresh token</AlertTitle>
-						<AlertDescription>Sign out and back in.</AlertDescription>
+						<AlertDescription>Cierra sesión y vuelve a entrar.</AlertDescription>
 					</Alert>
 				) : failing.length > 0 ? (
 					failing.map((source) => {
@@ -351,7 +350,7 @@ export function GoogleConnection({
 									<AlertAction>
 										<Button variant="contrast" size="xs" asChild>
 											<a href={url} target="_blank" rel="noreferrer">
-												Resolve
+												Resolver
 												<Icon icon={Launch} data-icon="inline-end" />
 											</a>
 										</Button>
@@ -364,7 +363,7 @@ export function GoogleConnection({
 					<p className="text-muted-foreground text-xs">
 						{lastSyncedAt ? (
 							<>
-								Last checked <LocalRelativeTime date={lastSyncedAt} />
+								Última comprobación <LocalRelativeTime date={lastSyncedAt} />
 							</>
 						) : (
 							"Waiting for the first check"
@@ -407,13 +406,13 @@ export function GoogleConnection({
 						<AlertDialog>
 							<AlertDialogTrigger asChild>
 								<Button variant="ghost" size="xs" disabled={purge.isPending}>
-									Delete synced data
+									Eliminar datos sincronizados
 								</Button>
 							</AlertDialogTrigger>
 
 							<AlertDialogContent>
 								<AlertDialogHeader>
-									<AlertDialogTitle>Delete synced data?</AlertDialogTitle>
+									<AlertDialogTitle>¿Eliminar datos sincronizados?</AlertDialogTitle>
 									<AlertDialogDescription>
 										Every email and meeting brought in from Google is removed
 										from the CRM. The next check starts from now, so nothing
@@ -422,12 +421,12 @@ export function GoogleConnection({
 								</AlertDialogHeader>
 
 								<AlertDialogFooter>
-									<AlertDialogCancel>Cancel</AlertDialogCancel>
+									<AlertDialogCancel>Cancelar</AlertDialogCancel>
 									<AlertDialogAction
 										variant="destructive"
 										onClick={() => purge.mutate()}
 									>
-										Delete
+										Eliminar
 									</AlertDialogAction>
 								</AlertDialogFooter>
 							</AlertDialogContent>
@@ -451,12 +450,12 @@ export function GoogleConnection({
 								</AlertDialogHeader>
 
 								<AlertDialogFooter>
-									<AlertDialogCancel>Cancel</AlertDialogCancel>
+									<AlertDialogCancel>Cancelar</AlertDialogCancel>
 									<AlertDialogAction
 										variant="destructive"
 										onClick={() => revoke.mutate()}
 									>
-										Revoke
+										Revocar
 									</AlertDialogAction>
 								</AlertDialogFooter>
 							</AlertDialogContent>

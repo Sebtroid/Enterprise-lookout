@@ -1,3 +1,4 @@
+import { WorkContext } from "@/components/lookout/work-context";
 import { notFound, unstable_rethrow } from "next/navigation";
 import { connection } from "next/server";
 import { Suspense } from "react";
@@ -6,7 +7,7 @@ import { AppIconRail, AppIconRailFallback } from "@/components/app-icon-rail";
 import { QuickSwitcher } from "@/components/crm/quick-switcher";
 import { RecordSheetHost } from "@/components/crm/record-sheet/record-sheet-host";
 import { MobileNavProvider } from "@/components/mobile-nav";
-import { requireMailboxAccess } from "@/lib/session";
+import { requireSession } from "@/lib/session";
 import { HydrateClient } from "@/lib/trpc/hydrate";
 import { getServerQueryClient, getServerTrpc } from "@/lib/trpc/server";
 
@@ -21,6 +22,7 @@ export default function AppLayout({
 					<WorkspaceHeader params={params} />
 				</Suspense>
 
+				<Suspense fallback={null}><WorkContext /></Suspense>
 				<div className="flex min-h-0 flex-1">
 					<Suspense fallback={<AppIconRailFallback />}>
 						<AppIconRail />
@@ -56,7 +58,7 @@ async function WorkspaceHeader({
 }: Pick<LayoutProps<"/[slug]">, "params">) {
 	await connection();
 	const [{ user }, { slug }, workspace] = await Promise.all([
-		requireMailboxAccess(),
+		requireSession(),
 		params,
 		loadWorkspace(),
 	]);

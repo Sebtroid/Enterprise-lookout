@@ -275,10 +275,10 @@ function Thread({
 			{ended ? (
 				<div className="flex flex-col items-start gap-3 border-t px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5 sm:py-2">
 					<p className="text-pretty text-muted-foreground text-xs">
-						This conversation has ended.
+						Esta conversación terminó.
 					</p>
 					<Button variant="outline" size="sm" onClick={onNewThread}>
-						Start a new conversation
+						Iniciar una conversación
 					</Button>
 				</div>
 			) : null}
@@ -312,7 +312,7 @@ function Thread({
 							disabled={locked}
 						>
 							{busy ? <Spinner /> : <Icon icon={Send} />}
-							<span className="sr-only">Ask</span>
+							<span className="sr-only">Preguntar</span>
 						</Button>
 					</form>
 				)}
@@ -414,7 +414,7 @@ function Item({ item }: { item: TranscriptItem }) {
 	if (item.kind === "asked") {
 		return (
 			<div className="w-full max-w-sm border-ring/50 border-l-2 bg-muted/40 px-3 py-2.5">
-				<p className="font-medium text-xs">Follow-up</p>
+				<p className="font-medium text-xs">Seguimiento</p>
 				<Markdown className="mt-1.5 wrap-break-word text-sm leading-5">
 					{item.question.prompt}
 				</Markdown>

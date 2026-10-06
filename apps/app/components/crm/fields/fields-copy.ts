@@ -1,7 +1,7 @@
 import type { RecordKind } from "@/components/crm/record-sheet/record-stack";
 import type { FieldEntity } from "./fields-entity";
 
-export const SHEET_TITLE = "Fields";
+export const SHEET_TITLE = "Campos";
 
 const SUBTITLE = {
 	company: "This shapes every company in your CRM.",
@@ -20,7 +20,7 @@ export const SUGGESTED_NOTE = "one click to add";
 export const ADD = "Add";
 export const CUSTOM_GROUP = "Custom fields";
 export const DRAG_NOTE = "Drag to order";
-export const ARCHIVED_ROW = "Archived";
+export const ARCHIVED_ROW = "Archivados";
 export const ARCHIVED_NOTE = "values kept, hidden everywhere";
 export const NEW_FIELD = "New field";
 export const ORDER_NOTE = "Order here is the order on the sheet";
@@ -56,9 +56,9 @@ export function optionLabel(index: number): string {
 	return `Option ${index + 1}`;
 }
 export const ADD_FIELD = "Create field";
-export const CANCEL = "Cancel";
+export const CANCEL = "Cancelar";
 export const SAVE = "Save changes";
-export const ARCHIVE = "Archive";
+export const ARCHIVE = "Archivar";
 export const FILL_REST = "Fill the rest";
 
 const SHEET_PLACEMENT = {
@@ -92,7 +92,7 @@ export function filterPlacement(entity: FieldEntity): string {
 }
 
 export const ENTITY_TABS = [
-	{ kind: "company", label: "Companies" },
-	{ kind: "contact", label: "Contacts" },
-	{ kind: "deal", label: "Deals" },
+	{ kind: "company", label: "Empresas" },
+	{ kind: "contact", label: "Contactos" },
+	{ kind: "deal", label: "Auspicios" },
 ] as const satisfies readonly { kind: RecordKind; label: string }[];

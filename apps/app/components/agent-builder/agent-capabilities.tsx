@@ -311,7 +311,7 @@ export function AgentCapabilities({
 					onClick={save}
 					size="sm"
 				>
-					{revise.isPending ? "Saving…" : "Save"}
+					{revise.isPending ? "Guardando…" : "Guardar"}
 				</Button>
 			</SaveBar>
 		</div>

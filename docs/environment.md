@@ -32,9 +32,17 @@ metadata. The root file's comment has the whole account.
 `DATABASE_URL`, `BETTER_AUTH_SECRET`, `ALLOWED_SIGN_IN`. Everything else has a
 localhost default or is genuinely optional.
 
-**`GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET`** are the sign-in button *and* the
-Gmail/Calendar sync — optional, so an SSO-only install needn't create a Google project,
-but **set together or not at all** (`packages/auth/src/env.ts` throws on one).
+**`GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET`** enable Google identity sign-in.
+On the isolated Supabase schema, `packages/auth/src/env.ts` reads
+`lookout_v2_google_client_id` and `lookout_v2_google_client_secret` from Vault
+when no environment pair is set. Restart app and API after editing these values.
+Google sign-in requests only `openid`, `email`, and `profile`. Mailbox permissions
+are optional and are requested separately. Neither mailbox access nor a Context.dev
+key gates general CRM access.
+
+**`GLM_API_KEY`** is an optional server override for Dom. Normally the agent reads
+`lookout_v2_glm_api_key` from Vault for each call to the direct Z.ai API.
+No `NEXT_PUBLIC` variable contains a provider credential.
 
 **`MICROSOFT_CLIENT_ID` + `MICROSOFT_CLIENT_SECRET`** are the same bargain for Entra
 ID: the other sign-in button *and* the Outlook mail sync, one app registration, the

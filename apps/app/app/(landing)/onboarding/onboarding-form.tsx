@@ -18,7 +18,7 @@ import {
 import { Spinner } from "@crm/ui/components/spinner";
 import { useMutation } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { useId, useRef, useState } from "react";
+import { useId, useState } from "react";
 import { toast } from "sonner";
 import { useTRPC } from "@/lib/trpc/client";
 
@@ -27,17 +27,14 @@ export function OnboardingForm({ placeholder }: { placeholder: string }) {
 	const router = useRouter();
 
 	const nameId = useId();
-	const slugId = useId();
 	const websiteId = useId();
-	const [name, setName] = useState("");
-	const [slug, setSlug] = useState("");
-	const slugEdited = useRef(false);
+	const [name, setName] = useState(placeholder);
 
 	const save = useMutation(
 		trpc.workspace.update.mutationOptions({
 			onSuccess: () => {
 				router.refresh();
-				router.replace("/onboarding/research");
+				router.replace("/");
 			},
 			onError: (error) => toast.error(error.message),
 		}),
@@ -52,7 +49,7 @@ export function OnboardingForm({ placeholder }: { placeholder: string }) {
 
 				save.mutate({
 					name: String(form.get("name") ?? "").trim(),
-					slug: workspaceSlug(String(form.get("slug") ?? "")),
+					slug: workspaceSlug(String(form.get("name") ?? "")),
 					website: String(form.get("website") ?? "").trim(),
 				});
 			}}
@@ -60,89 +57,54 @@ export function OnboardingForm({ placeholder }: { placeholder: string }) {
 		>
 			<FieldGroup>
 				<Field>
-					<FieldLabel htmlFor={nameId}>Company name</FieldLabel>
+					<FieldLabel htmlFor={nameId}>Nombre del espacio</FieldLabel>
 					<Input
 						id={nameId}
 						name="name"
 						value={name}
-						onChange={(event) => {
-							const next = event.target.value;
-							setName(next);
-							if (!slugEdited.current) setSlug(workspaceSlug(next));
-						}}
+						onChange={(event) => setName(event.target.value)}
 						placeholder={placeholder}
 						autoComplete="organization"
 						autoFocus
 						required
 					/>
-				</Field>
-
-				<Field>
-					<FieldLabel htmlFor={slugId}>Workspace URL</FieldLabel>
-					<InputGroup>
-						<InputGroupAddon>
-							<InputGroupText>/</InputGroupText>
-						</InputGroupAddon>
-						<InputGroupInput
-							id={slugId}
-							name="slug"
-							value={slug}
-							onChange={(event) => {
-								slugEdited.current = true;
-								setSlug(workspaceSlugDraft(event.target.value));
-							}}
-							onBlur={() =>
-								setSlug((value) => (value ? workspaceSlug(value) : ""))
-							}
-							placeholder={workspaceSlug(placeholder)}
-							autoComplete="off"
-							autoCapitalize="off"
-							autoCorrect="off"
-							spellCheck={false}
-							required
-						/>
-					</InputGroup>
 					<FieldDescription>
-						Your team will use this address to open the CRM.
+						Cada trabajo tendrá sus propios eventos y presupuesto.
 					</FieldDescription>
 				</Field>
 
-				<Field>
-					<FieldLabel htmlFor={websiteId}>Website</FieldLabel>
-					<InputGroup>
-						<InputGroupAddon>
-							<InputGroupText>https://</InputGroupText>
-						</InputGroupAddon>
-						<InputGroupInput
-							id={websiteId}
-							name="website"
-							placeholder="acme.com"
-							autoComplete="off"
-							autoCapitalize="off"
-							autoCorrect="off"
-							spellCheck={false}
-							inputMode="url"
-							required
-						/>
-					</InputGroup>
-					<FieldDescription>
-						Read once, so every answer afterwards knows what you sell.
-					</FieldDescription>
-				</Field>
+				<details>
+					<summary className="cursor-pointer text-muted-foreground text-sm">
+						Agregar un sitio web (opcional)
+					</summary>
+					<Field>
+						<FieldLabel htmlFor={websiteId}>Sitio web</FieldLabel>
+						<InputGroup>
+							<InputGroupAddon>
+								<InputGroupText>https://</InputGroupText>
+							</InputGroupAddon>
+							<InputGroupInput
+								id={websiteId}
+								name="website"
+								placeholder="tu-organizacion.cl"
+								autoComplete="off"
+								autoCapitalize="off"
+								autoCorrect="off"
+								spellCheck={false}
+								inputMode="url"
+							/>
+						</InputGroup>
+						<FieldDescription>
+							También puedes agregarlo después en Configuración.
+						</FieldDescription>
+					</Field>
+				</details>
 			</FieldGroup>
 
 			<Button type="submit" disabled={save.isPending}>
 				{save.isPending ? <Spinner data-icon="inline-start" /> : null}
-				Continue
+				Abrir Lookout
 			</Button>
 		</form>
 	);
-}
-
-function workspaceSlugDraft(value: string): string {
-	return value
-		.toLowerCase()
-		.replace(/[^a-z0-9-]+/g, "-")
-		.replace(/-{2,}/g, "-")
-		.replace(/^-+/, "");
 }

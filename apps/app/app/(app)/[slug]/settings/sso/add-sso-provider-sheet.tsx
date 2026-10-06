@@ -134,7 +134,7 @@ function AddSsoProviderForm() {
 				>
 					<FieldGroup>
 						<Field>
-							<FieldLabel htmlFor={providerIdId}>Name</FieldLabel>
+							<FieldLabel htmlFor={providerIdId}>Nombre</FieldLabel>
 							<Input
 								id={providerIdId}
 								value={values.providerId}
@@ -237,7 +237,7 @@ function AddSsoProviderForm() {
 						Add provider
 					</Button>
 					<SheetClose asChild>
-						<Button variant="outline">Cancel</Button>
+						<Button variant="outline">Cancelar</Button>
 					</SheetClose>
 				</SheetFooter>
 			</SheetContent>

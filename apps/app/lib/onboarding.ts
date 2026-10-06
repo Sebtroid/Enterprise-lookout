@@ -69,6 +69,12 @@ export async function readWorkspaceGate(
 }
 
 export async function readResearchGate(request: NextRequest): Promise<Gate> {
+	if (
+		process.env.NODE_ENV === "development" &&
+		process.env.LOOKOUT_LOCAL_EVALUATION === "1" &&
+		process.env.DATABASE_URL?.includes("@127.0.0.1:55439/lookout_v2_lab?") &&
+		["localhost", "127.0.0.1"].includes(request.nextUrl.hostname)
+	) return "settled";
 	const { configured } = researchKeyAnswer.parse(
 		await read(request, "settings.researchKey"),
 	);

@@ -52,9 +52,9 @@ export function WebsiteActivity({
 	const campaign = last?.campaign ?? first?.campaign ?? null;
 
 	return (
-		<DetailSheetSection title="Website activity">
+		<DetailSheetSection title="Actividad del sitio web">
 			<DetailSheetProperties>
-				<DetailSheetProperty label="Page views">
+				<DetailSheetProperty label="Vistas de página">
 					<span className="tabular-nums">
 						{activity.views.toLocaleString()}
 					</span>
@@ -67,13 +67,13 @@ export function WebsiteActivity({
 				</DetailSheetProperty>
 
 				{first ? (
-					<DetailSheetProperty label="Original source">
+					<DetailSheetProperty label="Origen inicial">
 						{channel(first)}
 					</DetailSheetProperty>
 				) : null}
 
 				{topPage ? (
-					<DetailSheetProperty label="Top page">
+					<DetailSheetProperty label="Página principal">
 						<span className="flex min-w-0 items-baseline gap-1">
 							<span className="truncate font-mono" title={topPage.path}>
 								{topPage.path}
@@ -87,19 +87,19 @@ export function WebsiteActivity({
 				) : null}
 
 				{channelChanged ? (
-					<DetailSheetProperty label="Latest source">
+					<DetailSheetProperty label="Último origen">
 						{channel(last)}
 					</DetailSheetProperty>
 				) : null}
 
 				{first?.at ? (
-					<DetailSheetProperty label="First seen">
+					<DetailSheetProperty label="Primera visita">
 						<LocalRelativeTime date={first.at} />
 					</DetailSheetProperty>
 				) : null}
 
 				{campaign ? (
-					<DetailSheetProperty label="Campaign">{campaign}</DetailSheetProperty>
+					<DetailSheetProperty label="Campaña">{campaign}</DetailSheetProperty>
 				) : null}
 			</DetailSheetProperties>
 		</DetailSheetSection>

@@ -230,3 +230,29 @@ icon marks are used at these sizes; the wordmarks stay unused.
 
 Docusign is spelled with a lowercase s since its 2024 rebrand. The note-taker is
 **Ergo**.
+
+
+## Enterprise Lookout: identidad y remitente independientes
+
+Google de ingreso solicita identidad únicamente. Gmail de auspicios solicita
+`gmail.readonly` y `gmail.send` mediante `LookoutMailboxService`, con callback
+`/google/mailbox/callback`, PKCE y estado de un solo uso vinculado al usuario.
+El perfil Gmail debe coincidir con el remitente solicitado. Ambos permisos y un
+token de actualización son necesarios para guardar la conexión.
+
+`lookout_mailbox` pertenece a la persona que lo conecta, no al espacio compartido.
+Cada persona conecta y desconecta su propio remitente con una sesión humana.
+Desconectarlo revoca ese permiso y limpia su cursor de sincronización; no elimina
+su cuenta de ingreso. No aplicar a esta tabla la regla de desconexión compartida
+de Slack.
+
+`GmailMailbox` muestra la cuenta de ingreso, el remitente y el estado de respuesta.
+La página deriva la sesión dentro de Suspense porque Next usa Cache Components.
+`MailboxTokenService` prefiere el remitente independiente para Gmail. La
+sincronización excluye ese remitente de las coincidencias de contactos y no crea
+empresas ni contactos automáticamente para Lookout.
+
+Los envíos viven en el evento, mediante `LookoutMailService` y `DraftDelivery`.
+Ni la conexión ni un agente aprueban borradores. Cada mensaje necesita aprobación
+vigente, destinatario permitido, remitente confirmado y un clic humano en Enviar.
+Las claves API no conectan el remitente, no aprueban y no envían.

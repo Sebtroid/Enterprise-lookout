@@ -94,7 +94,7 @@ export function TimelineEntry({
 					<Checkbox
 						checked={done}
 						disabled={complete.isPending}
-						aria-label={done ? "Mark as not done" : "Mark as done"}
+						aria-label={done ? "Mark as not done" : "Marcar como completado"}
 						onCheckedChange={(checked) =>
 							complete.mutate({ id: entry.id, completed: checked === true })
 						}

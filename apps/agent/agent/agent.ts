@@ -4,6 +4,7 @@ import { DEFAULT_AGENT_MODEL } from "@crm/db/settings";
 import { onTelemetryProblem, syncVersion } from "@crm/telemetry";
 import { defineAgent, defineDynamic } from "eve";
 import { logCapabilities } from "./lib/capabilities";
+import { glmModel } from "./lib/glm";
 import { selectedModel } from "./lib/model";
 
 void logCapabilities();
@@ -14,9 +15,10 @@ void syncVersion();
 
 export default defineAgent({
 	model: defineDynamic({
-		fallback: DEFAULT_AGENT_MODEL.id,
+		fallback: glmModel,
 		events: { "session.started": () => selectedModel() },
 	}),
+	modelContextWindowTokens: DEFAULT_AGENT_MODEL.contextWindowTokens,
 	limits: {
 		maxInputTokensPerSession: 500_000,
 		maxOutputTokensPerSession: 50_000,

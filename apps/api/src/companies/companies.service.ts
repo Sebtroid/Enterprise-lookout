@@ -7,6 +7,7 @@ import {
 } from "@crm/db";
 import { OPEN_DEAL_STAGES } from "@crm/db/deal-stage";
 import type { FieldDefinitionWithOptions } from "@crm/db/fields";
+import { profileSchema } from "@crm/validation/lookout";
 import {
 	BadRequestException,
 	ConflictException,
@@ -26,6 +27,7 @@ import { blankToNull, toCents } from "../crm/values";
 import { ConversionService } from "../currency/conversion.service";
 import { InjectDatabase } from "../database/database.constants";
 import { FieldsService } from "../fields/fields.service";
+import { revokeDraftApprovals } from "../lookout/approvals";
 import {
 	activityFacetCounts,
 	activityFilter,
@@ -62,6 +64,7 @@ const SORTABLE: OrderByColumns<Prisma.CompanyOrderByWithRelationInput> = {
 	createdAt: (dir) => ({ createdAt: dir }),
 	contacts: (dir) => ({ contacts: { _count: dir } }),
 	deals: (dir) => ({ deals: { _count: dir } }),
+	sponsorships: (dir) => ({ sponsorships: { _count: dir } }),
 	owner: (dir) => ({ owner: { name: dir } }),
 	lastActivity: (dir) => ({ lastActivityAt: { sort: dir, nulls: "last" } }),
 	archivedAt: (dir) => ({ archivedAt: { sort: dir, nulls: "last" } }),
@@ -104,12 +107,14 @@ export class CompaniesService {
 					logoUrl: true,
 					brandColor: true,
 					industry: true,
+					sponsorshipProfile: true,
 					enrichmentStatus: true,
 					source: true,
 					owner: { select: OWNER_SELECT },
 					_count: {
 						select: {
 							contacts: true,
+							sponsorships: true,
 							deals: { where: { stage: { in: [...OPEN_DEAL_STAGES] } } },
 						},
 					},
@@ -144,6 +149,9 @@ export class CompaniesService {
 				source: row.source,
 				owner: row.owner,
 				contactCount: row._count.contacts,
+				sponsorshipCount: row._count.sponsorships,
+				sponsorshipCategories: profileSchema.parse(row.sponsorshipProfile ?? {})
+					.categories,
 				openDealCount: row._count.deals,
 				lastActivityAt: row.lastActivityAt?.toISOString() ?? null,
 				createdAt: row.createdAt.toISOString(),
@@ -190,6 +198,7 @@ export class CompaniesService {
 				createdAt: true,
 				archivedAt: true,
 				owner: { select: OWNER_SELECT },
+				_count: { select: { sponsorships: true } },
 				primaryContact: {
 					select: {
 						id: true,
@@ -234,6 +243,7 @@ export class CompaniesService {
 
 		const {
 			deals,
+			_count,
 			primaryContact,
 			enrichedAt,
 			createdAt,
@@ -243,6 +253,7 @@ export class CompaniesService {
 
 		return {
 			...rest,
+			sponsorshipCount: _count.sponsorships,
 			fields: await this.fields.valuesFor("COMPANY", id),
 			queued: await this.queue.isQueued({ companyId: id }),
 			createdAt: createdAt.toISOString(),
@@ -264,7 +275,7 @@ export class CompaniesService {
 
 	async options(q: string) {
 		return this.db.company.findMany({
-			where: this.searchFilter(q),
+			where: { AND: [this.searchFilter(q), { archivedAt: null }] },
 			select: { id: true, name: true, domain: true, iconUrl: true },
 			orderBy: { name: "asc" },
 			take: 100,
@@ -293,6 +304,9 @@ export class CompaniesService {
 					domain,
 					website: domain ? `https://${domain}` : null,
 					ownerId: input.ownerId ?? null,
+					sponsorshipProfile: input.categories
+						? profileSchema.parse({ categories: input.categories })
+						: undefined,
 				},
 				select: { id: true, name: true, domain: true, createdAt: true },
 			});
@@ -395,10 +409,14 @@ export class CompaniesService {
 
 	async archive(id: string): Promise<{ id: string; name: string }> {
 		try {
-			const company = await this.db.company.update({
-				where: { id },
-				data: { archivedAt: new Date() },
-				select: { name: true },
+			const company = await this.db.$transaction(async (tx) => {
+				const updated = await tx.company.update({
+					where: { id },
+					data: { archivedAt: new Date() },
+					select: { name: true },
+				});
+				await revokeDraftApprovals(tx, { sponsorship: { companyId: id } });
+				return updated;
 			});
 
 			this.logger.log({ message: "Company archived", companyId: id });
@@ -452,6 +470,15 @@ export class CompaniesService {
 				) {
 					return null;
 				}
+				const sponsorship = await tx.sponsorship.findFirst({
+					where: { companyId: id },
+					select: { id: true },
+				});
+				if (sponsorship) {
+					throw new ConflictException(
+						"Esta empresa participa en eventos. Mantén el registro archivado para conservar los auspicios.",
+					);
+				}
 
 				const targets = await this.stamp.targetsOf(
 					{ OR: [{ companyId: id }, { deal: { companyId: id } }] },
@@ -498,7 +525,7 @@ export class CompaniesService {
 
 	async purgeExpired(before: Date): Promise<BulkResult> {
 		const expired = await this.db.company.findMany({
-			where: { archivedAt: { lte: before } },
+			where: { archivedAt: { lte: before }, sponsorships: { none: {} } },
 			select: { id: true },
 			take: ARCHIVE.prune.maxBatch,
 		});
@@ -654,6 +681,16 @@ export class CompaniesService {
 
 		if (input.industry.length > 0)
 			and.push({ industry: { in: input.industry } });
+		if (input.category.length > 0) {
+			and.push({
+				OR: input.category.map((category) => ({
+					sponsorshipProfile: {
+						path: ["categories"],
+						array_contains: [category],
+					},
+				})),
+			});
+		}
 		if (input.enrichment.length > 0) {
 			and.push({
 				enrichmentStatus: { in: input.enrichment as EnrichmentStatus[] },

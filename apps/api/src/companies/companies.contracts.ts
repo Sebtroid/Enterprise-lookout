@@ -1,5 +1,6 @@
 import { DealStage, EnrichmentStatus, RecordSource } from "@crm/db";
 import { FIELD_TYPES } from "@crm/db/fields";
+import { categories } from "@crm/validation/lookout";
 import { z } from "zod";
 import { bulkIdsInput } from "../crm/bulk";
 import { fieldEntity, recordFieldValues } from "../fields/fields.contracts";
@@ -8,6 +9,16 @@ import { activityFacetInput, listInput } from "../trpc/list-input";
 export const companyListInput = listInput.extend({
 	owner: z.array(z.string()).default([]),
 	industry: z.array(z.string()).default([]),
+	category: z
+		.array(z.string())
+		.refine(
+			(values) =>
+				values.every((value) =>
+					categories.some((category) => category === value),
+				),
+			{ message: "Elige una categoría de auspicios válida." },
+		)
+		.default([]),
 	enrichment: z.array(z.string()).default([]),
 	source: z.array(z.string()).default([]),
 	activity: activityFacetInput.default([]),
@@ -21,6 +32,7 @@ export const companyCreateInput = z.object({
 	name: z.string().trim().min(1, "A company needs a name."),
 	domain: z.string().trim().optional(),
 	ownerId: z.string().nullable().optional(),
+	categories: z.array(z.enum(categories)).min(1).optional(),
 });
 
 export type CompanyCreateInput = z.infer<typeof companyCreateInput>;
@@ -128,6 +140,8 @@ export const companyRowOutput = z.object({
 	source: companyRecordSource,
 	owner: ownerSummaryOutput.nullable(),
 	contactCount: z.number(),
+	sponsorshipCount: z.number(),
+	sponsorshipCategories: z.array(z.enum(categories)),
 	openDealCount: z.number(),
 	lastActivityAt: z.string().nullable(),
 	createdAt: z.string(),
@@ -203,6 +217,7 @@ export const companyDetailOutput = z.object({
 	source: companyRecordSource,
 	owner: ownerSummaryOutput.nullable(),
 	contacts: z.array(companyDetailContactOutput),
+	sponsorshipCount: z.number(),
 	fields: z.array(companyRecordFieldOutput),
 	queued: z.boolean(),
 	createdAt: z.string(),

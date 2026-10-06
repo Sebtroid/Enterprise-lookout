@@ -43,7 +43,7 @@ export function ResearchForm() {
 		>
 			<FieldGroup>
 				<Field>
-					<FieldLabel htmlFor={keyId}>Context API key</FieldLabel>
+					<FieldLabel htmlFor={keyId}>Clave API de Context</FieldLabel>
 					<Input
 						id={keyId}
 						name="apiKey"
@@ -64,7 +64,7 @@ export function ResearchForm() {
 							rel="noreferrer"
 							className="underline underline-offset-4 hover:text-foreground"
 						>
-							Sign up here
+							Crear cuenta
 						</a>
 					</FieldDescription>
 				</Field>

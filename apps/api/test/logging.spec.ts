@@ -125,18 +125,23 @@ describe("request context", () => {
 type MiddlewareRun = {
 	requestId: string;
 	seen: string | undefined;
+	path: string | undefined;
 };
 
 describe("RequestLoggerMiddleware", () => {
-	function run(headers: Record<string, string>): MiddlewareRun {
+	function run(
+		headers: Record<string, string>,
+		url = "/things",
+	): MiddlewareRun {
 		const middleware = new RequestLoggerMiddleware();
 		let requestId = "";
 		let seen: string | undefined;
+		let path: string | undefined;
 
 		const request = {
 			method: "GET",
-			originalUrl: "/things",
-			path: "/things",
+			originalUrl: url,
+			path: url.split("?")[0],
 			ip: "127.0.0.1",
 			get: (name: string) => headers[name.toLowerCase()],
 		} as unknown as Request;
@@ -151,10 +156,19 @@ describe("RequestLoggerMiddleware", () => {
 
 		middleware.use(request, response, (() => {
 			seen = getRequestContext()?.requestId;
+			path = getRequestContext()?.path;
 		}) as NextFunction);
 
-		return { requestId, seen };
+		return { requestId, seen, path };
 	}
+
+	it("keeps OAuth codes and state out of request logs", () => {
+		const { path } = run(
+			{},
+			"/api/auth/callback/google?code=private-code&state=private-state",
+		);
+		expect(path).toBe("/api/auth/callback/google");
+	});
 
 	it("stamps a request id and exposes it to the handler", () => {
 		const { requestId, seen } = run({});

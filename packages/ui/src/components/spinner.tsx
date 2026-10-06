@@ -28,7 +28,7 @@ function Spinner({
 		<svg
 			data-slot="spinner"
 			role="status"
-			aria-label="Loading"
+			aria-label="Cargando"
 			xmlns="http://www.w3.org/2000/svg"
 			viewBox="-68 -68 648 648"
 			fill="none"

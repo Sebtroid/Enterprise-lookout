@@ -35,7 +35,7 @@ type ContactRow = RouterOutputs["contacts"]["list"]["rows"][number];
 const COLUMNS: DataTableColumn<ContactRow>[] = [
 	{
 		id: "name",
-		header: "Name",
+		header: "Nombre",
 		sortable: true,
 		hideable: false,
 		width: "w-[22%]",
@@ -53,7 +53,7 @@ const COLUMNS: DataTableColumn<ContactRow>[] = [
 	},
 	{
 		id: "title",
-		header: "Title",
+		header: "Cargo",
 		sortable: true,
 		width: "w-[20%]",
 		hideBelow: "lg",
@@ -66,7 +66,7 @@ const COLUMNS: DataTableColumn<ContactRow>[] = [
 	},
 	{
 		id: "email",
-		header: "Email",
+		header: "Correo",
 		sortable: true,
 		width: "w-[24%]",
 		hideBelow: "md",
@@ -79,14 +79,14 @@ const COLUMNS: DataTableColumn<ContactRow>[] = [
 	},
 	{
 		id: "company",
-		header: "Company",
+		header: "Empresa",
 		sortable: true,
 		width: "w-[18%]",
 		cell: (row) => <CompanyCell company={row.company} />,
 	},
 	{
 		id: "owner",
-		header: "Owner",
+		header: "Responsable",
 		sortable: true,
 		width: "w-[16%]",
 		hideBelow: "md",
@@ -94,8 +94,8 @@ const COLUMNS: DataTableColumn<ContactRow>[] = [
 	},
 	{
 		id: "createdAt",
-		header: "Created",
-		label: "Created date",
+		header: "Creado",
+		label: "Fecha de creación",
 		sortable: true,
 		align: "right",
 		width: "w-[10%]",
@@ -108,7 +108,7 @@ const COLUMNS: DataTableColumn<ContactRow>[] = [
 	},
 	{
 		id: "lastActivity",
-		header: "Last activity",
+		header: "Última actividad",
 		sortable: true,
 		align: "right",
 		width: "w-[12%]",
@@ -127,8 +127,8 @@ const COLUMNS: DataTableColumn<ContactRow>[] = [
 
 const ARCHIVED_COLUMN: DataTableColumn<ContactRow> = {
 	id: "archivedAt",
-	header: "Archived",
-	label: "Archived date",
+	header: "Archivados",
+	label: "Fecha de archivo",
 	sortable: true,
 	align: "right",
 	width: "w-[12%]",
@@ -196,9 +196,9 @@ export function ContactsTable() {
 	const facets: DataTableFacet[] = [
 		{
 			id: "owner",
-			label: "Owner",
+			label: "Responsable",
 			options: [
-				{ value: "unassigned", label: "Unassigned" },
+				{ value: "unassigned", label: "Sin asignar" },
 				...(users.data ?? []).map((user) => ({
 					value: user.id,
 					label: user.name,
@@ -207,16 +207,18 @@ export function ContactsTable() {
 		},
 		{
 			id: "company",
-			label: "Company",
+			label: "Empresa",
 			searchable: true,
 			search: companyText,
 			onSearchChange: setCompanyText,
 			stale: companies.isFetching || companyText.trim() !== companyQuery.trim(),
-			empty: companies.isFetching ? "Searching…" : "No company matches.",
+			empty: companies.isFetching
+				? "Buscando empresas…"
+				: "No hay empresas que coincidan.",
 			options: [
 				...(companyQuery.trim()
 					? []
-					: [{ value: "none", label: "No company" }]),
+					: [{ value: "none", label: "Sin empresa" }]),
 				...(companies.data ?? []).map((company) => ({
 					value: company.id,
 					label: company.name,
@@ -225,14 +227,14 @@ export function ContactsTable() {
 		},
 		{
 			id: "title",
-			label: "Title",
+			label: "Cargo",
 			options: Object.keys(facetCounts?.title ?? {})
 				.sort()
 				.map((value) => ({ value, label: value })),
 		},
 		{
 			id: "seniority",
-			label: "Seniority",
+			label: "Nivel del cargo",
 			options: Object.keys(facetCounts?.seniority ?? {})
 				.sort()
 				.map((value) => ({ value, label: value })),
@@ -246,7 +248,7 @@ export function ContactsTable() {
 		},
 		{
 			id: "activity",
-			label: "Activity",
+			label: "Actividad",
 			options: ACTIVITY_FACET_OPTIONS.filter(
 				(option) => (facetCounts?.activity?.[option.value] ?? 0) > 0,
 			),
@@ -266,7 +268,7 @@ export function ContactsTable() {
 	return (
 		<DataTable
 			query={query}
-			search={<ListSearch placeholder="Search by name, email or company…" />}
+			search={<ListSearch placeholder="Buscar por nombre, correo o empresa…" />}
 			actions={
 				<>
 					<SavedViewsMenu entity="CONTACT" table={table} />
@@ -277,7 +279,7 @@ export function ContactsTable() {
 						onClick={() => toggleArchived(!input.archived)}
 					>
 						<Archive data-icon="inline-start" />
-						Archived
+						Archivados
 					</Button>
 				</>
 			}
@@ -303,8 +305,8 @@ export function ContactsTable() {
 			onRowClick={(row) => openRecord({ kind: "contact", id: row.id })}
 			empty={
 				input.archived
-					? "No archived contacts."
-					: "No contacts match this view."
+					? "No hay contactos archivados."
+					: "No hay contactos que coincidan con esta vista."
 			}
 		/>
 	);

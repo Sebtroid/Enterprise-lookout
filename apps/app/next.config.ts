@@ -1,3 +1,4 @@
+import { totalmem } from "node:os";
 import { loadRootEnv } from "@crm/env";
 import type { NextConfig } from "next";
 
@@ -20,6 +21,9 @@ const allowedDevOrigins = (process.env.APP_URL ?? "")
 
 const nextConfig: NextConfig = {
 	allowedDevOrigins,
+	...(totalmem() <= 8 * 1024 ** 3
+		? { experimental: { cpus: 1, staticGenerationMaxConcurrency: 1 } }
+		: {}),
 
 	env: {
 		NEXT_PUBLIC_API_URL: apiUrl,

@@ -15,8 +15,8 @@ type Runs = RouterOutputs["agents"]["history"];
 type Activity = RouterOutputs["agents"]["activity"];
 
 const VIEWS = [
-	{ id: "runs", label: "Runs" },
-	{ id: "activity", label: "Activity" },
+	{ id: "runs", label: "Ejecuciones" },
+	{ id: "activity", label: "Actividad" },
 ] as const;
 
 type View = (typeof VIEWS)[number]["id"];
@@ -53,9 +53,9 @@ export function AgentRunsDrawer({
 		<Sheet onOpenChange={onOpenChange} open={open}>
 			<SheetContent className="flex flex-col gap-0 p-0" side="right" size="xl">
 				<SheetHeader className="gap-1 border-b px-5 py-4">
-					<SheetTitle>History</SheetTitle>
+					<SheetTitle>Historial</SheetTitle>
 					<SheetDescription>
-						Every run and every change, newest first.
+						Ejecuciones y cambios, del más reciente al más antiguo.
 					</SheetDescription>
 				</SheetHeader>
 

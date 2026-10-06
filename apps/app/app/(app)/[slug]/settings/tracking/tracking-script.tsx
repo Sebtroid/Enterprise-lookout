@@ -126,7 +126,7 @@ export function TrackingScript() {
 						type="button"
 					>
 						<Icon icon={Copy} data-icon="inline-start" />
-						Copy
+						Copiar
 					</Button>
 				</CardAction>
 			</CardHeader>
@@ -238,7 +238,7 @@ export function TrackingScript() {
 								</AlertDialogHeader>
 
 								<AlertDialogFooter>
-									<AlertDialogCancel>Cancel</AlertDialogCancel>
+									<AlertDialogCancel>Cancelar</AlertDialogCancel>
 									<AlertDialogAction
 										variant="destructive"
 										onClick={() => rotate.mutate()}

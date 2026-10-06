@@ -10,7 +10,7 @@ import { requireSession } from "@/lib/session";
 import { getServerQueryClient, getServerTrpc } from "@/lib/trpc/server";
 import { AddConnectionDialog } from "./add-connection-dialog";
 
-export const metadata: Metadata = { title: "Connections" };
+export const metadata: Metadata = { title: "Conexiones" };
 
 export default function ConnectionsSettingsPage(
 	props: PageProps<"/[slug]/settings/connections">,
@@ -31,18 +31,18 @@ async function ConnectionsSettingsPageContent({
 	const queryClient = getServerQueryClient();
 	const trpc = getServerTrpc();
 	const [google, microsoft, slack] = await Promise.all([
-		queryClient.fetchQuery(trpc.google.status.queryOptions()),
+		queryClient.fetchQuery(trpc.lookout.mailboxStatus.queryOptions()),
 		queryClient.fetchQuery(trpc.microsoft.status.queryOptions()),
 		queryClient.fetchQuery(trpc.slack.status.queryOptions()),
 	]);
 	const rows = [
-		...(google.linked
+		...(google.connected
 			? [
 					{
-						name: "Google Workspace",
-						status: "Connected",
-						bringsIn: "Emails, meetings and the people on them",
-						sends: "Nothing yet",
+						name: "Gmail",
+						status: "Conectado",
+						bringsIn: "Correos y respuestas de tu cuenta de auspicios",
+						sends: "Correos revisados, aprobados y enviados manualmente",
 						href: `/${slug}/settings/connections/google`,
 						logo: GoogleLogo,
 					},
@@ -53,10 +53,10 @@ async function ConnectionsSettingsPageContent({
 					{
 						name: "Slack",
 						status: slack.workspace
-							? `Connected to ${slack.workspace}`
-							: "Connected",
-						bringsIn: "Workspace members and channels the app has joined",
-						sends: "Messages to approved channels and people",
+							? `Conectado a ${slack.workspace}`
+							: "Conectado",
+						bringsIn: "Miembros y canales de Slack autorizados",
+						sends: "Mensajes a canales y personas aprobados",
 						href: `/${slug}/settings/connections/slack`,
 						logo: SlackLogo,
 					},
@@ -66,9 +66,9 @@ async function ConnectionsSettingsPageContent({
 			? [
 					{
 						name: "Microsoft 365",
-						status: "Connected",
-						bringsIn: "Outlook email and the people on it",
-						sends: "Nothing yet",
+						status: "Conectado",
+						bringsIn: "Correos y contactos de Outlook",
+						sends: "Todavía no hay registros",
 						href: `/${slug}/settings/connections/microsoft`,
 						logo: MicrosoftLogo,
 					},
@@ -83,16 +83,15 @@ async function ConnectionsSettingsPageContent({
 					<header className="flex items-start justify-between gap-4 px-(--spacing-block-inline)">
 						<div className="flex flex-col gap-2">
 							<h1 className="font-medium text-2xl tracking-tight">
-								Connections
+								Conexiones
 							</h1>
 							<p className="max-w-2xl text-muted-foreground text-sm">
-								Where your CRM gets its information, and what it is allowed to
-								send on your behalf.
+								Conecta tus herramientas y revisa qué información comparten.
 							</p>
 						</div>
 						<Button asChild variant="outline">
 							<Link href={`/${slug}/settings/connections?add=1`}>
-								Add connection
+								Añadir conexión
 							</Link>
 						</Button>
 					</header>
@@ -106,41 +105,40 @@ async function ConnectionsSettingsPageContent({
 				<div className="mx-auto flex w-full max-w-(--container-narrow) flex-1 flex-col justify-center gap-(--spacing-page-gap) text-center">
 					<div className="flex flex-col gap-2 px-(--spacing-block-inline)">
 						<h1 className="font-medium text-2xl tracking-tight">
-							Nothing is connected yet
+							Conecta tu correo de auspicios
 						</h1>
 						<p className="text-muted-foreground text-sm leading-relaxed">
-							Right now every deal, contact and note has to be typed in by hand.
-							Connect a tool and the CRM starts filling itself in from the work
-							your team already does.
+							Conecta el correo que usas para contactar marcas. Revisa
+							respuestas y envía borradores aprobados desde cada evento.
 						</p>
 					</div>
 					<div className="flex flex-col divide-y rounded-lg border bg-card px-(--spacing-block-inline)">
 						<StarterRow
 							logo={GoogleLogo}
-							name="Google Workspace"
-							description="File email and meetings against the right company"
+							name="Gmail"
+							description="Correos aprobados y respuestas de las empresas"
 							href={`/${slug}/settings/connections/google`}
 						/>
 						<StarterRow
 							logo={SlackLogo}
 							name="Slack"
-							description="Let deployed agents notify approved channels and people"
+							description="Avisos de agentes a canales y personas aprobados"
 							href={`/${slug}/settings/connections/slack`}
 						/>
 						<StarterRow
 							logo={MicrosoftLogo}
 							name="Microsoft 365"
-							description="File Outlook email against the right company"
+							description="Correos y contactos de Outlook"
 							href={`/${slug}/settings/connections/microsoft`}
 						/>
 					</div>
 					<p className="px-(--spacing-block-inline) text-muted-foreground text-sm">
-						Looking for something else?{" "}
+						¿Buscas otra conexión?{" "}
 						<Link
 							className="font-medium text-foreground underline underline-offset-4"
 							href={`/${slug}/settings/connections?add=1`}
 						>
-							Browse all connections
+							Ver todas las conexiones
 						</Link>
 					</p>
 				</div>
@@ -186,12 +184,12 @@ function ConnectionCard({
 					{status}
 				</p>
 				<Button asChild size="sm" variant="outline">
-					<Link href={href}>Manage</Link>
+					<Link href={href}>Configurar</Link>
 				</Button>
 			</div>
 			<div className="flex flex-col gap-2 pl-8 text-sm">
-				<CapabilityRow label="Brings in" value={bringsIn} />
-				<CapabilityRow label="Sends" value={sends} />
+				<CapabilityRow label="Recibe" value={bringsIn} />
+				<CapabilityRow label="Envía" value={sends} />
 			</div>
 		</section>
 	);
@@ -225,7 +223,7 @@ function StarterRow({
 				<p className="text-muted-foreground text-xs">{description}</p>
 			</div>
 			<Button asChild variant="outline" size="sm">
-				<Link href={href}>Connect</Link>
+				<Link href={href}>Conectar</Link>
 			</Button>
 		</div>
 	);

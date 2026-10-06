@@ -46,13 +46,13 @@ function perMillion(rate: number): string {
 
 function priceHint(model: CatalogModel): string | null {
 	if (!model.pricing) return null;
-	return `${perMillion(model.pricing.input)} in · ${perMillion(model.pricing.output)} out per 1M`;
+	return `${perMillion(model.pricing.input)} entrada · ${perMillion(model.pricing.output)} salida por 1M tokens`;
 }
 
 function contextHint(tokens: number): string {
 	return tokens >= 1_000_000
-		? `${Math.round(tokens / 1_000_000)}M context`
-		: `${Math.round(tokens / 1_000)}K context`;
+		? `${Math.round(tokens / 1_000_000)}M tokens de contexto`
+		: `${Math.round(tokens / 1_000)}K tokens de contexto`;
 }
 
 function byProvider(models: CatalogModel[]): [string, CatalogModel[]][] {
@@ -79,7 +79,7 @@ export function AgentModel() {
 		trpc.settings.setAgentModel.mutationOptions({
 			onSuccess: async () => {
 				await cache.settings();
-				toast.success("The agent will use this model from its next session.");
+				toast.success("Dom usará este modelo en su próxima conversación.");
 			},
 			onError: (error) => toast.error(error.message),
 		}),
@@ -98,7 +98,7 @@ export function AgentModel() {
 
 	const currentLabel = selectedId
 		? effectiveName
-		: `Default — ${effectiveName}`;
+		: `Predeterminado · ${effectiveName}`;
 
 	const choose = (id: string) => {
 		setOpen(false);
@@ -109,9 +109,10 @@ export function AgentModel() {
 	return (
 		<Card>
 			<CardHeader>
-				<CardTitle>Research agent</CardTitle>
+				<CardTitle>Agente de investigación</CardTitle>
 				<CardDescription>
-					The model the agent thinks with, routed through the Vercel AI Gateway.
+					Dom usa GLM 5.3 con tu clave de Supabase Vault. Los otros modelos
+					requieren una conexión adicional.
 				</CardDescription>
 			</CardHeader>
 
@@ -122,7 +123,7 @@ export function AgentModel() {
 							variant="outline"
 							role="combobox"
 							aria-expanded={open}
-							aria-label="Model"
+							aria-label="Modelo"
 							disabled={save.isPending || catalog.isPending || unavailable}
 						>
 							{currentLabel}
@@ -132,9 +133,9 @@ export function AgentModel() {
 
 					<PopoverContent align="start" size="fit" className="w-96">
 						<Command>
-							<CommandInput placeholder="Search models…" />
+							<CommandInput placeholder="Buscar modelos…" />
 							<CommandList>
-								<CommandEmpty>No model matches that.</CommandEmpty>
+								<CommandEmpty>No hay modelos coincidentes.</CommandEmpty>
 
 								<CommandGroup>
 									<CommandItem
@@ -142,7 +143,7 @@ export function AgentModel() {
 										data-checked={current === FOLLOW_DEFAULT}
 										onSelect={() => choose(FOLLOW_DEFAULT)}
 									>
-										Default — {defaultModel?.name ?? defaultId}
+										Predeterminado · {defaultModel?.name ?? defaultId}
 									</CommandItem>
 								</CommandGroup>
 
@@ -174,7 +175,7 @@ export function AgentModel() {
 
 				<p className="text-muted-foreground text-xs">
 					{unavailable
-						? `Could not reach the AI Gateway to list models. The agent is still running ${effectiveId}.`
+						? `No se pudo cargar el catálogo. Modelo elegido: ${effectiveId}.`
 						: effective
 							? `${effectiveId} · ${contextHint(effective.contextWindowTokens)}${
 									priceHint(effective) ? ` · ${priceHint(effective)}` : ""

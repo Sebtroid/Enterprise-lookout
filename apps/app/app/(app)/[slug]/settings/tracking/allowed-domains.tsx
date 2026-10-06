@@ -42,11 +42,11 @@ import { useTRPC } from "@/lib/trpc/client";
 const CELL = "px-3 py-2.5 align-middle";
 
 const COLUMNS: SimpleTableColumn[] = [
-	{ id: "domain", header: "Domain" },
+	{ id: "domain", header: "Dominio" },
 	{ id: "scope", header: "Scope", width: "w-40" },
-	{ id: "pageViews", header: "Page views", width: "w-28", align: "right" },
+	{ id: "pageViews", header: "Vistas de página", width: "w-28", align: "right" },
 	{ id: "lastSeen", header: "Last seen", width: "w-28", align: "right" },
-	{ id: "actions", srLabel: "Actions", width: "w-24" },
+	{ id: "actions", srLabel: "Acciones", width: "w-24" },
 ];
 
 const SCOPES = {
@@ -119,7 +119,7 @@ export function AllowedDomains() {
 										disabled={remove.isPending}
 										onClick={() => remove.mutate({ id: domain.id })}
 									>
-										Remove
+										Quitar
 									</Button>
 								) : null}
 							</TableCell>
@@ -174,7 +174,7 @@ function AddDomain({ disabled }: { disabled: boolean }) {
 					}}
 				>
 					<Field>
-						<FieldLabel htmlFor={hostId}>Domain</FieldLabel>
+						<FieldLabel htmlFor={hostId}>Dominio</FieldLabel>
 						<Input
 							id={hostId}
 							value={host}

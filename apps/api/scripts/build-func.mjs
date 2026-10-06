@@ -177,7 +177,7 @@ writeFileSync(
 	JSON.stringify({
 		version: 3,
 		routes: [{ src: "/(.*)", dest: "/api/index" }],
-		crons: [{ path: "/internal/sync/google", schedule: "*/5 * * * *" }],
+		crons: JSON.parse(readFileSync(join(apiDir, "vercel.json"), "utf8")).crons,
 	}),
 );
 
@@ -203,14 +203,45 @@ if (!process.env.VERCEL) {
 } else {
 	const dbDir = join(repoRoot, "packages/db");
 	const dbEnv = { ...process.env, DATABASE_URL: directDatabaseUrl };
+	const runtimeDatabaseUrl = process.env.DATABASE_URL;
+	const runtimeIsSupabase = runtimeDatabaseUrl
+		? new URL(runtimeDatabaseUrl).hostname.endsWith(".supabase.com") ||
+			new URL(runtimeDatabaseUrl).hostname.endsWith(".supabase.co")
+		: false;
+	const isolatedLookoutSchema =
+		new URL(directDatabaseUrl).searchParams.get("schema") === "lookout_v2";
+	if (
+		runtimeIsSupabase &&
+		(!isolatedLookoutSchema ||
+			new URL(runtimeDatabaseUrl).searchParams.get("schema") !== "lookout_v2")
+	) {
+		throw new Error(
+			"Supabase deployments require schema=lookout_v2 on both DATABASE_URL and DIRECT_DATABASE_URL.",
+		);
+	}
+	if (isolatedLookoutSchema) {
+		const verifiedUrl = new URL(directDatabaseUrl);
+		verifiedUrl.searchParams.set("sslmode", "verify-full");
+		verifiedUrl.searchParams.set(
+			"sslrootcert",
+			join(repoRoot, "packages/db/certs/prod-ca-2021.crt"),
+		);
+		dbEnv.DATABASE_URL = verifiedUrl.toString();
+	}
 
-	console.log("• applying migrations (prisma migrate deploy)...");
-	execSync(`${bun} x prisma migrate deploy`, {
-		cwd: dbDir,
-		stdio: "inherit",
-		env: dbEnv,
-	});
-	console.log("✓ migrations applied");
+	if (isolatedLookoutSchema) {
+		console.log(
+			"• isolated Supabase schema — migrations are applied separately; checking schema only",
+		);
+	} else {
+		console.log("• applying migrations (prisma migrate deploy)...");
+		execSync(`${bun} x prisma migrate deploy`, {
+			cwd: dbDir,
+			stdio: "inherit",
+			env: dbEnv,
+		});
+		console.log("✓ migrations applied");
+	}
 
 	console.log("• checking the deployed schema against schema.prisma...");
 	const drift = spawnSync(
@@ -231,6 +262,11 @@ if (!process.env.VERCEL) {
 	if (drift.status === 0) {
 		console.log("✓ schema matches");
 	} else if (drift.status === 2) {
+		if (isolatedLookoutSchema) {
+			throw new Error(
+				"The isolated Supabase schema differs from schema.prisma. Apply and verify its migration before deploying.",
+			);
+		}
 		console.log("");
 		console.log("!!  THE PRODUCTION SCHEMA DOES NOT MATCH schema.prisma  !!");
 		console.log(
@@ -245,6 +281,11 @@ if (!process.env.VERCEL) {
 		console.log("");
 		console.log(drift.stdout || "");
 	} else {
+		if (isolatedLookoutSchema) {
+			throw new Error(
+				`Could not verify the isolated Supabase schema: ${drift.stderr?.trim() || "unknown error"}`,
+			);
+		}
 		console.log(
 			`• could not compare the schema (${drift.stderr?.trim() || "unknown error"})`,
 		);

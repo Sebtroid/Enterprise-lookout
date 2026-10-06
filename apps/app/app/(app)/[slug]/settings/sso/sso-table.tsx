@@ -85,8 +85,8 @@ function columns(
 		},
 		{
 			id: "actions",
-			header: <span className="sr-only">Actions</span>,
-			label: "Actions",
+			header: <span className="sr-only">Acciones</span>,
+			label: "Acciones",
 			hideable: false,
 			align: "right",
 			width: "w-[6%]",
@@ -110,12 +110,12 @@ function columns(
 							</AlertDialogHeader>
 
 							<AlertDialogFooter>
-								<AlertDialogCancel>Cancel</AlertDialogCancel>
+								<AlertDialogCancel>Cancelar</AlertDialogCancel>
 								<AlertDialogAction
 									variant="destructive"
 									onClick={() => onRemove(row)}
 								>
-									Remove
+									Quitar
 								</AlertDialogAction>
 							</AlertDialogFooter>
 						</AlertDialogContent>

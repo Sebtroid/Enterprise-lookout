@@ -79,6 +79,9 @@ export class EnvironmentVariables {
 	@IsOptional()
 	@IsUrl({ require_tld: false })
 	API_URL?: string;
+	@IsOptional()
+	@IsUrl({ require_tld: false })
+	BETTER_AUTH_URL?: string;
 
 	@IsOptional()
 	@IsString()

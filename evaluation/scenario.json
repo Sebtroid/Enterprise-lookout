@@ -1,0 +1,72 @@
+{
+  "fictional": true,
+  "currency": "CLP",
+  "project": {
+    "name": "Asado de Ingeniería · DEMO",
+    "owner": "Sebastián",
+    "organization": "UANDES",
+    "expected_attendance": 180,
+    "budget": [
+      {
+        "category": "Comida",
+        "planned": 540000,
+        "actual": 0
+      },
+      {
+        "category": "Bebidas",
+        "planned": 180000,
+        "actual": 0
+      },
+      {
+        "category": "Producción",
+        "planned": 180000,
+        "actual": 0
+      }
+    ],
+    "sponsorship_target_cash": 600000
+  },
+  "company": {
+    "name": "Brisa Bebidas · FICTICIA",
+    "domain": "brisa.example.invalid"
+  },
+  "contact": {
+    "name": "Camila Demo",
+    "email": "camila@brisa.example.invalid"
+  },
+  "opportunities": [
+    {
+      "owner": "Sebastián",
+      "project": "Asado de Ingeniería · DEMO",
+      "company": "Brisa Bebidas · FICTICIA",
+      "cash": 200000,
+      "cash_status": "proposed",
+      "in_kind": {
+        "item": "Bebidas sin alcohol",
+        "quantity": 180,
+        "unit": "latas",
+        "estimated_value": 180000,
+        "status": "proposed"
+      },
+      "stage": "Borrador pendiente de aprobación"
+    },
+    {
+      "owner": "Miguel",
+      "project": "Encuentro universitario UC · DEMO",
+      "company": "Brisa Bebidas · FICTICIA",
+      "stage": "Investigación"
+    }
+  ],
+  "outbound": {
+    "status": "needs_review",
+    "subject": "Propuesta de colaboración — Asado de Ingeniería (DEMO)",
+    "body": "Hola Camila: estamos preparando un asado ficticio para 180 asistentes. Nos gustaría conversar sobre un aporte de bebidas y apoyo económico. Las contraprestaciones quedan pendientes de definición. Este mensaje es una prueba y no debe enviarse."
+  },
+  "checks": [
+    "La empresa y el contacto existen una sola vez.",
+    "La vista inicial muestra proyectos del usuario activo.",
+    "La sección del otro usuario se abre voluntariamente.",
+    "Los aportes propuestos no cuentan como comprometidos o recibidos.",
+    "Los canjes no se suman al dinero disponible.",
+    "El borrador no se envía sin aprobación humana."
+  ]
+}

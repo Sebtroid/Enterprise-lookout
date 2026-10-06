@@ -4,6 +4,7 @@ import { Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { normalizeDomain } from "../companies/domain";
 import { ActivityStampService } from "../crm/activity-stamp.service";
 import { InjectDatabase } from "../database/database.constants";
+import { revokeDraftApprovals } from "../lookout/approvals";
 import { MailboxMatchService } from "../mailbox/mailbox-match.service";
 import { MailboxTokenService } from "../mailbox/mailbox-token.service";
 import { SyncStateService } from "../mailbox/sync-state.service";
@@ -109,7 +110,12 @@ export class GoogleConnectionService {
 			select: { userId: true },
 		});
 
-		for (const account of new Set(accounts.map((row) => row.userId))) {
+		const mailboxes = await this.db.lookoutMailbox.findMany({
+			select: { userId: true },
+		});
+		for (const account of new Set(
+			[...accounts, ...mailboxes].map((row) => row.userId),
+		)) {
 			await this.onConnected(account);
 		}
 	}
@@ -191,10 +197,29 @@ export class GoogleConnectionService {
 			);
 		}
 
-		await this.db.suppressedDomain.upsert({
-			where: { domain: normalised },
-			create: { domain: normalised, reason: options.reason ?? null },
-			update: { reason: options.reason ?? null },
+		await this.db.$transaction(async (tx) => {
+			await tx.suppressedDomain.upsert({
+				where: { domain: normalised },
+				create: { domain: normalised, reason: options.reason ?? null },
+				update: { reason: options.reason ?? null },
+			});
+			await revokeDraftApprovals(tx, {
+				sponsorship: {
+					OR: [
+						{ company: { domain: normalised } },
+						{
+							contact: {
+								is: {
+									email: {
+										endsWith: `@${normalised}`,
+										mode: "insensitive",
+									},
+								},
+							},
+						},
+					],
+				},
+			});
 		});
 
 		if (!options.purge) return { domain: normalised, purged: 0 };

@@ -91,7 +91,7 @@ export function ActivityComposer({ anchor }: { anchor: TimelineAnchor }) {
 					value={draft}
 					onChange={(event) => setDraft(event.target.value)}
 					placeholder={PLACEHOLDER[type]}
-					aria-label="What happened"
+					aria-label="Qué ocurrió"
 					onKeyDown={(event) => {
 						if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
 							event.preventDefault();

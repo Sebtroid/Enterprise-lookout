@@ -25,7 +25,7 @@ import { useWorkspaceUrl } from "@/lib/use-workspace-url";
 type Summary = RouterOutputs["dashboard"]["summary"];
 
 const TREND_CONFIG: ChartConfig = {
-	won: { label: "Closed won", color: "var(--success)" },
+	won: { label: "Confirmado", color: "var(--success)" },
 	created: { label: "New pipeline", color: "var(--chart-1)" },
 };
 
@@ -91,7 +91,7 @@ export function SalesDashboard({ summary }: { summary: Summary }) {
 					description={`${formatCount(wonThisMonth.count, "deal")} · ${money(wonPrevMonth.valueCents)} last month`}
 				/>
 				<StatCard
-					label="Open pipeline"
+					label="Auspicios en curso"
 					value={money(pipeline.totalCents)}
 					description={`${formatCount(pipeline.totalDeals, "deal")} in progress · ${money(closingThisMonthTotal.valueCents)} due this month`}
 				/>

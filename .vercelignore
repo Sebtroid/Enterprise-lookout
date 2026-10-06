@@ -26,3 +26,9 @@ dist
 # Nothing here affects the build.
 docs/images
 adrs
+.scratch
+evaluation
+.git
+.claude
+.agents
+dogfood-output

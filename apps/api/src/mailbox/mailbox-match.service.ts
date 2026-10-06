@@ -55,11 +55,14 @@ export class MailboxMatchService {
 		domains: Set<string>;
 	}> {
 		const users = await this.db.user.findMany({ select: { email: true } });
+		const mailboxes = await this.db.lookoutMailbox.findMany({
+			select: { email: true },
+		});
 
 		const addresses = new Set<string>();
 		const domains = new Set<string>(workspaceDomains());
 
-		for (const user of users) {
+		for (const user of [...users, ...mailboxes]) {
 			const email = user.email.toLowerCase();
 			addresses.add(email);
 

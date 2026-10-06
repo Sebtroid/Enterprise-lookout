@@ -20,6 +20,11 @@ import { DeleteChatAction } from "./delete-chat-action";
 
 type Conversation = RouterOutputs["conversations"]["builderList"][number];
 type TeamAgent = RouterOutputs["agents"]["list"][number];
+const DATE_GROUP_LABELS: Record<ChatDateGroup, string> = {
+	Today: "Hoy",
+	Yesterday: "Ayer",
+	"Last 7 days": "Últimos 7 días",
+};
 type SidebarData = {
 	conversations: Conversation[];
 	agents: TeamAgent[];
@@ -82,7 +87,7 @@ export function AgentBuilderSidebar({
 				<Button asChild variant="ghost" size="icon-xs">
 					<Link
 						href={workspaceUrl("/chat")}
-						aria-label="New agent chat"
+						aria-label="Nuevo chat con Dom"
 						onClick={onNavigate}
 					>
 						<Icon icon={Add} />
@@ -90,16 +95,19 @@ export function AgentBuilderSidebar({
 				</Button>
 			</div>
 
-			<nav aria-label="Agent chats" className="min-h-0 flex-1 overflow-y-auto">
+			<nav
+				aria-label="Chats con Dom"
+				className="min-h-0 flex-1 overflow-y-auto"
+			>
 				{groups.map((group) => (
 					<div key={group.label}>
 						<div className="flex h-8 items-end pb-1 pl-2 font-medium text-[11px] text-muted-foreground uppercase tracking-[0.08em]">
-							{group.label}
+							{DATE_GROUP_LABELS[group.label]}
 						</div>
 						{group.items.map((conversation) => {
 							const href = workspaceUrl(`/chat/${conversation.id}`);
 							const active = pathname === href;
-							const title = conversation.title ?? "Untitled chat";
+							const title = conversation.title ?? "Chat sin título";
 							return (
 								<div
 									key={conversation.id}
@@ -141,7 +149,7 @@ export function AgentBuilderSidebar({
 
 				{groups.length === 0 ? (
 					<p className="px-2 py-3 text-muted-foreground text-xs">
-						No chats in the last 7 days.
+						No tienes chats en los últimos 7 días.
 					</p>
 				) : null}
 
@@ -174,7 +182,7 @@ function TeamAgents({
 				onClick={onNavigate}
 				className="flex h-8 items-end gap-2 rounded-sm px-2 pb-1 font-medium text-[11px] text-muted-foreground uppercase tracking-[0.08em] outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60"
 			>
-				<span className="min-w-0 flex-1">Team agents</span>
+				<span className="min-w-0 flex-1">Agentes del equipo</span>
 				<span className="shrink-0 font-mono">{agents.length}</span>
 			</Link>
 			{agents.map((agent) => {

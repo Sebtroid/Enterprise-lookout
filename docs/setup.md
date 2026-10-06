@@ -1,10 +1,42 @@
-# Setup and local development
+# Inicio y configuración local
 
-Operational detail moved out of the rule docs. `api.md`, `agent.md` and
-`environment.md` are what agents read before changing code; this is what a person
-reads once.
+## Enterprise Lookout V2 en este Mac
 
-## First run
+La configuración activa usa el Supabase existente `qyructbgynzxqlqxvojf` y el
+esquema privado `lookout_v2`. No necesita Docker. No ejecutar `db:migrate`,
+`db:push`, `db:reset` ni `db:seed` contra esta base: la historia original incluye
+el esquema `public`. Las migraciones específicas están en `evaluation/supabase/`.
+
+Desde la carpeta del proyecto:
+
+```sh
+bash scripts/start-lookout.sh
+```
+
+Abre `http://localhost:4310`. El iniciador utiliza los binarios instalados o en
+caché, verifica Node 24 y los tres builds, e inicia API, app y Dom en secuencia.
+Cada proceso usa un heap máximo de 512 MB. El monitor detiene estos servicios si
+su memoria residente conjunta supera 1536 MB. `Ctrl+C` detiene los tres.
+El estado y los registros quedan en `.scratch/`, fuera de Git.
+
+Para compilar una modificación, detén primero el iniciador. Ejecuta solamente el
+paquete que cambió, sin Turbo ni servidores en paralelo. Los límites comprobados
+para este Mac son:
+
+| Comprobación | Heap máximo | Corte de RAM residente |
+| --- | ---: | ---: |
+| Tipos de API | 1024 MB | 1536 MB |
+| Build de API | 512 MB | 1000 MB |
+| Build completo de Next | 1280 MB | 1536 MB |
+| Build de Dom | 1024 MB | 1536 MB |
+
+`python3 scripts/low-memory.py --heap-mb 1280 --rss-mb 1536 -- comando` aplica el
+límite al comando y sus procesos. Next requiere Node 24 en el PATH; Bun 1.3.12
+queda disponible en la caché existente. No instalar otro runtime para iniciar la app.
+
+## Laboratorio genérico del repositorio original
+
+Estas instrucciones usan una base local nueva. No corresponden al Supabase activo.
 
 ```sh
 cp .env.example .env        # fill DATABASE_URL, BETTER_AUTH_SECRET, ALLOWED_SIGN_IN
@@ -26,11 +58,92 @@ is an edited migration that has already been applied.
 
 ## Google Cloud
 
-- **Enable the Gmail API and the Google Calendar API** on the project.
-- **Set the consent screen to User type: Internal** if you are on Workspace.
-  `gmail.readonly` is a *restricted* scope, so an External app needs OAuth
-  verification plus an annual CASA assessment. Going External later means the full
-  review — a decision, not a checkbox.
+El proyecto `vaulted-broker-510423-v7` y el cliente web
+**Enterprise Lookout · acceso web** ya existen. Las credenciales completas están
+en el Vault del Supabase existente. El ingreso pide solamente `openid`, `email`
+y `profile`; el remitente solicita sus permisos Gmail por separado.
+
+1. Abre [Clientes de Enterprise Lookout](https://console.cloud.google.com/auth/clients?project=vaulted-broker-510423-v7)
+   y selecciona **Enterprise Lookout · acceso web**.
+2. En **Orígenes autorizados de JavaScript**, agrega
+   `https://enterprise-lookout-v2.vercel.app`.
+3. En **URIs de redireccionamiento autorizados**, agrega
+   `https://enterprise-lookout-v2.vercel.app/api/auth/callback/google`.
+4. En el mismo campo, agrega
+   `https://enterprise-lookout-v2-api.vercel.app/google/mailbox/callback`.
+5. Guarda sin quitar las entradas localhost. Abre la app pública e ingresa con
+   `sebawitting@gmail.com`. Conecta el remitente desde Ajustes → Conexiones → Gmail.
+
+La configuración pública de identidad usa el dominio de la app para mantener
+las cookies en el mismo origen. La conexión independiente del remitente vuelve
+a la API. Los callbacks deben coincidir exactamente con los registrados.
+[Fuente oficial de Google](https://developers.google.com/identity/protocols/oauth2/web-server).
+
+La audiencia sigue en Testing. Los usuarios de prueba ya incluyen
+`sebawitting@gmail.com` y `sawitting@miuandes.cl`. Agrega Miguel después de conocer
+su correo de ingreso. No crees otro cliente ni reemplaces los secretos existentes
+para agregar las direcciones públicas. Las instrucciones de despliegue están en
+[lookout-vercel.md](lookout-vercel.md).
+
+`ALLOWED_SIGN_IN` must contain exact authorized login emails. The sender email
+`sawitting@miuandes.cl` uses a separate mailbox connection. Never allow all
+of `gmail.com` or `miuandes.cl` to make login work.
+
+GLM setup is a Vault edit: paste the Z.ai API key into `lookout_v2_glm_api_key`.
+Dom reads it server-side for each request. The endpoint is the regular Z.ai API,
+`https://api.z.ai/api/paas/v4`; no AI Gateway key is needed for the default GLM model.
+See `evaluation/supabase/README.md` for the restricted reader and verification.
+
+## Gmail de auspicios
+
+La configuración local ya tiene Gmail API habilitada, el callback
+`http://localhost:4311/google/mailbox/callback` y los permisos `gmail.readonly` y
+`gmail.send` declarados. El callback de identidad permanece independiente.
+Google Cloud usa el proyecto `vaulted-broker-510423-v7`.
+
+En **Ajustes → Conexiones → Gmail**, conecta `sawitting@miuandes.cl`. Elige esa
+cuenta en Google y acepta sus permisos. La sesión de Lookout sigue perteneciendo
+a `sebawitting@gmail.com`. Los tokens del remitente se cifran antes de guardarlos
+en `lookout_v2.lookout_mailbox`; no sustituyen la cuenta Google de ingreso.
+
+Google mantiene la audiencia en Testing. Con permisos Gmail, sus tokens de
+actualización vencen a los siete días. Reconecta el remitente al vencer el permiso.
+El paso a producción requiere revisar la publicación y verificación de Google.
+[Fuente oficial de Google](https://developers.google.com/identity/protocols/oauth2).
+
+Un borrador requiere una aprobación vigente y un clic humano en **Enviar**.
+Editar contenido o destinatario invalida la aprobación. Dom, Hermes y las claves
+API no pueden aprobar ni enviar correos. Una respuesta incierta de Gmail se
+comprueba por su Message-ID antes de permitir otra decisión humana.
+
+## Local runtime on an 8 GB Mac
+
+Use the existing compiled app and API against the private Supabase schema.
+Keep `NODE_ENV=production` in both processes. Mixing a development API with
+`next start` creates incompatible session cookies and returns users to sign-in.
+The Next configuration limits build workers on machines with 8 GB or less.
+
+Prefer `bash scripts/start-lookout.sh` from the repository root. These are the manual equivalents for troubleshooting; do not run them alongside the launcher:
+
+```sh
+cd apps/api
+NODE_ENV=production bun dist/main.js
+```
+
+```sh
+cd apps/app
+NODE_OPTIONS=--max-old-space-size=512 node node_modules/next/dist/bin/next start --hostname 127.0.0.1 --port 4310
+```
+
+The root `.env` supplies the database, URLs, allowlist and bridge secret.
+Keep Docker's demo database and `eve dev` stopped during compiled runtime checks.
+For Dom, `apps/agent/scripts/start.ts` starts the built Nitro entrypoint directly.
+It avoids loading the Eve development CLI. Use Node 24 and `bun run start` from
+`apps/agent`, with `NODE_OPTIONS=--max-old-space-size=512` and
+`NITRO_HOST=127.0.0.1` for local use. `AGENT_PORT` supplies its port.
+Stop the app before rebuilding it. Build only the changed package, sequentially;
+do not run the monorepo build alongside servers. Stop the verification processes
+when the user no longer needs the local app. The GLM key remains in Vault.
 
 ## The agent bridge
 
