@@ -1,6 +1,7 @@
 import "@crm/env/load";
 
 import { PrismaPg } from "@prisma/adapter-pg";
+import { DATABASE_POOL } from "./database-config";
 import { type Prisma, PrismaClient } from "./generated/prisma/client";
 import { SUPABASE_ROOT_CA } from "./supabase-root-ca";
 
@@ -123,7 +124,7 @@ const createPrismaClient = () => {
 				connectionString: runtimeUrl.toString(),
 				...(isSupabase && {
 					ssl: { ca: SUPABASE_ROOT_CA, rejectUnauthorized: true },
-					max: 3,
+					...DATABASE_POOL.supabase,
 				}),
 			},
 			{ schema: databaseSchema(connectionString) },

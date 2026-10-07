@@ -60,6 +60,25 @@ list, read by the sign-in guard *and* the sync's "which side is external" decisi
 if they drifted a colleague would be refused at the door or filed as a lead. **An empty
 list fails closed.** Parsed on demand. `packages/auth/src/workspace.ts`.
 
+## Supabase connections on Vercel
+
+The three Lookout services use Supavisor transaction mode on port `6543` for
+`DATABASE_URL`. The URL keeps the restricted `lookout_v2_app` role and
+`schema=lookout_v2`. It includes `pgbouncer=true`. TLS verifies the Supabase root
+certificate; the client does not disable certificate checks.
+
+`packages/db/src/database-config.ts` limits each Supabase client to one connection.
+The idle timeout and connection timeout are ten seconds. Serverless instances no
+longer retain separate session-mode connections across the three services.
+
+The API build uses `DIRECT_DATABASE_URL` on the Supavisor session port `5432`.
+Prisma compares the isolated schema before publishing. The build does not run
+migrations against that existing Supabase schema. Both URLs are encrypted Vercel
+variables. The runtime URL and audit URL use the same restricted role.
+
+This separation follows the [Supabase Prisma guide](https://supabase.com/docs/guides/database/prisma)
+and [connection guide](https://supabase.com/docs/guides/database/connecting-to-postgres).
+
 ## Where things are
 
 - **`API_URL`** (`:3001`) mints session cookies and serves `/api/auth/*`;

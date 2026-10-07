@@ -12,6 +12,24 @@ El control automático rechazó leer la pestaña local por su política de URLs.
 No se intentó sustituir esa acción por otro navegador. La aceptación de ingreso,
 Gmail y chat desde la interfaz pública permanece pendiente.
 
+## Conexiones de Supabase, 6 de octubre
+
+El build Git de la API detectó el límite de quince conexiones del pool de sesión.
+No se omitió la comparación de esquema ni se desactivó TLS. La configuración nueva
+separa `DATABASE_URL` en el pool de transacciones, puerto 6543, y
+`DIRECT_DATABASE_URL` de la API en el pool de sesión, puerto 5432.
+Los tres servicios mantienen el rol restringido y el esquema `lookout_v2`.
+
+El cliente compartido limita el pool de Supabase a una conexión por instancia.
+Una prueba real de solo lectura pasó veinte consultas concurrentes y una
+transacción interactiva. El certificado TLS se verificó. Las 26 pruebas
+focalizadas volvieron a pasar, con 67 aserciones y 77 MB residentes máximos.
+Biome pasó en los dos archivos del cliente modificados. No se iniciaron Docker,
+servidores locales ni compilaciones completas en el Mac.
+
+Las nuevas compilaciones y su promoción deben verificarse antes de declarar
+que las direcciones públicas sirven esta corrección.
+
 ## Despliegue verificado el 2 de octubre
 
 Los tres proyectos de V2 compilaron y alcanzaron READY en Vercel:

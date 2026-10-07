@@ -69,6 +69,16 @@ AGENT_URL=https://enterprise-lookout-v2-dom.vercel.app
 `CRON_SECRET` se guardan cifradas. Las credenciales Google y la clave GLM permanecen
 en Supabase Vault. No se copian al cliente ni al código de las funciones.
 
+Los tres `DATABASE_URL` usan el pool de transacciones Supavisor, puerto `6543`,
+con `pgbouncer=true` y `schema=lookout_v2`. Cada instancia usa una conexión y
+libera conexiones inactivas después de diez segundos. El cliente verifica el
+certificado TLS de Supabase. Esto evita agotar las quince conexiones de sesión.
+
+La API tiene además `DIRECT_DATABASE_URL`, cifrada, en el puerto de sesión `5432`.
+Prisma usa esa dirección solo para comparar el esquema antes de publicar.
+La comparación conserva el rol restringido y no ejecuta migraciones en Supabase.
+La separación está descrita en [environment.md](environment.md#supabase-connections-on-vercel).
+
 Los proyectos no tienen un muro adicional de acceso Vercel. Better Auth y la
 lista privada de correos controlan el acceso a la app. Los endpoints internos de
 Dom requieren la firma del puente. El rol PostgreSQL está limitado a `lookout_v2`.
