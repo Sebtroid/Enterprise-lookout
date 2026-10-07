@@ -1,6 +1,18 @@
-# Enterprise Lookout V2 — estado al 2 de octubre de 2026
+# Enterprise Lookout V2 — estado al 6 de octubre de 2026
 
-## Despliegue verificable
+## Actualización del 6 de octubre
+
+El código está en `Sebtroid/Enterprise-lookout`, rama `codex/lookout-v2`. Los tres
+proyectos V2 están conectados a GitHub y usan esa rama como producción. Las otras
+ramas se omiten en V2. Los proyectos V1 conservan `main` y omiten la rama V2.
+
+Google Cloud confirmó el guardado del origen público y los dos callbacks del
+cliente existente. Las entradas localhost y los secretos permanecen conservados.
+El control automático rechazó leer la pestaña local por su política de URLs.
+No se intentó sustituir esa acción por otro navegador. La aceptación de ingreso,
+Gmail y chat desde la interfaz pública permanece pendiente.
+
+## Despliegue verificado el 2 de octubre
 
 Los tres proyectos de V2 compilaron y alcanzaron READY en Vercel:
 
@@ -12,7 +24,8 @@ Los tres proyectos de V2 compilaron y alcanzaron READY en Vercel:
 
 La V1 en enterprise-lookout.vercel.app permanece separada. Los proyectos están
 bajo sebastians-projects-fe7a7a60. Las fuentes se publicaron mediante CLI y no se
-hizo push al repositorio trycompai. No hay despliegue automático desde GitHub.
+hizo push al repositorio trycompai. En esa fecha no había despliegue automático
+desde GitHub; la conexión se completó el 6 de octubre.
 Los archivos .env, .scratch y de evaluación quedan excluidos de la subida.
 
 El primer build de frontend falló porque su comando ejecutaba un generador
@@ -85,8 +98,8 @@ alcance por decisión del usuario. Hermes no se instaló durante esta tanda.
 Google Cloud usa el proyecto vaulted-broker-510423-v7 y el cliente existente
 «Enterprise Lookout · acceso web». Las credenciales ya están en Supabase Vault.
 La configuración de localhost, Gmail API y usuarios de prueba fue comprobada en
-la tanda anterior. No se guardaron todavía los nuevos callbacks públicos desde
-esta sesión. El usuario realizará ese paso en Google Cloud.
+la tanda anterior. El origen y los dos callbacks públicos se guardaron en ese
+cliente el 6 de octubre. Google confirmó «Se guardó el cliente OAuth».
 
 Origen público: https://enterprise-lookout-v2.vercel.app
 Callback de identidad: https://enterprise-lookout-v2.vercel.app/api/auth/callback/google
@@ -103,7 +116,7 @@ Google conserva la audiencia en Testing. Los tokens de actualización con permis
 Gmail vencen a los siete días en ese modo. Vercel Hobby ejecuta los crons diarios;
 la app conserva sincronización e investigación bajo demanda.
 
-## Verificaciones de esta tanda y RAM
+## Verificaciones del 2 de octubre y RAM
 
 Pasaron 26 pruebas focalizadas con 67 aserciones: cuatro de operaciones, cinco de
 candidatas, ocho de contactos y aprobaciones, seis de contexto y tres del proveedor
@@ -127,8 +140,8 @@ ni una sesión pública. La revisión visual directa sigue pendiente.
 
 ## Pendientes de aceptación
 
-1. Guardar las direcciones públicas en el cliente Google existente y probar el
-   ingreso público con sebawitting@gmail.com.
+1. Probar el ingreso público con sebawitting@gmail.com. Las direcciones del
+   cliente Google ya están guardadas.
 2. Autorizar sawitting@miuandes.cl, comprobar respuestas sincronizadas y probar
    una entrega aprobada por Sebastián. Revisar la publicación Google antes de
    depender de un token permanente.

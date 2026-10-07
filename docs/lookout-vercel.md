@@ -75,8 +75,9 @@ Dom requieren la firma del puente. El rol PostgreSQL está limitado a `lookout_v
 
 ## Google pendiente de aceptación pública
 
-El cliente OAuth ya existe. Sigue los cinco pasos de [setup.md](setup.md#google-cloud)
-para agregar las direcciones públicas sin reemplazar el cliente ni sus secretos.
+El cliente OAuth y las tres direcciones públicas están registrados. Google Cloud
+confirmó el guardado el 6 de octubre de 2026. Los cinco pasos de
+[setup.md](setup.md#google-cloud) permiten revisar la configuración y probar el ingreso.
 
 ```text
 Origen JavaScript:

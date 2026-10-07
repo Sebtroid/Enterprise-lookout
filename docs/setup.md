@@ -62,16 +62,18 @@ El proyecto `vaulted-broker-510423-v7` y el cliente web
 **Enterprise Lookout · acceso web** ya existen. Las credenciales completas están
 en el Vault del Supabase existente. El ingreso pide solamente `openid`, `email`
 y `profile`; el remitente solicita sus permisos Gmail por separado.
+Las tres direcciones públicas se guardaron en ese cliente el 6 de octubre de 2026.
+La siguiente lista permite revisar la configuración y realizar el primer ingreso.
 
 1. Abre [Clientes de Enterprise Lookout](https://console.cloud.google.com/auth/clients?project=vaulted-broker-510423-v7)
    y selecciona **Enterprise Lookout · acceso web**.
-2. En **Orígenes autorizados de JavaScript**, agrega
+2. En **Orígenes autorizados de JavaScript**, confirma
    `https://enterprise-lookout-v2.vercel.app`.
-3. En **URIs de redireccionamiento autorizados**, agrega
+3. En **URIs de redireccionamiento autorizados**, confirma
    `https://enterprise-lookout-v2.vercel.app/api/auth/callback/google`.
-4. En el mismo campo, agrega
+4. En el mismo campo, confirma
    `https://enterprise-lookout-v2-api.vercel.app/google/mailbox/callback`.
-5. Guarda sin quitar las entradas localhost. Abre la app pública e ingresa con
+5. Conserva las entradas localhost. Abre la app pública e ingresa con
    `sebawitting@gmail.com`. Conecta el remitente desde Ajustes → Conexiones → Gmail.
 
 La configuración pública de identidad usa el dominio de la app para mantener
